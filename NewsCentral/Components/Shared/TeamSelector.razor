@@ -1,0 +1,97 @@
+﻿@using NewsCentral.Models
+@inject Services.TeamService TeamService
+@inject Services.AuthenticationService AuthService
+@inject Services.TeamContextService TeamContext
+
+@if (userTeams.Count > 0)
+{
+    <div class="team-selector">
+        <label>Current Team:</label>
+        <select @bind="selectedTeamId" @bind:after="OnTeamChanged" class="team-dropdown">
+            <option value="">-- Select Team --</option>
+            @foreach (var team in userTeams)
+            {
+                <option value="@team.TeamID">@team.Name</option>
+            }
+        </select>
+    </div>
+}
+
+<style>
+    .team-selector {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+        .team-selector label {
+            font-weight: 500;
+            color: #333;
+            margin: 0;
+        }
+
+    .team-dropdown {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        min-width: 200px;
+    }
+</style>
+
+@code {
+    private List<Team> userTeams = new();
+    private string selectedTeamId = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserTeams();
+
+        // Auto-select first team if only one
+        if (userTeams.Count == 1)
+        {
+            selectedTeamId = userTeams[0].TeamID;
+            OnTeamChanged();
+        }
+        // Restore previous selection
+        else if (!string.IsNullOrEmpty(TeamContext.GetCurrentTeamId()))
+        {
+            selectedTeamId = TeamContext.GetCurrentTeamId()!;
+        }
+    }
+
+    private async Task LoadUserTeams()
+    {
+        var currentUser = AuthService.GetCurrentUser();
+        if (currentUser == null) return;
+
+        var allTeams = await TeamService.GetAllTeamsAsync();
+
+        if (currentUser.IsSystemAdmin)
+        {
+            userTeams = allTeams;
+        }
+        else
+        {
+            var userTeamIds = currentUser.TeamRoles.Select(tr => tr.TeamID).ToList();
+            userTeams = allTeams.Where(t => userTeamIds.Contains(t.TeamID)).ToList();
+        }
+    }
+
+    private void OnTeamChanged()
+    {
+        if (string.IsNullOrEmpty(selectedTeamId))
+        {
+            return;
+        }
+
+        var team = userTeams.FirstOrDefault(t => t.TeamID == selectedTeamId);
+        if (team != null)
+        {
+            TeamContext.SetCurrentTeam(team.TeamID, team.FolderName);
+        }
+    }
+}

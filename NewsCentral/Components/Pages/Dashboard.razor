@@ -1,0 +1,262 @@
+﻿@page "/dashboard"
+@inject NewsCentral.Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject Services.TeamContextService TeamContext
+@using NewsCentral.Models
+@using NewsCentral.Components.Shared
+
+<PageTitle>Dashboard - NewsCentral</PageTitle>
+
+<div class="dashboard-container">
+    <div class="header">
+        <h1>Welcome to NewsCentral</h1>
+        <div class="user-info">
+            <span>👤 @currentUser?.DisplayName</span>
+            @if (currentUser?.IsSystemAdmin == true)
+            {
+                <span class="badge badge-admin">System Admin</span>
+            }
+            @if (currentUser?.IsSystemAdmin == true)
+            {
+                <a href="/teams" class="btn btn-link">Teams</a>
+                <a href="/users" class="btn btn-link">Users</a>
+            }
+            @if (HasContentAuthorRole() || currentUser?.IsSystemAdmin == true)
+            {
+                <a href="/presentations" class="btn btn-link">Presentations</a>
+            }
+            <button @onclick="HandleLogout" class="btn btn-secondary">Logout</button>
+        </div>
+    </div>
+
+    @if (!AuthService.IsSystemAdmin())
+    {
+        <div class="team-selector-container">
+            <TeamSelector />
+        </div>
+    }
+
+    <div class="dashboard-content">
+        <div class="welcome-card">
+            <h2>🎉 Authentication Working!</h2>
+            <p>You are now logged in as: <strong>@currentUser?.Username</strong></p>
+            <p>Email: @currentUser?.Email</p>
+            <p>User ID: @currentUser?.UserID</p>
+            <p>Last Login: @currentUser?.LastLogin?.ToString("yyyy-MM-dd HH:mm:ss")</p>
+            
+            @if (currentUser?.IsSystemAdmin == true)
+            {
+                <div class="admin-notice">
+                    <p><strong>⚠️ Important:</strong> You are using the default admin account.</p>
+                    <p>Please change your password as soon as possible.</p>
+                    <p>(Password change feature coming in next phase)</p>
+                </div>
+            }
+        </div>
+
+        <div class="info-card">
+            <h3>📁 Data Location</h3>
+            <p><code>C:\Download\NewsCentral\config\users.json</code></p>
+            <p class="hint">You can check this file to see your user data stored as JSON</p>
+        </div>
+
+        <div class="info-card">
+            <h3>✅ Completed Features</h3>
+            <ul>
+                <li>✓ User authentication with BCrypt password hashing</li>
+                <li>✓ First-time setup (auto-create admin user)</li>
+                <li>✓ Session management</li>
+                <li>✓ JSON file-based user repository</li>
+                <li>✓ Login/logout functionality</li>
+            </ul>
+        </div>
+
+        <div class="info-card">
+            <h3>🚀 Coming Next</h3>
+            <ul>
+                <li>Team management</li>
+                <li>User management</li>
+                <li>Role assignment</li>
+                <li>Content creation</li>
+            </ul>
+        </div>
+        <div class="info-card">
+            <h3>🔐 Account Settings</h3>
+            <p>Manage your account security</p>
+            <a href="/change-password" class="btn btn-primary">Change Password</a>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dashboard-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #eee;
+    }
+
+    .header h1 {
+        margin: 0;
+        color: #333;
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .badge {
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .badge-admin {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .dashboard-content {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    .welcome-card, .info-card {
+        background: white;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .welcome-card {
+        grid-column: 1 / -1;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .welcome-card h2 {
+        margin-top: 0;
+    }
+
+    .admin-notice {
+        margin-top: 20px;
+        padding: 15px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 5px;
+        border-left: 4px solid #ffc107;
+    }
+
+    .info-card h3 {
+        margin-top: 0;
+        color: #667eea;
+    }
+
+    .info-card ul {
+        list-style: none;
+        padding: 0;
+    }
+
+    .info-card li {
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .info-card li:last-child {
+        border-bottom: none;
+    }
+
+    code {
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+    }
+
+    .hint {
+        font-size: 13px;
+        color: #666;
+        font-style: italic;
+    }
+    .btn-link {
+        background: transparent;
+        color: #667eea;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+    }
+
+    .btn-link:hover {
+        background: rgba(102, 126, 234, 0.1);
+    }
+
+    .info-card .btn {
+        margin-top: 10px;
+    }
+
+    .team-selector-container {
+        margin-bottom: 30px;
+    }
+</style>
+
+@code {
+    private User? currentUser;
+
+    protected override void OnInitialized()
+    {
+        // Check if user is authenticated
+        if (!AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+            return;
+        }
+
+        currentUser = AuthService.GetCurrentUser();
+    }
+
+    private void HandleLogout()
+    {
+        AuthService.Logout();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private bool HasContentAuthorRole()
+    {
+        if (currentUser == null) return false;
+    
+        return currentUser.TeamRoles.Any(tr => 
+            tr.Roles.Contains("ContentAuthor") || 
+            tr.Roles.Contains("ContentApprover") || 
+            tr.Roles.Contains("TeamAdmin"));
+    }
+}

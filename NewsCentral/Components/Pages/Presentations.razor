@@ -1,0 +1,380 @@
+﻿@page "/presentations"
+@inject Services.PresentationService PresentationService
+@inject Services.TeamService TeamService
+@inject Services.TeamContextService TeamContext
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@using NewsCentral.Components.Shared
+@using NewsCentral.Models
+
+<PageTitle>Presentations - NewsCentral</PageTitle>
+
+<div class="page-container">
+    @if (!TeamContext.HasTeamSelected())
+    {
+        <div class="no-team-selected">
+            <h2>No Team Selected</h2>
+            <p>Please select a team first</p>
+            <TeamSelector />
+        </div>
+    }
+    else
+    {
+        <div class="page-header">
+            <div>
+                <h1>Presentations</h1>
+                <p class="team-context">Team: @currentTeamName</p>
+            </div>
+            @if (canCreate)
+            {
+                <a href="/presentations/create" class="btn btn-primary">+ Create Presentation</a>
+            }
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading">Loading presentations...</div>
+        }
+        else if (presentations.Count == 0)
+        {
+            <div class="empty-state">
+                <h3>No presentations yet</h3>
+                @if (canCreate)
+                {
+                    <p>Create your first presentation to get started</p>
+                }
+                else
+                {
+                    <p>No presentations available for this team</p>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="presentations-grid">
+                @foreach (var presentation in presentations)
+                {
+                    <div class="presentation-card">
+                        <div class="presentation-image">
+                            @if (!string.IsNullOrEmpty(presentation.ImageName))
+                            {
+                                <div class="image-placeholder">
+                                    <span>📷</span>
+                                    <small>@presentation.ImageName</small>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="no-image">No Image</div>
+                            }
+                        </div>
+
+                        <div class="presentation-content">
+                            <h3>@presentation.Name</h3>
+                            <p class="description">@presentation.Description</p>
+
+                            <div class="presentation-meta">
+                                <small>Created: @presentation.DateCreated.ToString("yyyy-MM-dd")</small>
+                                <small>Version: @presentation.Version</small>
+                            </div>
+
+                            @if (CanEdit(presentation))
+                            {
+                                <div class="presentation-actions">
+                                    <a href="/presentations/edit/@presentation.PresentationID" class="btn btn-secondary">Edit</a>
+                                    <button @onclick="() => DeletePresentation(presentation)" class="btn btn-danger">Delete</button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<ConfirmDialog 
+    IsVisible="@showDeleteConfirm"
+    Title="Delete Presentation"
+    Message="@($"Are you sure you want to delete '{presentationToDelete?.Name}'? This action cannot be undone.")"
+    ConfirmText="Delete"
+    CancelText="Cancel"
+    DialogType="danger"
+    OnConfirm="ConfirmDelete"
+    OnCancel="CancelDelete" />
+
+<style>
+    .page-container {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .no-team-selected {
+        text-align: center;
+        padding: 60px 20px;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 30px;
+    }
+
+    .page-header h1 {
+        margin: 0;
+    }
+
+    .team-context {
+        color: #666;
+        margin: 5px 0 0 0;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .presentations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    .presentation-card {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+
+    .presentation-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    }
+
+    .presentation-image {
+        height: 200px;
+        background: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .presentation-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .no-image {
+        color: #999;
+        font-style: italic;
+    }
+
+    .presentation-content {
+        padding: 20px;
+    }
+
+    .presentation-content h3 {
+        margin: 0 0 10px 0;
+        color: #333;
+    }
+
+    .description {
+        color: #666;
+        margin: 0 0 15px 0;
+        min-height: 40px;
+    }
+
+    .presentation-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        padding-top: 10px;
+        border-top: 1px solid #eee;
+    }
+
+    .presentation-meta small {
+        color: #999;
+    }
+
+    .presentation-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .presentation-actions .btn {
+        flex: 1;
+        text-align: center;
+    }
+
+    .image-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #666;
+    }
+
+    .image-placeholder span {
+        font-size: 48px;
+        margin-bottom: 10px;
+    }
+
+    .image-placeholder small {
+        font-size: 12px;
+        color: #999;
+    }
+</style>
+
+@code {
+    private List<Presentation> presentations = new();
+    private List<Team> teams = new();
+    private bool isLoading = true;
+    private bool canCreate = false;
+    private string currentTeamName = string.Empty;
+
+    private bool showDeleteConfirm = false;
+    private Presentation? presentationToDelete = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        teams = await TeamService.GetAllTeamsAsync();
+
+        if (TeamContext.HasTeamSelected())
+        {
+            await LoadPresentations();
+        }
+
+        TeamContext.OnTeamChanged += async () =>
+        {
+            await LoadPresentations();
+            StateHasChanged();
+        };
+    }
+
+    private async Task LoadPresentations()
+    {
+        isLoading = true;
+        
+        var teamId = TeamContext.GetCurrentTeamId();
+        var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+
+        if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(teamFolderName))
+        {
+            isLoading = false;
+            return;
+        }
+
+        var team = teams.FirstOrDefault(t => t.TeamID == teamId);
+        currentTeamName = team?.Name ?? "Unknown";
+
+        canCreate = AuthService.HasRole(teamId, "ContentAuthor") || AuthService.IsSystemAdmin();
+
+        try
+        {
+            presentations = await PresentationService.GetPresentationsForTeamAsync(teamFolderName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading presentations: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private string GetImagePreview(Presentation presentation)
+    {
+        // Don't load images synchronously - causes deadlock
+        // Instead, we'll load them asynchronously on demand
+        return string.Empty;
+    }
+
+    private bool CanEdit(Presentation presentation)
+    {
+        var currentUser = AuthService.GetCurrentUser();
+        return currentUser?.UserID == presentation.CreatedBy || AuthService.IsSystemAdmin();
+    }
+
+    private void DeletePresentation(Presentation presentation)
+    {
+        presentationToDelete = presentation;
+        showDeleteConfirm = true;
+    }
+
+    private async Task ConfirmDelete()
+    {
+        if (presentationToDelete == null) return;
+
+        try
+        {
+            await PresentationService.DeletePresentationAsync(
+                TeamContext.GetCurrentTeamFolderName()!, 
+                presentationToDelete.PresentationID);
+
+            await LoadPresentations();
+            showDeleteConfirm = false;
+            presentationToDelete = null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting presentation: {ex.Message}");
+            showDeleteConfirm = false;
+        }
+    }
+
+    private void CancelDelete()
+    {
+        showDeleteConfirm = false;
+        presentationToDelete = null;
+    }
+}

@@ -1,0 +1,672 @@
+﻿@page "/users"
+@using NewsCentral.Models
+@using NewsCentral.Components.Shared
+@inject Services.UserService UserService
+@inject Services.TeamService TeamService
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Users - NewsCentral</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>User Management</h1>
+        <button @onclick="ShowCreateDialog" class="btn btn-primary">+ Create User</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading">Loading users...</div>
+    }
+    else
+    {
+        <div class="users-list">
+            @foreach (var user in users)
+            {
+                <div class="user-card">
+                    <div class="user-header">
+                        <div>
+                            <h3>@user.DisplayName</h3>
+                            <p class="username">@user.Username</p>
+                        </div>
+                        <div class="user-badges">
+                            @if (user.IsSystemAdmin)
+                            {
+                                <span class="badge badge-admin">System Admin</span>
+                            }
+                            @if (!user.IsActive)
+                            {
+                                <span class="badge badge-inactive">Inactive</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="user-info">
+                        <p><strong>Email:</strong> @user.Email</p>
+                        <p><strong>Created:</strong> @user.DateCreated.ToString("yyyy-MM-dd")</p>
+                        @if (user.LastLogin.HasValue)
+                        {
+                            <p><strong>Last Login:</strong> @user.LastLogin.Value.ToString("yyyy-MM-dd HH:mm")</p>
+                        }
+                    </div>
+
+                    <div class="user-teams">
+                        <strong>Teams & Roles:</strong>
+                        @if (user.TeamRoles.Count == 0)
+                        {
+                            <p class="no-teams">Not assigned to any teams</p>
+                        }
+                        else
+                        {
+                            <ul>
+                                @foreach (var teamRole in user.TeamRoles)
+                                {
+                                    var team = teams.FirstOrDefault(t => t.TeamID == teamRole.TeamID);
+                                    <li>
+                                        <strong>@(team?.Name ?? "Unknown Team")</strong>
+                                        <span class="roles">
+                                            @string.Join(", ", teamRole.Roles)
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+
+                    <div class="user-actions">
+                        <button @onclick="() => EditUser(user)" class="btn btn-secondary">Edit</button>
+                        <button @onclick="() => ManageTeams(user)" class="btn btn-primary">Manage Teams</button>
+                        @if (user.UserID != AuthService.GetCurrentUser()?.UserID)
+                        {
+                            <button @onclick="() => DeleteUser(user)" class="btn btn-danger">Delete</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (showCreateDialog)
+{
+    <div class="modal-overlay" @onclick="CloseCreateDialog">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h2>@(editingUser == null ? "Create User" : "Edit User")</h2>
+
+            <div class="form-group">
+                <label>Username:</label>
+                <input type="text" @bind="username" class="form-control"
+                       disabled="@(editingUser != null)"
+                       placeholder="john.smith" />
+            </div>
+
+            <div class="form-group">
+                <label>Display Name:</label>
+                <input type="text" @bind="displayName" class="form-control"
+                       placeholder="John Smith" />
+            </div>
+
+            <div class="form-group">
+                <label>Email:</label>
+                <input type="email" @bind="email" class="form-control"
+                       placeholder="john.smith@company.com" />
+            </div>
+
+            @if (editingUser == null)
+            {
+                <div class="form-group">
+                    <label>Password:</label>
+                    <input type="password" @bind="password" class="form-control" />
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" @bind="isSystemAdmin" />
+                        System Administrator
+                    </label>
+                </div>
+            }
+            else
+            {
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" @bind="isActive" />
+                        Active
+                    </label>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            <div class="modal-actions">
+                <button @onclick="CloseCreateDialog" class="btn btn-secondary">Cancel</button>
+                <button @onclick="SaveUser" class="btn btn-primary" disabled="@isSaving">
+                    @(isSaving ? "Saving..." : "Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showTeamsDialog)
+{
+    <div class="modal-overlay" @onclick="CloseTeamsDialog">
+        <div class="modal-content large" @onclick:stopPropagation="true">
+            <h2>Manage Teams - @managingUser?.DisplayName</h2>
+
+            @foreach (var team in teams)
+            {
+                var userTeamRole = managingUser?.TeamRoles.FirstOrDefault(tr => tr.TeamID == team.TeamID);
+                var isAssigned = userTeamRole != null;
+
+                <div class="team-assignment">
+                    <div class="team-assignment-header">
+                        <label>
+                            <input type="checkbox"
+                                   checked="@isAssigned"
+                                   @onchange="e => ToggleTeamAssignment(team, (bool)e.Value!)" />
+                            <strong>@team.Name</strong>
+                        </label>
+                    </div>
+
+                    @if (isAssigned && userTeamRole != null)
+                    {
+                        <div class="role-checkboxes">
+                            <label>
+                                <input type="checkbox"
+                                       checked="@userTeamRole.Roles.Contains("ContentAuthor")"
+                                       @onchange="@(e => ToggleRole(team, "ContentAuthor", (bool)e.Value!))" />
+                                Content Author
+                            </label>
+                            <label>
+                                <input type="checkbox"
+                                       checked="@userTeamRole.Roles.Contains("ContentApprover")"
+                                       @onchange="@(e => ToggleRole(team, "ContentApprover", (bool)e.Value!))" />
+                                Content Approver
+                            </label>
+                            <label>
+                                <input type="checkbox"
+                                       checked="@userTeamRole.Roles.Contains("TeamAdmin")"
+                                       @onchange="@(e => ToggleRole(team, "TeamAdmin", (bool)e.Value!))" />
+                                Team Admin
+                            </label>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            <div class="modal-actions">
+                <button @onclick="CloseTeamsDialog" class="btn btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    /* Reuse existing styles from Teams.razor, plus additions */
+    .page-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+
+    .users-list {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .user-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .user-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 15px;
+    }
+
+        .user-header h3 {
+            margin: 0;
+            color: #333;
+        }
+
+    .username {
+        color: #666;
+        font-family: monospace;
+        margin: 5px 0 0 0;
+    }
+
+    .user-badges {
+        display: flex;
+        gap: 10px;
+    }
+
+    .badge {
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .badge-admin {
+        background: #667eea;
+        color: white;
+    }
+
+    .badge-inactive {
+        background: #dc3545;
+        color: white;
+    }
+
+    .user-info p {
+        margin: 5px 0;
+        color: #666;
+    }
+
+    .user-teams {
+        margin: 15px 0;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+        .user-teams ul {
+            list-style: none;
+            padding: 0;
+            margin: 10px 0 0 0;
+        }
+
+        .user-teams li {
+            padding: 5px 0;
+        }
+
+    .roles {
+        color: #667eea;
+        font-size: 14px;
+        margin-left: 10px;
+    }
+
+    .no-teams {
+        color: #999;
+        font-style: italic;
+        margin: 10px 0 0 0;
+    }
+
+    .user-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+
+        .modal-content.large {
+            max-width: 600px;
+        }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-sizing: border-box;
+    }
+
+    .alert {
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+
+    .team-assignment {
+        padding: 15px;
+        margin: 10px 0;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .role-checkboxes {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 10px;
+        margin-left: 25px;
+    }
+
+        .role-checkboxes label {
+            font-weight: normal;
+        }
+</style>
+
+<ConfirmDialog 
+    IsVisible="@showDeleteConfirm"
+    Title="Delete User"
+    Message="@($"Are you sure you want to delete '{userToDelete?.DisplayName}'? This will remove all team assignments and cannot be undone.")"
+    ConfirmText="Delete"
+    CancelText="Cancel"
+    DialogType="danger"
+    OnConfirm="ConfirmDeleteUser"
+    OnCancel="CancelDeleteUser" />
+
+@code {
+    private List<User> users = new();
+    private List<Team> teams = new();
+    private bool isLoading = true;
+    private bool showCreateDialog = false;
+    private bool showTeamsDialog = false;
+    private bool isSaving = false;
+
+    private string username = string.Empty;
+    private string displayName = string.Empty;
+    private string email = string.Empty;
+    private string password = string.Empty;
+    private bool isSystemAdmin = false;
+    private bool isActive = true;
+    private string errorMessage = string.Empty;
+
+    private User? editingUser = null;
+    private User? managingUser = null;
+
+    private bool showDeleteConfirm = false;
+    private User? userToDelete = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsSystemAdmin())
+        {
+            Navigation.NavigateTo("/dashboard");
+            return;
+        }
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            users = await UserService.GetAllUsersAsync();
+            teams = await TeamService.GetAllTeamsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ShowCreateDialog()
+    {
+        editingUser = null;
+        username = string.Empty;
+        displayName = string.Empty;
+        email = string.Empty;
+        password = string.Empty;
+        isSystemAdmin = false;
+        isActive = true;
+        errorMessage = string.Empty;
+        showCreateDialog = true;
+    }
+
+    private void EditUser(User user)
+    {
+        editingUser = user;
+        username = user.Username;
+        displayName = user.DisplayName;
+        email = user.Email;
+        isActive = user.IsActive;
+        errorMessage = string.Empty;
+        showCreateDialog = true;
+    }
+
+    private void CloseCreateDialog()
+    {
+        showCreateDialog = false;
+    }
+
+    private async Task SaveUser()
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(displayName))
+        {
+            errorMessage = "Username and display name are required";
+            return;
+        }
+
+        if (editingUser == null && string.IsNullOrWhiteSpace(password))
+        {
+            errorMessage = "Password is required for new users";
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (editingUser == null)
+            {
+                await UserService.CreateUserAsync(username, email, displayName, password, isSystemAdmin);
+            }
+            else
+            {
+                await UserService.UpdateUserAsync(editingUser.UserID, email, displayName, isActive);
+            }
+
+            await LoadData();
+            CloseCreateDialog();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ManageTeams(User user)
+    {
+        managingUser = user;
+        errorMessage = string.Empty;
+        showTeamsDialog = true;
+    }
+
+    private void CloseTeamsDialog()
+    {
+        showTeamsDialog = false;
+        managingUser = null;
+    }
+
+    private async Task ToggleTeamAssignment(Team team, bool isAssigned)
+    {
+        if (managingUser == null) return;
+
+        try
+        {
+            if (isAssigned)
+            {
+                // Assign with default role
+                await UserService.AssignUserToTeamAsync(
+                    managingUser.UserID,
+                    team.TeamID,
+                    team.FolderName,
+                    new List<string> { "ContentAuthor" });
+            }
+            else
+            {
+                // Remove from team
+                await UserService.RemoveUserFromTeamAsync(managingUser.UserID, team.TeamID);
+            }
+
+            await LoadData();
+            managingUser = users.FirstOrDefault(u => u.UserID == managingUser.UserID);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task ToggleRole(Team team, string role, bool isChecked)
+    {
+        if (managingUser == null) return;
+
+        try
+        {
+            var teamRole = managingUser.TeamRoles.FirstOrDefault(tr => tr.TeamID == team.TeamID);
+            if (teamRole == null) return;
+
+            var roles = new List<string>(teamRole.Roles);
+
+            if (isChecked && !roles.Contains(role))
+            {
+                roles.Add(role);
+            }
+            else if (!isChecked && roles.Contains(role))
+            {
+                roles.Remove(role);
+            }
+
+            // Must have at least one role
+            if (roles.Count == 0)
+            {
+                errorMessage = "User must have at least one role per team";
+                return;
+            }
+
+            await UserService.UpdateTeamRolesAsync(managingUser.UserID, team.TeamID, roles);
+
+            await LoadData();
+            managingUser = users.FirstOrDefault(u => u.UserID == managingUser.UserID);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void DeleteUser(User user)
+    {
+        userToDelete = user;
+        showDeleteConfirm = true;
+    }
+
+    private async Task ConfirmDeleteUser()
+    {
+        if (userToDelete == null) return;
+
+        try
+        {
+            await UserService.DeleteUserAsync(userToDelete.UserID);
+            await LoadData();
+            showDeleteConfirm = false;
+            userToDelete = null;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting user: {ex.Message}";
+            showDeleteConfirm = false;
+        }
+    }
+
+    private void CancelDeleteUser()
+    {
+        showDeleteConfirm = false;
+        userToDelete = null;
+    }
+}

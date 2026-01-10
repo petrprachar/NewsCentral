@@ -1,0 +1,157 @@
+﻿@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Cancel">
+        <div class="modal-content confirm-dialog" @onclick:stopPropagation="true">
+            <div class="confirm-icon">
+                @if (DialogType == "danger")
+                {
+                    <span class="icon-danger">⚠️</span>
+                }
+                else
+                {
+                    <span class="icon-warning">❓</span>
+                }
+            </div>
+
+            <h3>@Title</h3>
+            <p>@Message</p>
+
+            <div class="confirm-actions">
+                <button @onclick="Cancel" class="btn btn-secondary">@CancelText</button>
+                <button @onclick="Confirm" class="btn @ConfirmButtonClass">@ConfirmText</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        animation: fadeIn 0.2s;
+    }
+
+    @@keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .confirm-dialog {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        max-width: 400px;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s;
+    }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateY(-50px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .confirm-icon {
+        font-size: 48px;
+        margin-bottom: 15px;
+    }
+
+    .icon-danger {
+        color: #dc3545;
+    }
+
+    .icon-warning {
+        color: #ffc107;
+    }
+
+    .confirm-dialog h3 {
+        margin: 0 0 15px 0;
+        color: #333;
+    }
+
+    .confirm-dialog p {
+        color: #666;
+        margin-bottom: 25px;
+        line-height: 1.5;
+    }
+
+    .confirm-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        min-width: 100px;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: #5568d3;
+    }
+</style>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string Title { get; set; } = "Confirm Action";
+    [Parameter] public string Message { get; set; } = "Are you sure?";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string DialogType { get; set; } = "warning"; // "warning" or "danger"
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string ConfirmButtonClass => DialogType == "danger" ? "btn-danger" : "btn-primary";
+
+    private async Task Confirm()
+    {
+        await OnConfirm.InvokeAsync();
+    }
+
+    private async Task Cancel()
+    {
+        await OnCancel.InvokeAsync();
+    }
+}
