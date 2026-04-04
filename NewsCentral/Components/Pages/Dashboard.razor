@@ -1,4 +1,5 @@
 ﻿@page "/dashboard"
+@page "/"
 @inject NewsCentral.Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject Services.TeamContextService TeamContext
@@ -24,6 +25,18 @@
             @if (HasContentAuthorRole() || currentUser?.IsSystemAdmin == true)
             {
                 <a href="/presentations" class="btn btn-link">Presentations</a>
+            }
+
+
+            @if (HasContentAuthorRole() || currentUser?.IsSystemAdmin == true)
+            {
+                <a href="/my-assignments" class="btn btn-link">My Assignments</a>
+            }
+
+
+            @if (HasContentApproverRole() || currentUser?.IsSystemAdmin == true)
+            {
+                <a href="/approvals" class="btn btn-link">Approvals</a>
             }
             <button @onclick="HandleLogout" class="btn btn-secondary">Logout</button>
         </div>
@@ -257,6 +270,15 @@
         return currentUser.TeamRoles.Any(tr => 
             tr.Roles.Contains("ContentAuthor") || 
             tr.Roles.Contains("ContentApprover") || 
+            tr.Roles.Contains("TeamAdmin"));
+    }
+
+    private bool HasContentApproverRole()
+    {
+        if (currentUser == null) return false;
+
+        return currentUser.TeamRoles.Any(tr =>
+            tr.Roles.Contains("ContentApprover") ||
             tr.Roles.Contains("TeamAdmin"));
     }
 }

@@ -1,0 +1,132 @@
+@page "/login"
+@page "/"
+@using Microsoft.Extensions.Localization
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@* @inject IStringLocalizer Localizer *@
+
+<PageTitle>"Login - AppTitle"</PageTitle>
+@*<PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>*@
+
+<div class="login-container">
+    <div class="login-card">
+        <h1>Login</h1>
+        @* <h1>@Localizer["Login"]</h1> *@
+
+        <p class="subtitle">Content Management System</p>
+
+        <div class="form-group">
+            <label>Username:</label>
+            @*<label>@Localizer["Username"]:</label>*@
+            
+            <input type="text" @bind="username" class="form-control" placeholder="Username" />
+            @* <input type="text" @bind="username" class="form-control" placeholder="@Localizer["Username"]" /> *@
+
+        </div>
+
+        <div class="form-group">
+            <label>Password:</label>
+            @*<label>@Localizer["Password"]:</label>*@
+
+            <input type="password" @bind="password" class="form-control" placeholder="Password" />
+            @*<input type="password" @bind="password" class="form-control" placeholder="@Localizer["Password"]" />*@
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">@successMessage</div>
+        }
+
+        <button @onclick="HandleLogin" class="btn btn-primary" disabled="@isLoggingIn">
+            @(isLoggingIn ? "..." : "Login")
+            @*@(isLoggingIn ? "..." : Localizer["Login"])*@
+
+        </button>
+
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="/reset-admin" style="color: #dc3545; font-size: 14px;">
+                Forgot password? Reset Admin Password
+            </a>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string username = string.Empty;
+    private string password = string.Empty;
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private bool isLoggingIn = false;
+    private bool isInitializing = true;
+
+    protected override void OnInitialized()
+    {
+        // If already logged in, redirect to dashboard
+        if (AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/dashboard");
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Initialize authentication service (creates default admin if needed)
+            await AuthService.InitializeAsync();
+            isInitializing = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Initialization error: {ex.Message}";
+            isInitializing = false;
+        }
+    }
+
+    private async void HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await HandleLogin();
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        isLoggingIn = true;
+
+        try
+        {
+            var user = await AuthService.LoginAsync(username, password);
+
+            if (user != null)
+            {
+                successMessage = $"Welcome, {user.DisplayName}!";
+                
+                // Navigate to dashboard after short delay
+                await Task.Delay(1000);
+                Navigation.NavigateTo("/dashboard", forceLoad: true);
+            }
+            else
+            {
+                errorMessage = "Invalid username or password";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Login error: {ex.Message}";
+        }
+        finally
+        {
+            isLoggingIn = false;
+            StateHasChanged();
+        }
+    }
+}

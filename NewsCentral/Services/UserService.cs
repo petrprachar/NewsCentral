@@ -1,4 +1,5 @@
-﻿using NewsCentral.Configuration;
+﻿using System.Text.Json;
+using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
 
@@ -6,11 +7,13 @@ namespace NewsCentral.Services;
 
 public class UserService
 {
+    private readonly string _basePath;
     private readonly JsonFileRepository<UsersCollection> _userRepo;
     private readonly AuthenticationService _authService;
 
     public UserService(AppConfiguration config, AuthenticationService authService)
     {
+        _basePath = config.DataPath;
         _authService = authService;
         _userRepo = new JsonFileRepository<UsersCollection>(
             Path.Combine(config.DataPath, "config"),
@@ -303,5 +306,53 @@ public class UserService
         }
 
         return removed > 0;
+    }
+
+    public async Task<bool> ResetAdminPasswordAsync(string newPassword)
+    {
+        try
+        {
+            var usersFilePath = Path.Combine(_basePath, "config", "users.json");
+
+            if (!File.Exists(usersFilePath))
+            {
+                return false;
+            }
+
+            // Read the file directly
+            var json = await File.ReadAllTextAsync(usersFilePath);
+            var usersCollection = System.Text.Json.JsonSerializer.Deserialize<UsersCollection>(json);
+
+            if (usersCollection == null)
+            {
+                return false;
+            }
+
+            var adminUser = usersCollection.Users.FirstOrDefault(u => u.Username == "admin");
+            if (adminUser == null)
+            {
+                return false;
+            }
+
+            // Hash the new password
+            adminUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+
+            // Save back to file
+            var options = new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+
+            var updatedJson = System.Text.Json.JsonSerializer.Serialize(usersCollection, options);
+            await File.WriteAllTextAsync(usersFilePath, updatedJson);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error resetting admin password: {ex.Message}");
+            return false;
+        }
     }
 }

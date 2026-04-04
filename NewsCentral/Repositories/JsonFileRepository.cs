@@ -78,7 +78,8 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
 
             var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
 
             await File.WriteAllTextAsync(filePath, json);
@@ -103,7 +104,8 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
 
             var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
 
             await File.WriteAllTextAsync(filePath, json);

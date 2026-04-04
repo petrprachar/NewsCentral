@@ -1,0 +1,322 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+	<xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+		<xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+		<xsd:element name="root" msdata:IsDataSet="true">
+			<xsd:complexType>
+				<xsd:choice maxOccurs="unbounded">
+					<xsd:element name="metadata">
+						<xsd:complexType>
+							<xsd:sequence>
+								<xsd:element name="value" type="xsd:string" minOccurs="0" />
+							</xsd:sequence>
+							<xsd:attribute name="name" use="required" type="xsd:string" />
+							<xsd:attribute name="type" type="xsd:string" />
+							<xsd:attribute name="mimetype" type="xsd:string" />
+							<xsd:attribute ref="xml:space" />
+						</xsd:complexType>
+					</xsd:element>
+					<xsd:element name="assembly">
+						<xsd:complexType>
+							<xsd:attribute name="alias" type="xsd:string" />
+							<xsd:attribute name="name" type="xsd:string" />
+						</xsd:complexType>
+					</xsd:element>
+					<xsd:element name="data">
+						<xsd:complexType>
+							<xsd:sequence>
+								<xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+								<xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+							</xsd:sequence>
+							<xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+							<xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+							<xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+							<xsd:attribute ref="xml:space" />
+						</xsd:complexType>
+					</xsd:element>
+					<xsd:element name="resheader">
+						<xsd:complexType>
+							<xsd:sequence>
+								<xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+							</xsd:sequence>
+							<xsd:attribute name="name" type="xsd:string" use="required" />
+						</xsd:complexType>
+					</xsd:element>
+				</xsd:choice>
+			</xsd:complexType>
+		</xsd:element>
+	</xsd:schema>
+	<resheader name="resmimetype">
+		<value>text/microsoft-resx</value>
+	</resheader>
+	<resheader name="version">
+		<value>2.0</value>
+	</resheader>
+	<resheader name="reader">
+		<value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+	</resheader>
+	<resheader name="writer">
+		<value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+	</resheader>
+	<data name="AppTitle" xml:space="preserve">
+    <value>NewsCentral</value>
+  </data>
+	<data name="Login" xml:space="preserve">
+    <value>Anmelden</value>
+  </data>
+	<data name="Logout" xml:space="preserve">
+    <value>Abmelden</value>
+  </data>
+	<data name="Username" xml:space="preserve">
+    <value>Benutzername</value>
+  </data>
+	<data name="Password" xml:space="preserve">
+    <value>Passwort</value>
+  </data>
+	<data name="Dashboard" xml:space="preserve">
+    <value>Dashboard</value>
+  </data>
+	<data name="Presentations" xml:space="preserve">
+    <value>Präsentationen</value>
+  </data>
+	<data name="MyAssignments" xml:space="preserve">
+    <value>Meine Zuweisungen</value>
+  </data>
+	<data name="Approvals" xml:space="preserve">
+    <value>Genehmigungen</value>
+  </data>
+	<data name="Teams" xml:space="preserve">
+    <value>Teams</value>
+  </data>
+	<data name="Users" xml:space="preserve">
+    <value>Benutzer</value>
+  </data>
+	<data name="Cancel" xml:space="preserve">
+    <value>Abbrechen</value>
+  </data>
+	<data name="Save" xml:space="preserve">
+    <value>Speichern</value>
+  </data>
+	<data name="Delete" xml:space="preserve">
+    <value>Löschen</value>
+  </data>
+	<data name="Create" xml:space="preserve">
+    <value>Erstellen</value>
+  </data>
+	<data name="Edit" xml:space="preserve">
+    <value>Bearbeiten</value>
+  </data>
+	<data name="Approve" xml:space="preserve">
+    <value>Genehmigen</value>
+  </data>
+	<data name="Reject" xml:space="preserve">
+    <value>Ablehnen</value>
+  </data>
+	<data name="Publish" xml:space="preserve">
+    <value>Veröffentlichen</value>
+  </data>
+	<data name="Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+	<data name="Description" xml:space="preserve">
+    <value>Beschreibung</value>
+  </data>
+	<data name="TargetTeam" xml:space="preserve">
+    <value>Ziel-Team</value>
+  </data>
+	<data name="SourceTeam" xml:space="preserve">
+    <value>Quell-Team</value>
+  </data>
+	<data name="Schedule" xml:space="preserve">
+    <value>Zeitplan</value>
+  </data>
+	<data name="StartDate" xml:space="preserve">
+    <value>Startdatum</value>
+  </data>
+	<data name="EndDate" xml:space="preserve">
+    <value>Enddatum</value>
+  </data>
+	<data name="DaysOfWeek" xml:space="preserve">
+    <value>Wochentage</value>
+  </data>
+	<data name="Monday" xml:space="preserve">
+    <value>Montag</value>
+  </data>
+	<data name="Tuesday" xml:space="preserve">
+    <value>Dienstag</value>
+  </data>
+	<data name="Wednesday" xml:space="preserve">
+    <value>Mittwoch</value>
+  </data>
+	<data name="Thursday" xml:space="preserve">
+    <value>Donnerstag</value>
+  </data>
+	<data name="Friday" xml:space="preserve">
+    <value>Freitag</value>
+  </data>
+	<data name="Saturday" xml:space="preserve">
+    <value>Samstag</value>
+  </data>
+	<data name="Sunday" xml:space="preserve">
+    <value>Sonntag</value>
+  </data>
+	<data name="RequireApproval" xml:space="preserve">
+    <value>Genehmigung erforderlich</value>
+  </data>
+	<data name="CreateAssignment" xml:space="preserve">
+    <value>Zuweisung erstellen</value>
+  </data>
+	<data name="CreatePresentation" xml:space="preserve">
+    <value>Präsentation erstellen</value>
+  </data>
+	<data name="EditPresentation" xml:space="preserve">
+    <value>Präsentation bearbeiten</value>
+  </data>
+	<data name="DeletePresentation" xml:space="preserve">
+    <value>Präsentation löschen</value>
+  </data>
+	<data name="PendingApproval" xml:space="preserve">
+    <value>Ausstehende Genehmigung</value>
+  </data>
+	<data name="Approved" xml:space="preserve">
+    <value>Genehmigt</value>
+  </data>
+	<data name="Published" xml:space="preserve">
+    <value>Veröffentlicht</value>
+  </data>
+	<data name="Rejected" xml:space="preserve">
+    <value>Abgelehnt</value>
+  </data>
+	<data name="Cancelled" xml:space="preserve">
+    <value>Storniert</value>
+  </data>
+	<data name="Draft" xml:space="preserve">
+    <value>Entwurf</value>
+  </data>
+	<data name="NoPendingApprovals" xml:space="preserve">
+    <value>Keine ausstehenden Genehmigungen</value>
+  </data>
+	<data name="NoAssignmentsYet" xml:space="preserve">
+    <value>Noch keine Zuweisungen</value>
+  </data>
+	<data name="LoadingPleaseWait" xml:space="preserve">
+    <value>Laden...</value>
+  </data>
+	<data name="SuccessfullyPublished" xml:space="preserve">
+    <value>Erfolgreich veröffentlicht an {0}</value>
+  </data>
+	<data name="ErrorPublishing" xml:space="preserve">
+    <value>Fehler beim Veröffentlichen: {0}</value>
+  </data>
+	<data name="InvalidCredentials" xml:space="preserve">
+    <value>Ungültiger Benutzername oder Passwort</value>
+  </data>
+	<data name="PasswordChangedSuccess" xml:space="preserve">
+    <value>Passwort erfolgreich geändert!</value>
+  </data>
+	<data name="WelcomeMessage" xml:space="preserve">
+    <value>Willkommen, {0}!</value>
+  </data>
+	<data name="ConfirmDelete" xml:space="preserve">
+    <value>Möchten Sie '{0}' wirklich löschen?</value>
+  </data>
+	<data name="Publishing" xml:space="preserve">
+    <value>Veröffentlichen...</value>
+  </data>
+	<data name="CreatedBy" xml:space="preserve">
+    <value>Erstellt von</value>
+  </data>
+	<data name="ApprovedBy" xml:space="preserve">
+    <value>Genehmigt von</value>
+  </data>
+	<data name="PublishedBy" xml:space="preserve">
+    <value>Veröffentlicht von</value>
+  </data>
+	<data name="DateCreated" xml:space="preserve">
+    <value>Erstellungsdatum</value>
+  </data>
+	<data name="ApprovedDate" xml:space="preserve">
+    <value>Genehmigungsdatum</value>
+  </data>
+	<data name="PublishedDate" xml:space="preserve">
+    <value>Veröffentlichungsdatum</value>
+  </data>
+	<data name="RejectionReason" xml:space="preserve">
+    <value>Ablehnungsgrund</value>
+  </data>
+	<data name="ApprovalNotes" xml:space="preserve">
+    <value>Genehmigungsnotizen</value>
+  </data>
+	<data name="PendingYourApproval" xml:space="preserve">
+    <value>Wartet auf Ihre Genehmigung</value>
+  </data>
+	<data name="ReadyToPublish" xml:space="preserve">
+    <value>Bereit zur Veröffentlichung</value>
+  </data>
+	<data name="ViewPresentations" xml:space="preserve">
+    <value>Präsentationen anzeigen</value>
+  </data>
+	<data name="BackToDashboard" xml:space="preserve">
+    <value>Zurück zum Dashboard</value>
+  </data>
+	<data name="BackToPresentations" xml:space="preserve">
+    <value>Zurück zu Präsentationen</value>
+  </data>
+	<data name="ChangePassword" xml:space="preserve">
+    <value>Passwort ändern</value>
+  </data>
+	<data name="CurrentPassword" xml:space="preserve">
+    <value>Aktuelles Passwort</value>
+  </data>
+	<data name="NewPassword" xml:space="preserve">
+    <value>Neues Passwort</value>
+  </data>
+	<data name="ConfirmPassword" xml:space="preserve">
+    <value>Passwort bestätigen</value>
+  </data>
+	<data name="PasswordTooShort" xml:space="preserve">
+    <value>Passwort muss mindestens 6 Zeichen lang sein</value>
+  </data>
+	<data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>Passwörter stimmen nicht überein</value>
+  </data>
+	<data name="CurrentPasswordIncorrect" xml:space="preserve">
+    <value>Aktuelles Passwort ist falsch</value>
+  </data>
+	<data name="HeadlineText" xml:space="preserve">
+    <value>Überschrift</value>
+  </data>
+	<data name="BodyText" xml:space="preserve">
+    <value>Fließtext</value>
+  </data>
+	<data name="CallToAction" xml:space="preserve">
+    <value>Handlungsaufforderung</value>
+  </data>
+	<data name="OriginalImage" xml:space="preserve">
+    <value>Originalbild</value>
+  </data>
+	<data name="GeneratedPoster" xml:space="preserve">
+    <value>Generiertes Poster</value>
+  </data>
+	<data name="PosterPreview" xml:space="preserve">
+    <value>Poster-Vorschau</value>
+  </data>
+	<data name="SelectImage" xml:space="preserve">
+    <value>Bild auswählen</value>
+  </data>
+	<data name="UploadImage" xml:space="preserve">
+    <value>Bild hochladen</value>
+  </data>
+	<data name="ImageSelected" xml:space="preserve">
+    <value>Bild ausgewählt</value>
+  </data>
+	<data name="PleaseSelectImage" xml:space="preserve">
+    <value>Bitte wählen Sie ein Bild aus</value>
+  </data>
+	<data name="ImageTooLarge" xml:space="preserve">
+    <value>Bild muss kleiner als 10 MB sein</value>
+  </data>
+	<data name="InvalidImageType" xml:space="preserve">
+    <value>Bitte wählen Sie eine gültige Bilddatei</value>
+  </data>
+</root>

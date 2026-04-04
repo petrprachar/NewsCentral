@@ -40,12 +40,18 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
         var files = Directory.GetFiles(folderPath, "*.json");
         var entities = new List<T>();
 
+        // ADD OPTIONS
+        var options = new JsonSerializerOptions
+        {
+            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+        };
+
         foreach (var file in files)
         {
             try
             {
                 var json = await File.ReadAllTextAsync(file);
-                var entity = JsonSerializer.Deserialize<T>(json);
+                var entity = JsonSerializer.Deserialize<T>(json, options);  // USE OPTIONS
                 if (entity != null)
                     entities.Add(entity);
             }
@@ -68,7 +74,14 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
         try
         {
             var json = await File.ReadAllTextAsync(filePath);
-            return JsonSerializer.Deserialize<T>(json);
+
+            // ADD OPTIONS HERE TOO
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+
+            return JsonSerializer.Deserialize<T>(json, options);
         }
         catch (Exception ex)
         {
@@ -89,7 +102,8 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
 
             var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
 
             await File.WriteAllTextAsync(filePath, json);
@@ -114,7 +128,8 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
 
             var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
 
             await File.WriteAllTextAsync(filePath, json);

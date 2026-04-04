@@ -1,0 +1,604 @@
+﻿@page "/presentations/{presentationId}/assign"
+@using NewsCentral.Models
+@inject Services.PresentationService PresentationService
+@inject Services.ScheduleService ScheduleService
+@inject Services.AssignmentService AssignmentService
+@inject Services.TeamService TeamService
+@inject Services.TeamContextService TeamContext
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Create Schedule & Assignment - NewsCentral</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>Create Schedule & Assignment</h1>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else if (presentation == null)
+    {
+        <div class="alert alert-danger">
+            <p>Presentation not found</p>
+            <a href="/presentations" class="btn btn-secondary">Back to Presentations</a>
+        </div>
+    }
+    else
+    {
+        <div class="assign-form">
+            <div class="form-section">
+                <h3>Presentation</h3>
+                <div class="presentation-info">
+                    <strong>@presentation.Name</strong>
+                    <p>@presentation.Description</p>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>1. Schedule</h3>
+
+                <div class="form-group">
+                    <label>Start Date: *</label>
+                    <input type="date" @bind="scheduleStartDate" class="form-control" />
+                </div>
+
+                <div class="form-group">
+                    <label>End Date: *</label>
+                    <input type="date" @bind="scheduleEndDate" class="form-control" />
+                </div>
+
+                <div class="form-group">
+                    <label>Days of Week: *</label>
+                    <div class="days-checkboxes">
+                        <label><input type="checkbox" @bind="monday" /> Monday</label>
+                        <label><input type="checkbox" @bind="tuesday" /> Tuesday</label>
+                        <label><input type="checkbox" @bind="wednesday" /> Wednesday</label>
+                        <label><input type="checkbox" @bind="thursday" /> Thursday</label>
+                        <label><input type="checkbox" @bind="friday" /> Friday</label>
+                        <label><input type="checkbox" @bind="saturday" /> Saturday</label>
+                        <label><input type="checkbox" @bind="sunday" /> Sunday</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3>2. Target Teams</h3>
+
+                @if (currentTeam is not null)
+                {
+                    <div class="current-team-section">
+                        <label class="section-label">Current Team (Self-Assignment):</label>
+                        <div class="team-checkbox current">
+                            <label>
+                                <input type="checkbox"
+                                       checked="@selectedTeams.Contains(currentTeam.TeamID)"
+                                       @onchange="@(e => ToggleTeam(currentTeam.TeamID, (bool)e.Value!))" />
+                                <strong>@currentTeam.Name</strong> (Current)
+                            </label>
+                            <small>@currentTeam.Description</small>
+                        </div>
+                    </div>
+                }
+
+                @if (availableTeams.Count == 0)
+                {
+                    <p class="no-teams">No other teams available for assignment</p>
+                }
+                else
+                {
+                    <label class="section-label">Other Teams:</label>
+                    <div class="teams-list">
+                        @foreach (var team in availableTeams)
+                        {
+                            var isSelected = selectedTeams.Contains(team.TeamID);
+
+                            <div class="team-checkbox">
+                                <label>
+                                    <input type="checkbox"
+                                           checked="@isSelected"
+                                           @onchange="@(e => ToggleTeam(team.TeamID, (bool)e.Value!))" />
+                                    <strong>@team.Name</strong>
+                                </label>
+                                <small>@team.Description</small>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="form-section">
+                <h3>3. Options</h3>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" @bind="requiresApproval" />
+                        Require approval from target team approvers
+                    </label>
+                    <small class="hint">If unchecked, assignments will be automatically approved</small>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            @if (!string.IsNullOrEmpty(successMessage))
+            {
+                <div class="alert alert-success">
+                    <div class="success-content">
+                        <strong>✓</strong> @successMessage
+                    </div>
+                    <button @onclick="ReturnToPresentations" class="btn btn-return">
+                        Back to Presentations
+                    </button>
+                </div>
+            }
+
+            @if (string.IsNullOrEmpty(successMessage))
+            {
+                <div class="form-actions">
+                    <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
+                    <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@isCreating">
+                        @(isCreating ? "Creating..." : "Create Assignments")
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    .page-container {
+        padding: 20px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 30px;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .assign-form {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .form-section {
+        margin-bottom: 30px;
+        padding-bottom: 30px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+
+        .form-section:last-of-type {
+            border-bottom: none;
+        }
+
+        .form-section h3 {
+            margin: 0 0 20px 0;
+            color: #667eea;
+        }
+
+    .presentation-info {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+        .presentation-info strong {
+            font-size: 16px;
+            color: #333;
+        }
+
+        .presentation-info p {
+            margin: 5px 0 0 0;
+            color: #666;
+        }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #333;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    .days-checkboxes {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+        .days-checkboxes label {
+            font-weight: normal;
+            cursor: pointer;
+        }
+
+    .teams-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .team-checkbox {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+        border: 2px solid transparent;
+        transition: all 0.2s;
+    }
+
+        .team-checkbox:has(input:checked) {
+            background: #e7f3ff;
+            border-color: #667eea;
+        }
+
+        .team-checkbox label {
+            display: block;
+            cursor: pointer;
+            margin-bottom: 5px;
+        }
+
+        .team-checkbox small {
+            color: #666;
+            margin-left: 24px;
+        }
+
+    .no-teams {
+        padding: 20px;
+        text-align: center;
+        color: #999;
+        font-style: italic;
+    }
+
+    .hint {
+        display: block;
+        margin-top: 5px;
+        margin-left: 24px;
+        color: #999;
+        font-size: 12px;
+    }
+
+    .alert {
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .alert-success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+
+    .success-content {
+        margin-bottom: 15px;
+        font-size: 16px;
+    }
+
+        .success-content strong {
+            font-size: 20px;
+            margin-right: 8px;
+            color: #28a745;
+        }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+    .btn-return {
+        background: #28a745;
+        color: white;
+        width: 100%;
+        padding: 12px;
+        font-size: 15px;
+    }
+
+        .btn-return:hover {
+            background: #218838;
+        }
+
+    .form-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 30px;
+    }
+
+    .current-team-section {
+        margin-bottom: 25px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #eee;
+    }
+
+    .section-label {
+        display: block;
+        font-weight: 600;
+        color: #667eea;
+        margin-bottom: 10px;
+    }
+
+    .team-checkbox.current {
+        background: #fff3cd;
+        border-color: #ffc107;
+    }
+</style>
+
+@code
+{
+    [Parameter] public string PresentationId { get; set; } = string.Empty;
+
+    private Presentation? presentation;
+    private List<Team> availableTeams = new();
+    private bool isLoading = true;
+    private bool isCreating = false;
+
+    private DateTime scheduleStartDate = DateTime.Today.AddDays(1);
+    private DateTime scheduleEndDate = DateTime.Today.AddDays(30);
+    private bool monday = true;
+    private bool tuesday = true;
+    private bool wednesday = true;
+    private bool thursday = true;
+    private bool friday = true;
+    private bool saturday = false;
+    private bool sunday = false;
+
+    private Team? currentTeam;
+
+    private List<string> selectedTeams = new();
+    private bool requiresApproval = true;
+
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        if (!TeamContext.HasTeamSelected())
+        {
+            Navigation.NavigateTo("/presentations");
+            return;
+        }
+
+        await LoadData();
+    }
+    private async Task LoadData()
+    {
+        isLoading = true;
+
+        try
+        {
+            var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+            if (string.IsNullOrEmpty(teamFolderName))
+            {
+                Navigation.NavigateTo("/presentations");
+                return;
+            }
+
+            presentation = await PresentationService.GetPresentationAsync(teamFolderName, PresentationId);
+
+            if (presentation is null)
+            {
+                return;
+            }
+
+            // Load all teams
+            var allTeams = await TeamService.GetAllTeamsAsync();
+            currentTeam = allTeams.FirstOrDefault(t => t.FolderName == teamFolderName);
+
+            // Other teams = all teams except current (for the "Other Teams" section)
+            availableTeams = allTeams.Where(t => t.FolderName != teamFolderName).ToList();
+
+            // DON'T auto-select anything - completely empty
+            selectedTeams.Clear();
+        }
+        catch (Exception ex)  
+        {
+            errorMessage = $"Error loading data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ToggleTeam(string teamId, bool isSelected)
+    {
+        if (isSelected)
+        {
+            if (!selectedTeams.Contains(teamId))
+            {
+                selectedTeams.Add(teamId);
+            }
+        }
+        else
+        {
+            selectedTeams.Remove(teamId);
+        }
+    }
+
+    private async Task CreateAssignments()
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        // Validation
+        if (scheduleEndDate <= scheduleStartDate)
+        {
+            errorMessage = "End date must be after start date";
+            return;
+        }
+
+        var selectedDays = GetSelectedDays();
+        if (selectedDays.Count == 0)
+        {
+            errorMessage = "Please select at least one day of the week";
+            return;
+        }
+
+        if (selectedTeams.Count == 0)
+        {
+            errorMessage = "Please select at least one target team";
+            return;
+        }
+
+        isCreating = true;
+
+        try
+        {
+            var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+            if (string.IsNullOrEmpty(teamFolderName))
+            {
+                errorMessage = "No team selected";
+                return;
+            }
+
+            if (presentation is null)
+            {
+                errorMessage = "Presentation not loaded";
+                return;
+            }
+
+            // Create schedule
+            var schedule = await ScheduleService.CreateScheduleAsync(
+                teamFolderName,
+                PresentationId,
+                presentation.Version,
+                scheduleStartDate,
+                scheduleEndDate,
+                selectedDays
+            );
+
+            // Create assignments for each selected team
+            var allTeams = await TeamService.GetAllTeamsAsync();
+            var createdCount = 0;
+
+            foreach (var teamId in selectedTeams)
+            {
+                var targetTeam = allTeams.FirstOrDefault(t => t.TeamID == teamId);
+                if (targetTeam is null) continue;
+
+                await AssignmentService.CreateAssignmentAsync(
+                    teamFolderName,
+                    PresentationId,
+                    presentation.Version,
+                    schedule.ScheduleID,
+                    targetTeam.FolderName,
+                    requiresApproval
+                );
+
+                createdCount++;
+            }
+
+            successMessage = $"Schedule and {createdCount} assignment(s) created successfully!";
+
+            if (requiresApproval)
+            {
+                successMessage += " Assignments are now pending approval.";
+            }
+            else
+            {
+                successMessage += " Assignments are automatically approved.";
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error creating assignments: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private List<int> GetSelectedDays()
+    {
+        var days = new List<int>();
+        if (monday) days.Add(1);
+        if (tuesday) days.Add(2);
+        if (wednesday) days.Add(3);
+        if (thursday) days.Add(4);
+        if (friday) days.Add(5);
+        if (saturday) days.Add(6);
+        if (sunday) days.Add(7);
+        return days;
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/presentations");
+    }
+
+    private void ReturnToPresentations()
+    {
+        Navigation.NavigateTo("/presentations");
+    }
+
+}

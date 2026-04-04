@@ -311,38 +311,55 @@
     private async Task HandleImageSelected(InputFileChangeEventArgs e)
     {
         errorMessage = string.Empty;
-        
-        var file = e.File;
-        
-        if (file == null)
-            return;
-
-        // Validate file type
-        if (!file.ContentType.StartsWith("image/"))
-        {
-            errorMessage = "Please select a valid image file";
-            return;
-        }
-
-        // Validate file size (max 10MB)
-        if (file.Size > 10 * 1024 * 1024)
-        {
-            errorMessage = "Image file must be smaller than 10MB";
-            return;
-        }
-
-        selectedFileName = file.Name;
 
         try
         {
-            // Read image data
+            var file = e.File;
+
+            if (file == null)
+                return;
+
+            // Validate file type
+            if (!file.ContentType.StartsWith("image/"))
+            {
+                errorMessage = "Please select a valid image file";
+                return;
+            }
+
+            // Validate file size (max 10MB)
+            if (file.Size > 10 * 1024 * 1024)
+            {
+                errorMessage = "Image file must be smaller than 10MB";
+                return;
+            }
+
+            selectedFileName = file.Name;
+
+            // Read image data with error handling
             using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
             imageData = ms.ToArray();
 
+            // Validate image data
+            if (imageData == null || imageData.Length == 0)
+            {
+                errorMessage = "Failed to load image data";
+                selectedFileName = string.Empty;
+                imageData = null;
+                imagePreview = null;
+                return;
+            }
+
             // Create preview
             imagePreview = $"data:{file.ContentType};base64,{Convert.ToBase64String(imageData)}";
+        }
+        catch (IOException ioEx)
+        {
+            errorMessage = $"Error reading file: {ioEx.Message}. Try selecting a different image.";
+            selectedFileName = string.Empty;
+            imageData = null;
+            imagePreview = null;
         }
         catch (Exception ex)
         {

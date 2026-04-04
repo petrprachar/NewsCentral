@@ -1,8 +1,12 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿#pragma warning disable CA1416 // Validate platform compatibility
+
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NewsCentral.Configuration;
 using NewsCentral.Services;
 using System.Reflection;
+using Microsoft.Extensions.Localization;
+using System.Globalization;
 
 namespace NewsCentral;
 
@@ -94,9 +98,30 @@ public static class MauiProgram
         builder.Services.AddSingleton<AuthenticationService>();
         builder.Services.AddSingleton<TeamService>();
         builder.Services.AddSingleton<UserService>();
+        builder.Services.AddSingleton<PosterGenerationService>();
         builder.Services.AddSingleton<PresentationService>();
         builder.Services.AddSingleton<TeamContextService>();
+        builder.Services.AddSingleton<ScheduleService>();
+        builder.Services.AddSingleton<AssignmentService>();
+        builder.Services.AddSingleton<PublishingService>();
+
+        // Add localization
+        builder.Services.AddLocalization();
+
+        // Register string localizer
+        builder.Services.AddSingleton<IStringLocalizer>(sp =>
+        {
+            var factory = sp.GetRequiredService<IStringLocalizerFactory>();
+            return factory.Create("Resources.Resources", typeof(MauiProgram).Assembly.GetName().Name!);
+        });
+
+        // TEMPORARY: Force German for testing
+        var culture = new System.Globalization.CultureInfo("es");
+        System.Globalization.CultureInfo.CurrentCulture = culture;
+        System.Globalization.CultureInfo.CurrentUICulture = culture;
 
         return builder.Build();
     }
 }
+
+#pragma warning restore CA1416

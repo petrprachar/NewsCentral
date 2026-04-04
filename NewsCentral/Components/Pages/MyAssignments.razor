@@ -1,0 +1,604 @@
+﻿@page "/my-assignments"
+@inject Services.AssignmentService AssignmentService
+@inject Services.PresentationService PresentationService
+@inject Services.ScheduleService ScheduleService
+@inject Services.TeamService TeamService
+@inject Services.PublishingService PublishingService
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@using NewsCentral.Components.Shared
+@using NewsCentral.Models
+
+<PageTitle>My Assignments - NewsCentral</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>My Assignments</h1>
+        <p class="subtitle">View and publish your content assignments</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading">Loading assignments...</div>
+    }
+    else if (myAssignments.Count == 0)
+    {
+        <div class="empty-state">
+            <h3>No Assignments Yet</h3>
+            <p>You haven't created any assignments</p>
+            <a href="/presentations" class="btn btn-primary">Create Assignment</a>
+        </div>
+    }
+    else
+    {
+        <!-- Approved Assignments Ready to Publish -->
+        @if (approvedAssignments.Count > 0)
+        {
+            <div class="section">
+                <h2>✓ Approved - Ready to Publish (@approvedAssignments.Count)</h2>
+                <div class="assignments-list">
+                    @foreach (var item in approvedAssignments)
+                    {
+                        <div class="assignment-card approved">
+                            <div class="assignment-header">
+                                <div>
+                                    <h3>@item.PresentationName</h3>
+                                    <p class="meta">
+                                        To: <strong>@item.TargetTeamName</strong> |
+                                        Approved: @item.Assignment.ApprovedDate?.ToString("MMM dd, yyyy")
+                                    </p>
+                                </div>
+                                <div class="status-badge success">Approved</div>
+                            </div>
+
+                            <div class="assignment-body">
+                                <p class="description">@item.PresentationDescription</p>
+
+                                <div class="schedule-info">
+                                    <strong>Schedule:</strong>
+                                    @item.ScheduleStart.ToString("MMM dd") - @item.ScheduleEnd.ToString("MMM dd, yyyy") |
+                                    @FormatDaysOfWeek(item.DaysOfWeek)
+                                </div>
+                            </div>
+
+                            <div class="assignment-actions">
+                                <button @onclick="() => PublishAssignment(item)" class="btn btn-success" disabled="@isPublishing">
+                                    @(isPublishing && publishingId == item.Assignment.AssignmentID ? "Publishing..." : "📤 Publish")
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Pending Approval -->
+        @if (pendingAssignments.Count > 0)
+        {
+            <div class="section">
+                <h2>⏳ Pending Approval (@pendingAssignments.Count)</h2>
+                <div class="assignments-list">
+                    @foreach (var item in pendingAssignments)
+                    {
+                        <div class="assignment-card pending">
+                            <div class="assignment-header">
+                                <div>
+                                    <h3>@item.PresentationName</h3>
+                                    <p class="meta">To: <strong>@item.TargetTeamName</strong></p>
+                                </div>
+                                <div class="status-badge warning">Pending</div>
+                            </div>
+
+                            <div class="assignment-body">
+                                <p class="description">@item.PresentationDescription</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Published -->
+        @if (publishedAssignments.Count > 0)
+        {
+            <div class="section">
+                <h2>✅ Published (@publishedAssignments.Count)</h2>
+                <div class="assignments-list">
+                    @foreach (var item in publishedAssignments)
+                    {
+                        <div class="assignment-card published">
+                            <div class="assignment-header">
+                                <div>
+                                    <h3>@item.PresentationName</h3>
+                                    <p class="meta">
+                                        To: <strong>@item.TargetTeamName</strong> |
+                                        Published: @item.Assignment.PublishedDate?.ToString("MMM dd, yyyy")
+                                    </p>
+                                </div>
+                                <div class="status-badge published-badge">Published</div>
+                            </div>
+
+                            <div class="assignment-body">
+                                <p class="description">@item.PresentationDescription</p>
+
+                                @if (item.Assignment.PublishedPaths.Count > 0)
+                                {
+                                    <div class="published-files">
+                                        <strong>Published files:</strong>
+                                        <ul>
+                                            @foreach (var path in item.Assignment.PublishedPaths)
+                                            {
+                                                <li>@path</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Rejected -->
+        @if (rejectedAssignments.Count > 0)
+        {
+            <div class="section">
+                <h2>✗ Rejected (@rejectedAssignments.Count)</h2>
+                <div class="assignments-list">
+                    @foreach (var item in rejectedAssignments)
+                    {
+                        <div class="assignment-card rejected">
+                            <div class="assignment-header">
+                                <div>
+                                    <h3>@item.PresentationName</h3>
+                                    <p class="meta">To: <strong>@item.TargetTeamName</strong></p>
+                                </div>
+                                <div class="status-badge danger">Rejected</div>
+                            </div>
+
+                            <div class="assignment-body">
+                                <p class="description">@item.PresentationDescription</p>
+
+                                @if (!string.IsNullOrEmpty(item.Assignment.RejectionReason))
+                                {
+                                    <div class="rejection-reason">
+                                        <strong>Rejection reason:</strong>
+                                        <p>@item.Assignment.RejectionReason</p>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="toast success">
+            ✓ @successMessage
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="toast error">
+            ✗ @errorMessage
+        </div>
+    }
+</div>
+
+<style>
+    .page-container {
+        padding: 20px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 30px;
+    }
+
+        .page-header h1 {
+            margin: 0;
+        }
+
+    .subtitle {
+        color: #666;
+        margin: 5px 0 0 0;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .section {
+        margin-bottom: 40px;
+    }
+
+        .section h2 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 20px;
+        }
+
+    .assignments-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .assignment-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-left: 4px solid #ccc;
+    }
+
+        .assignment-card.approved {
+            border-left-color: #28a745;
+        }
+
+        .assignment-card.pending {
+            border-left-color: #ffc107;
+        }
+
+        .assignment-card.published {
+            border-left-color: #17a2b8;
+        }
+
+        .assignment-card.rejected {
+            border-left-color: #dc3545;
+        }
+
+    .assignment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid #eee;
+    }
+
+        .assignment-header h3 {
+            margin: 0;
+            color: #333;
+        }
+
+    .meta {
+        color: #666;
+        margin: 5px 0 0 0;
+        font-size: 14px;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+        .status-badge.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-badge.published-badge {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .status-badge.danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+    .assignment-body {
+        margin-bottom: 15px;
+    }
+
+    .description {
+        color: #666;
+        margin-bottom: 10px;
+    }
+
+    .schedule-info {
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 5px;
+        font-size: 14px;
+        color: #333;
+    }
+
+    .published-files {
+        margin-top: 10px;
+        padding: 10px;
+        background: #e7f3ff;
+        border-radius: 5px;
+        font-size: 13px;
+    }
+
+        .published-files ul {
+            margin: 5px 0 0 0;
+            padding-left: 20px;
+        }
+
+        .published-files li {
+            color: #666;
+            margin: 3px 0;
+        }
+
+    .rejection-reason {
+        margin-top: 10px;
+        padding: 10px;
+        background: #fff3cd;
+        border-left: 3px solid #ffc107;
+        border-radius: 3px;
+        font-size: 14px;
+    }
+
+        .rejection-reason p {
+            margin: 5px 0 0 0;
+            color: #856404;
+        }
+
+    .assignment-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-primary {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-success {
+        background: #28a745;
+        color: white;
+    }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-success:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+    .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 5px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease-out;
+        z-index: 1000;
+    }
+
+        .toast.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .toast.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+    @@keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+
+@code {
+    private List<AssignmentViewModel> myAssignments = new();
+    private List<AssignmentViewModel> approvedAssignments = new();
+    private List<AssignmentViewModel> pendingAssignments = new();
+    private List<AssignmentViewModel> publishedAssignments = new();
+    private List<AssignmentViewModel> rejectedAssignments = new();
+
+    private bool isLoading = true;
+    private bool isPublishing = false;
+    private string? publishingId = null;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadMyAssignments();
+    }
+
+    private async Task LoadMyAssignments()
+    {
+        isLoading = true;
+        myAssignments.Clear();
+
+        try
+        {
+            var currentUser = AuthService.GetCurrentUser();
+            if (currentUser == null) return;
+
+            var allAssignments = await AssignmentService.GetAllAssignmentsAsync();
+            var allTeams = await TeamService.GetAllTeamsAsync();
+
+            // Filter assignments created by current user
+            var userAssignments = allAssignments
+                .Where(a => a.CreatedBy == currentUser.UserID)
+                .OrderByDescending(a => a.DateCreated)
+                .ToList();
+
+            foreach (var assignment in userAssignments)
+            {
+                // Load presentation details
+                var presentation = await PresentationService.GetPresentationAsync(
+                    assignment.SourceTeam,
+                    assignment.PresentationID);
+
+                if (presentation is null) continue;
+
+                var targetTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.TargetTeam);
+
+                // Load schedule
+                var schedule = await ScheduleService.GetScheduleAsync(
+                    assignment.SourceTeam,
+                    assignment.ScheduleID);
+
+                var viewModel = new AssignmentViewModel
+                {
+                    Assignment = assignment,
+                    PresentationName = presentation.Name,
+                    PresentationDescription = presentation.Description,
+                    TargetTeamName = targetTeam?.Name ?? assignment.TargetTeam,
+                    ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
+                    ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
+                    DaysOfWeek = schedule?.DaysOfWeek ?? ""
+                };
+
+                myAssignments.Add(viewModel);
+            }
+
+            // Group by status
+            approvedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Approved).ToList();
+            pendingAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.PendingApproval).ToList();
+            publishedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Published).ToList();
+            rejectedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Rejected).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading assignments: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task PublishAssignment(AssignmentViewModel item)
+    {
+        isPublishing = true;
+        publishingId = item.Assignment.AssignmentID;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var result = await PublishingService.PublishAssignmentAsync(
+                item.Assignment.SourceTeam,
+                item.Assignment.AssignmentID);
+
+            if (result.Success)
+            {
+                successMessage = result.Message;
+
+                // Reload assignments to reflect new status
+                await LoadMyAssignments();
+
+                // Hide success message after 3 seconds
+                await Task.Delay(3000);
+                successMessage = string.Empty;
+            }
+            else
+            {
+                errorMessage = result.ErrorMessage;
+
+                // Hide error after 5 seconds
+                await Task.Delay(5000);
+                errorMessage = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Publishing error: {ex.Message}";
+
+            await Task.Delay(5000);
+            errorMessage = string.Empty;
+        }
+        finally
+        {
+            isPublishing = false;
+            publishingId = null;
+        }
+    }
+
+    private string FormatDaysOfWeek(string daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek)) return "None";
+
+        var days = daysOfWeek.Split(',').Select(int.Parse).ToList();
+        var dayNames = new List<string>();
+
+        foreach (var day in days)
+        {
+            dayNames.Add(day switch
+            {
+                1 => "Mon",
+                2 => "Tue",
+                3 => "Wed",
+                4 => "Thu",
+                5 => "Fri",
+                6 => "Sat",
+                7 => "Sun",
+                _ => ""
+            });
+        }
+
+        return string.Join(", ", dayNames);
+    }
+
+    private class AssignmentViewModel
+    {
+        public Assignment Assignment { get; set; } = null!;
+        public string PresentationName { get; set; } = string.Empty;
+        public string PresentationDescription { get; set; } = string.Empty;
+        public string TargetTeamName { get; set; } = string.Empty;
+        public DateTime ScheduleStart { get; set; }
+        public DateTime ScheduleEnd { get; set; }
+        public string DaysOfWeek { get; set; } = string.Empty;
+    }
+}

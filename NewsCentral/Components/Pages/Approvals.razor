@@ -1,0 +1,525 @@
+﻿@page "/approvals"
+@inject Services.AssignmentService AssignmentService
+@inject Services.PresentationService PresentationService
+@inject Services.ScheduleService ScheduleService
+@inject Services.TeamService TeamService
+@inject Services.AuthenticationService AuthService
+@inject NavigationManager Navigation
+@using NewsCentral.Components.Shared
+@using NewsCentral.Models
+
+<PageTitle>Pending Approvals - NewsCentral</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>Pending Approvals</h1>
+        <p class="subtitle">Assignments awaiting your approval</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="loading">Loading pending approvals...</div>
+    }
+    else if (pendingApprovals.Count == 0)
+    {
+        <div class="empty-state">
+            <h3>No Pending Approvals</h3>
+            <p>You don't have any assignments waiting for approval</p>
+        </div>
+    }
+    else
+    {
+        <div class="approvals-list">
+            @foreach (var approval in pendingApprovals)
+            {
+                <div class="approval-card">
+                    <div class="approval-header">
+                        <div>
+                            <h3>@approval.PresentationName</h3>
+                            <p class="meta">
+                                From: <strong>@approval.SourceTeamName</strong> 
+                                → To: <strong>@approval.TargetTeamName</strong>
+                            </p>
+                        </div>
+                        <div class="status-badge pending">
+                            Pending Approval
+                        </div>
+                    </div>
+
+                    <div class="approval-body">
+                        <p class="description">@approval.PresentationDescription</p>
+                        
+                        <div class="schedule-info">
+                            <strong>Schedule:</strong><br/>
+                            @approval.ScheduleStart.ToString("MMM dd, yyyy") - @approval.ScheduleEnd.ToString("MMM dd, yyyy")<br/>
+                            Days: @FormatDaysOfWeek(approval.DaysOfWeek)
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(approval.PosterPreview))
+                        {
+                            <div class="poster-preview">
+                                <img src="@approval.PosterPreview" alt="Poster preview" />
+                            </div>
+                        }
+                    </div>
+
+                    <div class="approval-actions">
+                        <button @onclick="() => ShowRejectDialog(approval)" class="btn btn-danger">
+                            ✗ Reject
+                        </button>
+                        <button @onclick="() => ApproveAssignment(approval)" class="btn btn-success">
+                            ✓ Approve
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (showRejectDialog)
+{
+    <div class="modal-overlay" @onclick="CloseRejectDialog">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <h2>Reject Assignment</h2>
+            
+            <p>Are you sure you want to reject this assignment?</p>
+            <p><strong>@rejectingApproval?.PresentationName</strong></p>
+
+            <div class="form-group">
+                <label>Rejection Reason: *</label>
+                <textarea @bind="rejectionReason" class="form-control" rows="3" 
+                          placeholder="Please provide a reason for rejection..."></textarea>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger">@errorMessage</div>
+            }
+
+            <div class="modal-actions">
+                <button @onclick="CloseRejectDialog" class="btn btn-secondary">Cancel</button>
+                <button @onclick="ConfirmReject" class="btn btn-danger" disabled="@isProcessing">
+                    @(isProcessing ? "Rejecting..." : "Reject")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .page-container {
+        padding: 20px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .page-header {
+        margin-bottom: 30px;
+    }
+
+    .page-header h1 {
+        margin: 0;
+    }
+
+    .subtitle {
+        color: #666;
+        margin: 5px 0 0 0;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px;
+        background: #f8f9fa;
+        border-radius: 10px;
+    }
+
+    .empty-state h3 {
+        color: #666;
+        margin-bottom: 10px;
+    }
+
+    .approvals-list {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .approval-card {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-left: 4px solid #ffc107;
+    }
+
+    .approval-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+
+    .approval-header h3 {
+        margin: 0;
+        color: #333;
+    }
+
+    .meta {
+        color: #666;
+        margin: 5px 0 0 0;
+        font-size: 14px;
+    }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-badge.pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .approval-body {
+        margin-bottom: 20px;
+    }
+
+    .description {
+        color: #666;
+        margin-bottom: 15px;
+    }
+
+    .schedule-info {
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        font-size: 14px;
+        color: #333;
+    }
+
+    .poster-preview {
+        margin-top: 15px;
+        text-align: center;
+        background: #000;
+        padding: 10px;
+        border-radius: 5px;
+    }
+
+    .poster-preview img {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 5px;
+    }
+
+    .approval-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-success {
+        background: #28a745;
+        color: white;
+    }
+
+    .btn-success:hover {
+        background: #218838;
+    }
+
+    .btn-danger {
+        background: #dc3545;
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #c82333;
+    }
+
+    .btn-danger:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+
+    .btn-secondary:hover {
+        background: #5a6268;
+    }
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        max-width: 500px;
+        width: 90%;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+
+    .modal-content h2 {
+        margin-top: 0;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #333;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        box-sizing: border-box;
+    }
+
+    .alert {
+        padding: 10px 15px;
+        border-radius: 5px;
+        margin-bottom: 15px;
+    }
+
+    .alert-danger {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+</style>
+
+@code {
+    private List<ApprovalViewModel> pendingApprovals = new();
+    private bool isLoading = true;
+    private bool isProcessing = false;
+    private bool showRejectDialog = false;
+    private ApprovalViewModel? rejectingApproval;
+    private string rejectionReason = string.Empty;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthService.IsAuthenticated())
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        await LoadPendingApprovals();
+    }
+
+    private async Task LoadPendingApprovals()
+    {
+        isLoading = true;
+        pendingApprovals.Clear();
+
+        try
+        {
+            var assignments = await AssignmentService.GetPendingApprovalsForUserAsync();
+            var allTeams = await TeamService.GetAllTeamsAsync();
+
+            foreach (var assignment in assignments)
+            {
+                // Load presentation details
+                var presentation = await PresentationService.GetPresentationAsync(
+                    assignment.SourceTeam, 
+                    assignment.PresentationID);
+
+                if (presentation is null) continue;
+
+                var sourceTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.SourceTeam);
+                var targetTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.TargetTeam);
+
+                // Load poster preview
+                string? posterPreview = null;
+                if (!string.IsNullOrEmpty(presentation.ContentImageBase64))
+                {
+                    posterPreview = $"data:image/jpeg;base64,{presentation.ContentImageBase64}";
+                }
+
+                // Load schedule
+                var schedule = await ScheduleService.GetScheduleAsync(
+                    assignment.SourceTeam,
+                    assignment.ScheduleID);
+
+                pendingApprovals.Add(new ApprovalViewModel
+                {
+                    Assignment = assignment,
+                    PresentationName = presentation.Name,
+                    PresentationDescription = presentation.Description,
+                    SourceTeamName = sourceTeam?.Name ?? assignment.SourceTeam,
+                    TargetTeamName = targetTeam?.Name ?? assignment.TargetTeam,
+                    PosterPreview = posterPreview,
+                    ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
+                    ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
+                    DaysOfWeek = schedule?.DaysOfWeek ?? ""
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading approvals: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ApproveAssignment(ApprovalViewModel approval)
+    {
+        try
+        {
+            await AssignmentService.ApproveAssignmentAsync(
+                approval.Assignment.SourceTeam,
+                approval.Assignment.AssignmentID,
+                "Approved via UI"
+            );
+
+            // Remove from list
+            pendingApprovals.Remove(approval);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error approving assignment: {ex.Message}";
+        }
+    }
+
+    private void ShowRejectDialog(ApprovalViewModel approval)
+    {
+        rejectingApproval = approval;
+        rejectionReason = string.Empty;
+        errorMessage = string.Empty;
+        showRejectDialog = true;
+    }
+
+    private void CloseRejectDialog()
+    {
+        showRejectDialog = false;
+        rejectingApproval = null;
+        rejectionReason = string.Empty;
+        errorMessage = string.Empty;
+    }
+
+    private async Task ConfirmReject()
+    {
+        if (string.IsNullOrWhiteSpace(rejectionReason))
+        {
+            errorMessage = "Please provide a reason for rejection";
+            return;
+        }
+
+        if (rejectingApproval is null) return;
+
+        isProcessing = true;
+
+        try
+        {
+            await AssignmentService.RejectAssignmentAsync(
+                rejectingApproval.Assignment.SourceTeam,
+                rejectingApproval.Assignment.AssignmentID,
+                rejectionReason
+            );
+
+            // Remove from list
+            pendingApprovals.Remove(rejectingApproval);
+            CloseRejectDialog();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error rejecting assignment: {ex.Message}";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private string FormatDaysOfWeek(string daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek)) return "None";
+
+        var days = daysOfWeek.Split(',').Select(int.Parse).ToList();
+        var dayNames = new List<string>();
+
+        foreach (var day in days)
+        {
+            dayNames.Add(day switch
+            {
+                1 => "Mon",
+                2 => "Tue",
+                3 => "Wed",
+                4 => "Thu",
+                5 => "Fri",
+                6 => "Sat",
+                7 => "Sun",
+                _ => ""
+            });
+        }
+
+        return string.Join(", ", dayNames);
+    }
+
+    private class ApprovalViewModel
+    {
+        public Assignment Assignment { get; set; } = null!;
+        public string PresentationName { get; set; } = string.Empty;
+        public string PresentationDescription { get; set; } = string.Empty;
+        public string SourceTeamName { get; set; } = string.Empty;
+        public string TargetTeamName { get; set; } = string.Empty;
+        public string? PosterPreview { get; set; }
+        public DateTime ScheduleStart { get; set; }
+        public DateTime ScheduleEnd { get; set; }
+        public string DaysOfWeek { get; set; } = string.Empty;
+    }
+}

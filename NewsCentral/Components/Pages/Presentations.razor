@@ -4,6 +4,8 @@
 @inject Services.TeamContextService TeamContext
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject UserService UserService
+
 @using NewsCentral.Components.Shared
 @using NewsCentral.Models
 
@@ -56,12 +58,19 @@
                 {
                     <div class="presentation-card">
                         <div class="presentation-image">
-                            @if (!string.IsNullOrEmpty(presentation.ImageName))
+                            @if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
                             {
-                                <div class="image-placeholder">
-                                    <span>📷</span>
-                                    <small>@presentation.ImageName</small>
-                                </div>
+                                @if (imageCache.ContainsKey(presentation.PresentationID))
+                                {
+                                    <img src="data:image/jpeg;base64,@GetImagePreview(presentation)" alt="@presentation.Name" />
+                                }
+                                else
+                                {
+                                    <div class="image-loading">
+                                        <span>⏳</span>
+                                        <small>Loading...</small>
+                                    </div>
+                                }
                             }
                             else
                             {
@@ -71,6 +80,11 @@
 
                         <div class="presentation-content">
                             <h3>@presentation.Name</h3>
+
+                            <span class="creator-badge">
+                                Created by: @GetCreatorName(presentation.CreatedBy)
+                            </span>
+
                             <p class="description">@presentation.Description</p>
 
                             <div class="presentation-meta">
@@ -78,13 +92,18 @@
                                 <small>Version: @presentation.Version</small>
                             </div>
 
-                            @if (CanEdit(presentation))
+                            @if (CanEditPresentation(presentation))
                             {
                                 <div class="presentation-actions">
                                     <a href="/presentations/edit/@presentation.PresentationID" class="btn btn-secondary">Edit</a>
+                                    @if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
+                                    {
+                                        <a href="/presentations/@presentation.PresentationID/assign" class="btn btn-primary">Assign</a>
+                                    }
                                     <button @onclick="() => DeletePresentation(presentation)" class="btn btn-danger">Delete</button>
                                 </div>
                             }
+
                         </div>
                     </div>
                 }
@@ -186,6 +205,14 @@
         transition: transform 0.2s;
     }
 
+    .creator-badge {
+        font-size: 12px;
+        color: #666;
+        background: #f0f0f0;
+        padding: 4px 8px;
+        border-radius: 3px;
+    }
+
     .presentation-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
@@ -239,44 +266,47 @@
     }
 
     .presentation-actions {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
         gap: 10px;
     }
 
     .presentation-actions .btn {
-        flex: 1;
         text-align: center;
     }
 
-    .image-placeholder {
+    .image-loading {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         height: 100%;
-        color: #666;
+        color: #999;
     }
 
-    .image-placeholder span {
-        font-size: 48px;
+    .image-loading span {
+        font-size: 32px;
         margin-bottom: 10px;
     }
 
-    .image-placeholder small {
+    .image-loading small {
         font-size: 12px;
-        color: #999;
     }
+
 </style>
 
 @code {
     private List<Presentation> presentations = new();
     private List<Team> teams = new();
+    private Dictionary<string, string> imageCache = new();
     private bool isLoading = true;
     private bool canCreate = false;
     private string currentTeamName = string.Empty;
 
     private bool showDeleteConfirm = false;
     private Presentation? presentationToDelete = null;
+
+    private Dictionary<string, string> userNames = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -285,6 +315,9 @@
             Navigation.NavigateTo("/login");
             return;
         }
+
+        // Load user names for display
+        await LoadUserNames();
 
         teams = await TeamService.GetAllTeamsAsync();
 
@@ -303,7 +336,8 @@
     private async Task LoadPresentations()
     {
         isLoading = true;
-        
+        imageCache.Clear();
+
         var teamId = TeamContext.GetCurrentTeamId();
         var teamFolderName = TeamContext.GetCurrentTeamFolderName();
 
@@ -321,6 +355,9 @@
         try
         {
             presentations = await PresentationService.GetPresentationsForTeamAsync(teamFolderName);
+
+            // Load images asynchronously in background
+            _ = LoadImagesAsync();
         }
         catch (Exception ex)
         {
@@ -332,23 +369,71 @@
         }
     }
 
+    private async Task LoadImagesAsync()
+    {
+        foreach (var presentation in presentations)
+        {
+            if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
+            {
+                try
+                {
+                    var imageData = await PresentationService.GetImageDataAsync(
+                        presentation.TeamFolderName, 
+                        presentation.OriginalImagePath);
+
+                    imageCache[presentation.PresentationID] = Convert.ToBase64String(imageData);
+                    StateHasChanged();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading image for {presentation.PresentationID}: {ex.Message}");
+                }
+            }
+        }
+    }
+
+    private string GetCreatorName(string userId)
+    {
+        var currentUser = AuthService.GetCurrentUser();
+
+        if (userId == currentUser?.UserID)
+        {
+            return "You";
+        }
+
+        if (userNames.TryGetValue(userId, out var name))
+        {
+            return name;
+        }
+
+        return "Team Member";
+    }
+
     private string GetImagePreview(Presentation presentation)
     {
-        // Don't load images synchronously - causes deadlock
-        // Instead, we'll load them asynchronously on demand
+        if (imageCache.TryGetValue(presentation.PresentationID, out var base64))
+        {
+            return base64;
+        }
         return string.Empty;
     }
 
+    /*
     private bool CanEdit(Presentation presentation)
     {
         var currentUser = AuthService.GetCurrentUser();
-        return currentUser?.UserID == presentation.CreatedBy || AuthService.IsSystemAdmin();
-    }
+        // return currentUser?.UserID == presentation.CreatedBy || AuthService.IsSystemAdmin();
+        return true;
+        }
+    */
 
     private void DeletePresentation(Presentation presentation)
     {
-        presentationToDelete = presentation;
-        showDeleteConfirm = true;
+        if (CanDeletePresentation(presentation))
+        {
+            presentationToDelete = presentation;
+            showDeleteConfirm = true;
+        }
     }
 
     private async Task ConfirmDelete()
@@ -377,4 +462,43 @@
         showDeleteConfirm = false;
         presentationToDelete = null;
     }
+
+    private async Task LoadUserNames()
+    {
+        try
+        {
+            var usersCollection = await UserService.GetAllUsersAsync();
+            userNames = usersCollection
+                .ToDictionary(u => u.UserID, u => u.DisplayName);
+        }
+        catch
+        {
+            // Ignore errors - will fall back to "Team Member"
+        }
+    }
+
+    private bool CanEditPresentation(Presentation presentation)
+    {
+        var currentUser = AuthService.GetCurrentUser();
+
+        // SystemAdmin can edit anything
+        if (currentUser?.IsSystemAdmin == true)
+            return true;
+
+        // Creator can edit their own
+        if (presentation.CreatedBy == currentUser?.UserID)
+            return true;
+
+        // Role Author can edit
+        if (AuthService.HasRole(TeamContext.GetCurrentTeamId()!, "ContentAuthor"))
+            return true;
+
+        return false;
+    }
+
+    private bool CanDeletePresentation(Presentation presentation)
+    {
+        return CanEditPresentation(presentation);
+    }
+
 }

@@ -1,6 +1,7 @@
 ﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
+using System.Text.Json;
 
 namespace NewsCentral.Services;
 
@@ -9,10 +10,71 @@ public class PresentationService
     private readonly string _basePath;
     private readonly AuthenticationService _authService;
 
-    public PresentationService(AppConfiguration config, AuthenticationService authService)
+    private readonly PosterGenerationService _posterService;
+
+    public PresentationService(
+        AppConfiguration config,
+        AuthenticationService authService,
+        PosterGenerationService posterService)
     {
         _basePath = config.DataPath;
         _authService = authService;
+        _posterService = posterService;
+    }
+
+    public async Task<Presentation> UpdatePresentationWithPosterAsync(
+    string teamFolderName,
+    string presentationId,
+    string headlineText,
+    string bodyText,
+    string ctaText)
+    {
+        var currentUser = _authService.GetCurrentUser();
+        if (currentUser == null)
+        {
+            throw new UnauthorizedAccessException("Not authenticated");
+        }
+
+        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId);
+
+        if (presentation == null)
+        {
+            throw new InvalidOperationException($"Presentation {presentationId} not found");
+        }
+
+        // Only creator or SystemAdmin can edit
+        if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
+        {
+            throw new UnauthorizedAccessException("You can only edit your own presentations");
+        }
+
+        // Load original image
+        var originalImagePath = Path.Combine(_basePath, presentation.OriginalImagePath);
+        var originalImageData = await File.ReadAllBytesAsync(originalImagePath);
+
+        // Generate poster
+        var posterPath = await _posterService.GeneratePosterAsync(
+            teamFolderName,
+            presentationId,
+            presentation.Version,
+            originalImageData,
+            headlineText,
+            bodyText,
+            ctaText
+        );
+
+        // Get poster as base64 for JSON storage
+        var posterImageData = await _posterService.GetPosterImageDataAsync(teamFolderName, posterPath);
+        var posterBase64 = Convert.ToBase64String(posterImageData);
+
+        // Update presentation
+        presentation.GeneratedImagePath = posterPath;
+        presentation.ContentImageBase64 = posterBase64;
+        presentation.LastModified = DateTime.UtcNow;
+        presentation.ModifiedBy = currentUser.UserID;
+
+        return await repo.UpdateAsync(presentation);
     }
 
     public async Task<List<Presentation>> GetPresentationsForTeamAsync(string teamFolderName)
