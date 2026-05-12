@@ -95,53 +95,110 @@ public class PublishingService
             }
 
             // Copy files to target team
+            Console.WriteLine($"Publishing to {assignment.TargetTeam}...");
             var publishedPaths = new List<string>();
 
-            // 1. Copy presentation JSON
-            var presentationPath = await CopyPresentationToTargetAsync(
-                presentation,
-                assignment.TargetTeam);
-            publishedPaths.Add(presentationPath);
-
-            // 2. Copy schedule JSON
-            var schedulePath = await CopyScheduleToTargetAsync(
-                schedule,
-                assignment.TargetTeam,
-                assignment.PresentationID);
-            publishedPaths.Add(schedulePath);
-
-            // 3. Copy poster image
-            if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
+            // 1. Copy presentation JSON (includes embedded base64 image)
+            try
             {
-                var posterPath = await CopyImageToTargetAsync(
-                    presentation.GeneratedImagePath,
-                    assignment.TargetTeam,
-                    "generated");
-                publishedPaths.Add(posterPath);
+                Console.WriteLine("Copying presentation JSON...");
+                var presentationPath = await CopyPresentationToTargetAsync(
+                    presentation,
+                    assignment.TargetTeam);
+                publishedPaths.Add(presentationPath);
+                Console.WriteLine($"  ✓ Presentation: {presentationPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ERROR copying presentation: {ex.Message}");
+                throw; // Critical - cannot proceed without presentation
             }
 
-            // 4. Copy original image
+            // 2. Copy schedule JSON
+            try
+            {
+                Console.WriteLine("Copying schedule JSON...");
+                var schedulePath = await CopyScheduleToTargetAsync(
+                    schedule,
+                    assignment.TargetTeam,
+                    assignment.PresentationID);
+                publishedPaths.Add(schedulePath);
+                Console.WriteLine($"  ✓ Schedule: {schedulePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ERROR copying schedule: {ex.Message}");
+                throw; // Critical - cannot proceed without schedule
+            }
+
+            // 3. OPTIONAL: Copy physical image files for reference/backup
+            // (The poster is already embedded in ContentImageBase64, but we keep originals for editing)
+            if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
+            {
+                try
+                {
+                    Console.WriteLine("Copying poster image file (optional backup)...");
+                    var posterPath = await CopyImageToTargetAsync(
+                        presentation.GeneratedImagePath,
+                        assignment.TargetTeam,
+                        "generated");
+                    publishedPaths.Add(posterPath);
+                    Console.WriteLine($"  ✓ Poster file: {posterPath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  WARNING: Could not copy poster file - {ex.Message}");
+                    // Non-critical - embedded image in JSON is sufficient
+                }
+            }
+
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
-                var originalPath = await CopyImageToTargetAsync(
-                    presentation.OriginalImagePath,
-                    assignment.TargetTeam,
-                    "original");
-                publishedPaths.Add(originalPath);
+                try
+                {
+                    Console.WriteLine("Copying original image file (optional backup)...");
+                    var originalPath = await CopyImageToTargetAsync(
+                        presentation.OriginalImagePath,
+                        assignment.TargetTeam,
+                        "original");
+                    publishedPaths.Add(originalPath);
+                    Console.WriteLine($"  ✓ Original file: {originalPath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  WARNING: Could not copy original file - {ex.Message}");
+                    // Non-critical - not needed for display
+                }
             }
 
             // Update assignment status
-            var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-            assignment.Status = AssignmentStatus.Published;
-            assignment.PublishedBy = currentUser.UserID;
-            assignment.PublishedDate = DateTime.UtcNow;
-            assignment.PublishedPaths = publishedPaths;
-            await repo.UpdateAsync(assignment);
+            Console.WriteLine($"Updating assignment status... ({publishedPaths.Count} files)");
+            try
+            {
+                var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
+                assignment.Status = AssignmentStatus.Published;
+                assignment.PublishedBy = currentUser.UserID;
+                assignment.PublishedDate = DateTime.UtcNow;
+                assignment.PublishedPaths = publishedPaths;
+
+                Console.WriteLine($"  Status: {assignment.Status}");
+                Console.WriteLine($"  PublishedBy: {assignment.PublishedBy}");
+                Console.WriteLine($"  PublishedDate: {assignment.PublishedDate}");
+
+                await repo.UpdateAsync(assignment);
+                Console.WriteLine("  ✓ Assignment updated in JSON");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ERROR updating assignment: {ex.Message}");
+                throw; // Critical failure
+            }
 
             result.Success = true;
             result.PublishedPaths = publishedPaths;
             result.Message = $"Successfully published to {assignment.TargetTeam}";
 
+            Console.WriteLine($"=== SUCCESS: Published {publishedPaths.Count} files ===");
             return result;
         }
         catch (Exception ex)
