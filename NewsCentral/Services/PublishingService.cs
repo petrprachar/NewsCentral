@@ -131,7 +131,56 @@ public class PublishingService
                 throw; // Critical - cannot proceed without schedule
             }
 
-            // 3. OPTIONAL: Copy physical image files for reference/backup
+            // 3. NEW: Copy assignment JSON to target team
+            /*
+            try
+            {
+                Console.WriteLine("Copying assignment metadata...");
+                var assignmentPath = await CopyAssignmentToTargetAsync(
+                    assignment,
+                    assignment.TargetTeam);
+                publishedPaths.Add(assignmentPath);
+                Console.WriteLine($"  ✓ Assignment: {assignmentPath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  WARNING: Could not copy assignment metadata - {ex.Message}");
+                // Non-critical - target team can still use the content
+            }
+            */
+            // Update assignment status
+            // System.Diagnostics.Debug.WriteLine($"Updating assignment status... ({publishedPaths.Count} files)");
+            try
+            {
+                var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
+
+                // System.Diagnostics.Debug.WriteLine($"  Current status: {assignment.Status}");
+                // System.Diagnostics.Debug.WriteLine($"  Setting status to: Published");
+
+                assignment.Status = AssignmentStatus.Published;
+                assignment.PublishedBy = currentUser.UserID;
+                assignment.PublishedDate = DateTime.UtcNow;
+                assignment.PublishedPaths = publishedPaths;
+
+                // System.Diagnostics.Debug.WriteLine($"  PublishedBy: {assignment.PublishedBy}");
+                // System.Diagnostics.Debug.WriteLine($"  PublishedDate: {assignment.PublishedDate}");
+                // System.Diagnostics.Debug.WriteLine($"  PublishedPaths count: {publishedPaths.Count}");
+
+                // System.Diagnostics.Debug.WriteLine($"  Calling repo.UpdateAsync...");
+                await repo.UpdateAsync(assignment);
+                // System.Diagnostics.Debug.WriteLine($"  ✓ Assignment updated successfully");
+            }
+            catch (Exception ex)
+            {
+                // System.Diagnostics.Debug.WriteLine($"  ✗ ERROR updating assignment!");
+                // System.Diagnostics.Debug.WriteLine($"  Exception type: {ex.GetType().Name}");
+                // System.Diagnostics.Debug.WriteLine($"  Exception message: {ex.Message}");
+                // System.Diagnostics.Debug.WriteLine($"  Stack trace: {ex.StackTrace}");
+                throw; // Re-throw to propagate the error
+            }
+
+
+            // 4. OPTIONAL: Copy physical image files for reference/backup
             // (The poster is already embedded in ContentImageBase64, but we keep originals for editing)
             if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
             {
@@ -140,6 +189,7 @@ public class PublishingService
                     Console.WriteLine("Copying poster image file (optional backup)...");
                     var posterPath = await CopyImageToTargetAsync(
                         presentation.GeneratedImagePath,
+                        sourceTeamFolderName,    // ← FIXED: Added source team parameter
                         assignment.TargetTeam,
                         "generated");
                     publishedPaths.Add(posterPath);
@@ -151,6 +201,10 @@ public class PublishingService
                     // Non-critical - embedded image in JSON is sufficient
                 }
             }
+            else
+            {
+                Console.WriteLine("  No GeneratedImagePath - skipping poster copy");
+            }
 
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
@@ -159,6 +213,7 @@ public class PublishingService
                     Console.WriteLine("Copying original image file (optional backup)...");
                     var originalPath = await CopyImageToTargetAsync(
                         presentation.OriginalImagePath,
+                        sourceTeamFolderName,    // ← FIXED: Added source team parameter
                         assignment.TargetTeam,
                         "original");
                     publishedPaths.Add(originalPath);
@@ -170,28 +225,9 @@ public class PublishingService
                     // Non-critical - not needed for display
                 }
             }
-
-            // Update assignment status
-            Console.WriteLine($"Updating assignment status... ({publishedPaths.Count} files)");
-            try
+            else
             {
-                var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-                assignment.Status = AssignmentStatus.Published;
-                assignment.PublishedBy = currentUser.UserID;
-                assignment.PublishedDate = DateTime.UtcNow;
-                assignment.PublishedPaths = publishedPaths;
-
-                Console.WriteLine($"  Status: {assignment.Status}");
-                Console.WriteLine($"  PublishedBy: {assignment.PublishedBy}");
-                Console.WriteLine($"  PublishedDate: {assignment.PublishedDate}");
-
-                await repo.UpdateAsync(assignment);
-                Console.WriteLine("  ✓ Assignment updated in JSON");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  ERROR updating assignment: {ex.Message}");
-                throw; // Critical failure
+                Console.WriteLine("  No OriginalImagePath - skipping original copy");
             }
 
             result.Success = true;
@@ -269,27 +305,132 @@ public class PublishingService
     }
 
     private async Task<string> CopyImageToTargetAsync(
-        string sourceImagePath,
-        string targetTeamFolderName,
-        string imageType) // "original" or "generated"
+        string imagePathFromJson,  // Path stored in presentation JSON (might be wrong team)
+        string sourceTeamFolder,   // ← NEW: The actual source team we're copying FROM
+        string targetTeamFolder,   // The target team we're copying TO
+        string imageType)          // "generated" or "original"
     {
-        var sourcePath = Path.Combine(_basePath, sourceImagePath);
+        Console.WriteLine($"  CopyImage - JSON path: {imagePathFromJson}");
+        Console.WriteLine($"  CopyImage - Source team: {sourceTeamFolder}");
+        Console.WriteLine($"  CopyImage - Target team: {targetTeamFolder}");
 
+        // Extract just the filename
+        var fileName = Path.GetFileName(imagePathFromJson);
+        Console.WriteLine($"  CopyImage - Filename: {fileName}");
+
+        // Build source path
+        var sourcePath = Path.Combine(
+            _basePath,
+            sourceTeamFolder,
+            "images",
+            imageType,
+            fileName);
+
+        // Build target path
+        var targetPath = Path.Combine(
+            _basePath,
+            targetTeamFolder,
+            "images",
+            imageType,
+            fileName);
+
+        Console.WriteLine($"  Source: {sourcePath}");
+        Console.WriteLine($"  Target: {targetPath}");
+
+        // Check if source file exists
         if (!File.Exists(sourcePath))
         {
-            throw new FileNotFoundException($"Source image not found: {sourceImagePath}");
+            var error = $"Source image not found: {sourcePath}";
+            Console.WriteLine($"  ERROR: {error}");
+            throw new IOException(error);
         }
 
-        var fileName = Path.GetFileName(sourcePath);
-        var targetFolder = Path.Combine(_basePath, targetTeamFolderName, "images", imageType);
-        Directory.CreateDirectory(targetFolder);
+        // Check if source and target are the same (self-assignment)
+        if (string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"  Source and target are the same - skipping copy");
+            return $"{targetTeamFolder}/images/{imageType}/{fileName}";
+        }
 
-        var targetPath = Path.Combine(targetFolder, fileName);
+        // Ensure target directory exists
+        var targetDir = Path.GetDirectoryName(targetPath);
+        if (targetDir != null && !Directory.Exists(targetDir))
+        {
+            Console.WriteLine($"  Creating directory: {targetDir}");
+            Directory.CreateDirectory(targetDir);
+        }
 
-        // Copy the file
-        File.Copy(sourcePath, targetPath, overwrite: true);
+        // Copy file with FileShare.ReadWrite to allow other processes to keep it open
+        try
+        {
+            Console.WriteLine($"  Copying file (with shared read access)...");
 
-        return $"{targetTeamFolderName}/images/{imageType}/{fileName}";
+            // Open source with FileShare.ReadWrite (allows other processes to read)
+            using (var sourceStream = new FileStream(
+                sourcePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite))  // ← KEY FIX: Allow sharing
+            {
+                // Create/overwrite target
+                using (var targetStream = new FileStream(
+                    targetPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None))
+                {
+                    await sourceStream.CopyToAsync(targetStream);
+                }
+            }
+
+            Console.WriteLine($"  ✓ File copied successfully");
+        }
+        catch (IOException ioEx)
+        {
+            Console.WriteLine($"  ERROR: {ioEx.Message}");
+            throw;
+        }
+
+        return $"{targetTeamFolder}/images/{imageType}/{fileName}";
+    }
+
+    private async Task<string> CopyAssignmentToTargetAsync(
+    Assignment assignment,
+    string targetTeamFolder)
+    {
+        Console.WriteLine($"  Copying assignment to target team...");
+
+        // Build target path
+        var targetPath = Path.Combine(
+            _basePath,
+            targetTeamFolder,
+            "content",
+            "assignments",
+            $"assign_{assignment.AssignmentID}.json");
+
+        Console.WriteLine($"  Target: {targetPath}");
+
+        // Ensure target directory exists
+        var targetDir = Path.GetDirectoryName(targetPath);
+        if (targetDir != null && !Directory.Exists(targetDir))
+        {
+            Console.WriteLine($"  Creating directory: {targetDir}");
+            Directory.CreateDirectory(targetDir);
+        }
+
+        // Create a repository for the target team
+        var targetRepo = new TeamAwareRepository<Assignment>(
+            _basePath,
+            targetTeamFolder,
+            "assignments");
+
+        // Save a copy of the assignment to target team
+        // The assignment already has Published status and all metadata
+        await targetRepo.CreateAsync(assignment);
+
+        Console.WriteLine($"  ✓ Assignment copied to target");
+
+        return $"{targetTeamFolder}/content/assignments/assign_{assignment.AssignmentID}.json";
     }
 }
 

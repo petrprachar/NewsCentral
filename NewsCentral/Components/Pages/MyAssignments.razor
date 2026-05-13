@@ -87,14 +87,11 @@
                                 </div>
                             </div>
 
-                            <div class="assignment-actions">
-                                <!-- ORIGINAL PUBLISH BUTTON -->
-                                <button @onclick="() => PublishAssignment(item)"
-                                        class="btn btn-success"
-                                        disabled="@isPublishing">
-                                    @(isPublishing && publishingId == item.Assignment.AssignmentID ? "Publishing..." : "📤 Publish")
-                                </button>
-                            </div>
+                            <button @onclick="() => PublishAssignment(item)"
+                                    class="btn btn-success"
+                                    disabled="@(isPublishing && publishingId == item.Assignment.AssignmentID)">
+                                @(isPublishing && publishingId == item.Assignment.AssignmentID ? "📤 Publishing..." : "📤 Publish")
+                            </button>
 
                         </div>
                     }
@@ -460,7 +457,8 @@
 
     private async Task LoadMyAssignments()
     {
-        Console.WriteLine("=== LoadMyAssignments START ===");
+        // System.Diagnostics.Debug.WriteLine("=== LoadMyAssignments START ===");
+        // System.Diagnostics.Debug.WriteLine($"Time: {DateTime.Now:HH:mm:ss.fff}");
 
         isLoading = true;
 
@@ -479,7 +477,7 @@
             var allAssignments = await AssignmentService.GetAllAssignmentsAsync();
             var allTeams = await TeamService.GetAllTeamsAsync();
 
-            Console.WriteLine($"Total assignments in system: {allAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"Total assignments in system: {allAssignments.Count}");
 
             // Filter assignments created by current user
             var userAssignments = allAssignments
@@ -487,10 +485,13 @@
                 .OrderByDescending(a => a.DateCreated)
                 .ToList();
 
-            Console.WriteLine($"User's assignments: {userAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"User's assignments: {userAssignments.Count}");
 
             foreach (var assignment in userAssignments)
             {
+                // System.Diagnostics.Debug.WriteLine($"Assignment {assignment.AssignmentID}: Status={assignment.Status}");
+
+
                 // Load presentation details
                 var presentation = await PresentationService.GetPresentationAsync(
                     assignment.SourceTeam,
@@ -498,7 +499,7 @@
 
                 if (presentation is null)
                 {
-                    Console.WriteLine($"WARNING: Presentation {assignment.PresentationID} not found for assignment {assignment.AssignmentID}");
+                    // System.Diagnostics.Debug.WriteLine($"WARNING: Presentation {assignment.PresentationID} not found for assignment {assignment.AssignmentID}");
                     continue;
                 }
 
@@ -544,95 +545,35 @@
                 .OrderByDescending(a => a.Assignment.RejectedDate ?? a.Assignment.DateCreated)
                 .ToList();
 
-            Console.WriteLine($"Pending: {pendingAssignments.Count}");
-            Console.WriteLine($"Approved: {approvedAssignments.Count}");
-            Console.WriteLine($"Published: {publishedAssignments.Count}");
-            Console.WriteLine($"Rejected: {rejectedAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"Pending: {pendingAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"Approved: {approvedAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"Published: {publishedAssignments.Count}");
+            // System.Diagnostics.Debug.WriteLine($"Rejected: {rejectedAssignments.Count}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ERROR in LoadMyAssignments: {ex.Message}");
+            // System.Diagnostics.Debug.WriteLine($"ERROR in LoadMyAssignments: {ex.Message}");
             errorMessage = $"Error loading assignments: {ex.Message}";
         }
         finally
         {
             isLoading = false;
             StateHasChanged(); // Force UI update
-            Console.WriteLine("=== LoadMyAssignments END ===");
-        }
-    }
 
-    /*
-    private async Task LoadMyAssignments()
-    {
-        isLoading = true;
-        myAssignments.Clear();
-
-        try
-        {
-            var currentUser = AuthService.GetCurrentUser();
-            if (currentUser == null) return;
-
-            var allAssignments = await AssignmentService.GetAllAssignmentsAsync();
-            var allTeams = await TeamService.GetAllTeamsAsync();
-
-            // Filter assignments created by current user
-            var userAssignments = allAssignments
-                .Where(a => a.CreatedBy == currentUser.UserID)
-                .OrderByDescending(a => a.DateCreated)
-                .ToList();
-
-            foreach (var assignment in userAssignments)
+            // Print all assignments with their status
+            foreach (var item in myAssignments)
             {
-                // Load presentation details
-                var presentation = await PresentationService.GetPresentationAsync(
-                    assignment.SourceTeam,
-                    assignment.PresentationID);
-
-                if (presentation is null) continue;
-
-                var targetTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.TargetTeam);
-
-                // Load schedule
-                var schedule = await ScheduleService.GetScheduleAsync(
-                    assignment.SourceTeam,
-                    assignment.ScheduleID);
-
-                var viewModel = new AssignmentViewModel
-                {
-                    Assignment = assignment,
-                    PresentationName = presentation.Name,
-                    PresentationDescription = presentation.Description,
-                    TargetTeamName = targetTeam?.Name ?? assignment.TargetTeam,
-                    ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
-                    ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
-                    DaysOfWeek = schedule?.DaysOfWeek ?? ""
-                };
-
-                myAssignments.Add(viewModel);
+                // System.Diagnostics.Debug.WriteLine($"  {item.PresentationName} → {item.Assignment.Status}");
             }
 
-            // Group by status
-            approvedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Approved).ToList();
-            pendingAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.PendingApproval).ToList();
-            publishedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Published).ToList();
-            rejectedAssignments = myAssignments.Where(a => a.Assignment.Status == AssignmentStatus.Rejected).ToList();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error loading assignments: {ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
+            // System.Diagnostics.Debug.WriteLine("=== LoadMyAssignments END ===");
         }
     }
-    */
 
     private async Task PublishAssignment(AssignmentViewModel item)
     {
-        Console.WriteLine($"=== PUBLISH START ===");
-        Console.WriteLine($"Assignment: {item.Assignment.AssignmentID}");
+        // System.Diagnostics.Debug.WriteLine($"=== PUBLISH START ===");
+        // System.Diagnostics.Debug.WriteLine($"Assignment: {item.Assignment.AssignmentID}");
 
         isPublishing = true;
         publishingId = item.Assignment.AssignmentID;
@@ -642,46 +583,36 @@
 
         try
         {
-            Console.WriteLine("Calling PublishingService...");
+            // System.Diagnostics.Debug.WriteLine("Calling PublishingService...");
 
             var result = await PublishingService.PublishAssignmentAsync(
                 item.Assignment.SourceTeam,
                 item.Assignment.AssignmentID);
 
-            Console.WriteLine($"Result: Success={result.Success}");
+            // System.Diagnostics.Debug.WriteLine($"Result: Success={result.Success}");
+            // System.Diagnostics.Debug.WriteLine($"Result: Message={result.Message}");
+            // System.Diagnostics.Debug.WriteLine($"Result: ErrorMessage={result.ErrorMessage}");
+            // System.Diagnostics.Debug.WriteLine($"Result: PublishedPaths Count={result.PublishedPaths?.Count ?? 0}");
 
             if (result.Success)
             {
-                Console.WriteLine("Publishing succeeded - reloading data...");
-
-                // Clear ALL lists first
-                myAssignments.Clear();
-                approvedAssignments.Clear();
-                pendingAssignments.Clear();
-                publishedAssignments.Clear();
-                rejectedAssignments.Clear();
-
-                StateHasChanged(); // Force clear
-
-                // Now reload
-                await LoadMyAssignments();
-
-                // Force another render
-                StateHasChanged();
-
-                Console.WriteLine($"After reload - Approved: {approvedAssignments.Count}, Published: {publishedAssignments.Count}");
+                // System.Diagnostics.Debug.WriteLine($"Published {result.PublishedPaths?.Count ?? 0} files");
 
                 successMessage = result.Message;
                 StateHasChanged();
 
-                // Show success for 3 seconds
-                await Task.Delay(3000);
-                successMessage = string.Empty;
-                StateHasChanged();
+                // Show success message briefly, then reload page
+                // System.Diagnostics.Debug.WriteLine("Waiting 1.5 seconds before navigation...");
+                await Task.Delay(1500);
+
+                // Force complete page reload to show updated status
+                Navigation.NavigateTo("/my-assignments", forceLoad: true);
+
+                // System.Diagnostics.Debug.WriteLine("Navigation.NavigateTo called");
             }
             else
             {
-                Console.WriteLine($"Publishing failed: {result.ErrorMessage}");
+                // System.Diagnostics.Debug.WriteLine($"Publishing failed: {result.ErrorMessage}");
                 errorMessage = result.ErrorMessage;
                 StateHasChanged();
 
@@ -692,7 +623,11 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"EXCEPTION: {ex.Message}");
+            // System.Diagnostics.Debug.WriteLine($"EXCEPTION: {ex.Message}");
+            // System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().Name}");
+            // System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
+            // System.Diagnostics.Debug.WriteLine($"Stack: {ex.StackTrace}");
+
             errorMessage = $"Publishing error: {ex.Message}";
             StateHasChanged();
 
@@ -705,7 +640,7 @@
             isPublishing = false;
             publishingId = null;
             StateHasChanged();
-            Console.WriteLine($"=== PUBLISH END ===");
+            // System.Diagnostics.Debug.WriteLine($"=== PUBLISH END ===");
         }
     }
 

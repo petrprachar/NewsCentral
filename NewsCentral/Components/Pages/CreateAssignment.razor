@@ -427,6 +427,7 @@
 
         await LoadData();
     }
+
     private async Task LoadData()
     {
         isLoading = true;
@@ -447,19 +448,61 @@
                 return;
             }
 
+            // Get current user
+            var currentUser = AuthService.GetCurrentUser();
+            if (currentUser is null)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
             // Load all teams
             var allTeams = await TeamService.GetAllTeamsAsync();
             currentTeam = allTeams.FirstOrDefault(t => t.FolderName == teamFolderName);
 
-            // Other teams = all teams except current (for the "Other Teams" section)
-            availableTeams = allTeams.Where(t => t.FolderName != teamFolderName).ToList();
+            // Filter "Other Teams" based on user permissions
+            if (currentUser.IsSystemAdmin)
+            {
+                // System admins can publish to any team
+                availableTeams = allTeams
+                    .Where(t => t.FolderName != teamFolderName)
+                    .ToList();
+
+                Console.WriteLine("User is SystemAdmin - showing all teams");
+            }
+            else
+            {
+                // Regular users: only show teams where they have "ContentAuthor" role
+                var contentAuthorTeamFolders = currentUser.TeamRoles
+                    .Where(tr => tr.Roles.Contains("ContentAuthor"))  // ← Check if "ContentAuthor" is in the Roles list
+                    .Select(tr => tr.TeamFolderName)
+                    .ToHashSet();
+
+                availableTeams = allTeams
+                    .Where(t => t.FolderName != teamFolderName)  // Exclude current team
+                    .Where(t => contentAuthorTeamFolders.Contains(t.FolderName))  // User has ContentAuthor role
+                    .ToList();
+
+                Console.WriteLine($"User has ContentAuthor in: {string.Join(", ", contentAuthorTeamFolders)}");
+            }
+
+            Console.WriteLine($"=== CreateAssignment - LoadData ===");
+            Console.WriteLine($"Current team: {teamFolderName}");
+            Console.WriteLine($"User: {currentUser.Username}");
+            Console.WriteLine($"Is SystemAdmin: {currentUser.IsSystemAdmin}");
+            Console.WriteLine($"Available other teams: {availableTeams.Count}");
+            foreach (var team in availableTeams)
+            {
+                Console.WriteLine($"  - {team.Name} ({team.FolderName})");
+            }
 
             // DON'T auto-select anything - completely empty
             selectedTeams.Clear();
         }
-        catch (Exception ex)  
+        catch (Exception ex)
         {
             errorMessage = $"Error loading data: {ex.Message}";
+            Console.WriteLine($"ERROR in LoadData: {ex.Message}");
         }
         finally
         {
