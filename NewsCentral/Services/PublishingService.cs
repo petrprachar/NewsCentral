@@ -170,7 +170,7 @@ public class PublishingService
                 await repo.UpdateAsync(assignment);
                 // System.Diagnostics.Debug.WriteLine($"  ✓ Assignment updated successfully");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // System.Diagnostics.Debug.WriteLine($"  ✗ ERROR updating assignment!");
                 // System.Diagnostics.Debug.WriteLine($"  Exception type: {ex.GetType().Name}");

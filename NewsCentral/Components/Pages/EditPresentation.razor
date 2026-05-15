@@ -5,163 +5,235 @@
 @inject TeamContextService TeamContext
 @inject AuthenticationService AuthService
 @inject NavigationManager Navigation
+@using NewsCentral.Repositories
+@using System.IO
 
-<PageTitle>Edit Presentation - NewsCentral</PageTitle>
-
-<div class="page-container">
-    <div class="page-header">
-        <h1>Edit Presentation</h1>
-    </div>
-
+<div class="edit-presentation-container">
     @if (isLoading)
     {
-        <div class="loading">Loading presentation...</div>
+        <div class="loading">
+            <p>Loading presentation...</p>
+        </div>
     }
     else if (presentation == null)
     {
-        <div class="alert alert-danger">
-            <p>Presentation not found</p>
-            <a href="/presentations" class="btn btn-secondary">Back to Presentations</a>
+        <div class="error-state">
+            <h3>Presentation not found</h3>
+            <button @onclick="ReturnToPresentations" class="btn btn-primary">Return to Presentations</button>
         </div>
     }
     else
     {
-        <div class="edit-form">
-            <div class="form-section">
-                <h3>Original Image</h3>
-                @if (!string.IsNullOrEmpty(originalImagePreview))
-                {
-                    <div class="image-preview">
-                        <img src="@originalImagePreview" alt="Original" />
-                    </div>
-                }
+        <div class="page-header">
+            <h2>Edit Presentation</h2>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger">
+                @errorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success">
+                @successMessage
+            </div>
+        }
+
+        <!-- Basic Details Section -->
+        <div class="form-section">
+            <h3>Basic Details</h3>
+
+            <div class="form-group">
+                <label>Name: *</label>
+                <input type="text" @bind="presentationName" class="form-control" placeholder="Presentation name" />
             </div>
 
-            <div class="form-section">
-                <h3>Basic Details</h3>
-
-                <div class="form-group">
-                    <label>Name:</label>
-                    <input type="text" @bind="presentationName" class="form-control" />
-                </div>
-
-                <div class="form-group">
-                    <label>Description:</label>
-                    <textarea @bind="presentationDescription" class="form-control" rows="3"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label>More Info URL:</label>
-                    <input type="text" @bind="moreUrl" class="form-control" />
-                </div>
+            <div class="form-group">
+                <label>Description:</label>
+                <textarea @bind="presentationDescription" class="form-control" rows="3" placeholder="Brief description"></textarea>
             </div>
 
+            <div class="form-group">
+                <label>More Info URL:</label>
+                <input type="text" @bind="moreUrl" class="form-control" placeholder="https://example.com/more-info" />
+            </div>
+
+            <!-- NEW: Display Type Checkboxes -->
+            <div class="form-group">
+                <label class="section-label">Display Types:</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="isNewsOfWeek" />
+                        <span>News of the Week</span>
+                    </label>
+                    <label class="checkbox-label disabled">
+                        <input type="checkbox" @bind="isWallpaper" disabled />
+                        <span>Wallpaper</span>
+                        <small class="coming-soon">(Coming soon)</small>
+                    </label>
+                    <label class="checkbox-label disabled">
+                        <input type="checkbox" @bind="isLogonScreen" disabled />
+                        <span>Logon screen</span>
+                        <small class="coming-soon">(Coming soon)</small>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Original Image Preview -->
+        <div class="form-section">
+            <h3>Original Image</h3>
+
+            @if (!string.IsNullOrEmpty(originalImagePreview))
+            {
+                <div class="image-preview">
+                    <img src="@originalImagePreview" alt="Original Image" />
+                </div>
+            }
+        </div>
+
+        <!-- NEW: Support Poster Creation Toggle -->
+        <div class="form-section">
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" @bind="supportPosterCreation" />
+                    <span>Support Poster creation</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Poster Text Section - Conditionally Visible -->
+        @if (supportPosterCreation)
+        {
             <div class="form-section">
                 <h3>Poster Text</h3>
 
                 <div class="form-group">
-                    <label>Headline Text: *</label>
-                    <input type="text" @bind="headlineText" class="form-control"
-                           placeholder="e.g., Safety First!" maxlength="50" />
-                    <small class="hint">Keep it short and impactful (max 50 characters)</small>
+                    <label>Headline: *</label>
+                    <input type="text" @bind="headlineText" class="form-control" placeholder="Main headline" />
                 </div>
 
                 <div class="form-group">
                     <label>Body Text: *</label>
-                    <textarea @bind="bodyText" class="form-control" rows="2"
-                              placeholder="e.g., Remember to wear protective equipment" maxlength="100"></textarea>
-                    <small class="hint">Brief supporting message (max 100 characters)</small>
+                    <textarea @bind="bodyText" class="form-control" rows="3" placeholder="Description text"></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label>Call-to-Action Text:</label>
-                    <input type="text" @bind="ctaText" class="form-control"
-                           placeholder="e.g., Learn More" maxlength="30" />
-                    <small class="hint">Optional button text (max 30 characters)</small>
+                    <label>Call to Action:</label>
+                    <input type="text" @bind="ctaText" class="form-control" placeholder="Learn More" />
                 </div>
-
-                <button @onclick="GeneratePosterPreview" class="btn btn-secondary" disabled="@isGenerating">
-                    @(isGenerating ? "Generating Preview..." : "🔄 Preview Poster")
-                </button>
             </div>
 
-            @if (!string.IsNullOrEmpty(posterPreview))
-            {
-                <div class="form-section">
-                    <h3>Poster Preview</h3>
+            <!-- Poster Preview Section - Conditionally Visible -->
+            <div class="form-section">
+                <h3>Poster Preview</h3>
+
+                <div class="form-group">
+                    <button @onclick="GeneratePosterPreview" class="btn btn-secondary" disabled="@isGenerating" type="button">
+                        @(isGenerating ? "Generating..." : "🖼️ Preview Poster")
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(posterPreview))
+                {
                     <div class="poster-preview">
-                        <img src="@posterPreview" alt="Generated Poster" />
+                        <img src="@posterPreview" alt="Poster Preview" />
                     </div>
-                </div>
-            }
+                }
+            </div>
+        }
 
-            @if (!string.IsNullOrEmpty(errorMessage))
-            {
-                <div class="alert alert-danger">@errorMessage</div>
-            }
+        <!-- Action Buttons -->
+        <div class="form-actions">
+            <button @onclick="Cancel" class="btn btn-secondary" type="button">Cancel</button>
 
-            @if (!string.IsNullOrEmpty(successMessage))
+            @if (supportPosterCreation)
             {
-                <div class="alert alert-success">
-                    <div class="success-content">
-                        <strong>✓</strong> @successMessage
-                    </div>
-                    <button @onclick="ReturnToPresentations" class="btn btn-return">
-                        View Presentations
-                    </button>
-                </div>
+                <button @onclick="SaveAndGeneratePoster" class="btn btn-primary" disabled="@isSaving" type="button">
+                    @(isSaving ? "Generating..." : "🎨 Generate & Save")
+                </button>
             }
-
-            @if (string.IsNullOrEmpty(successMessage))
+            else
             {
-                <div class="form-actions">
-                    <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
-                    <button @onclick="SaveChanges" class="btn btn-primary" disabled="@isSaving">
-                        @(isSaving ? "Saving..." : "Save & Generate Poster")
-                    </button>
-                </div>
+                <button @onclick="SaveWithoutPoster" class="btn btn-primary" disabled="@isSaving" type="button">
+                    @(isSaving ? "Saving..." : "💾 Save")
+                </button>
             }
         </div>
     }
 </div>
 
 <style>
-    .page-container {
-        padding: 20px;
-        max-width: 900px;
+    .edit-presentation-container {
+        max-width: 1000px;
         margin: 0 auto;
+        padding: 30px 20px;
     }
 
     .page-header {
         margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #e0e0e0;
     }
+
+        .page-header h2 {
+            margin: 0;
+            color: #333;
+            font-size: 28px;
+        }
 
     .loading {
         text-align: center;
-        padding: 40px;
+        padding: 60px 20px;
         color: #666;
+        font-size: 18px;
     }
 
-    .edit-form {
-        background: white;
-        padding: 30px;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    .error-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+        .error-state h3 {
+            color: #d32f2f;
+            margin-bottom: 20px;
+        }
+
+    .alert {
+        padding: 15px 20px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        font-size: 14px;
+    }
+
+    .alert-danger {
+        background-color: #fee;
+        border: 1px solid #fcc;
+        color: #c33;
+    }
+
+    .alert-success {
+        background-color: #efe;
+        border: 1px solid #cfc;
+        color: #3c3;
     }
 
     .form-section {
-        margin-bottom: 30px;
-        padding-bottom: 30px;
-        border-bottom: 2px solid #f0f0f0;
+        background: white;
+        padding: 25px;
+        margin-bottom: 25px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-
-        .form-section:last-of-type {
-            border-bottom: none;
-        }
 
         .form-section h3 {
             margin: 0 0 20px 0;
             color: #667eea;
+            font-size: 20px;
+            font-weight: 600;
         }
 
     .form-group {
@@ -170,134 +242,173 @@
 
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            color: #555;
             font-weight: 500;
-            color: #333;
+            font-size: 14px;
         }
 
     .form-control {
         width: 100%;
-        padding: 10px;
+        padding: 12px 15px;
         border: 1px solid #ddd;
         border-radius: 5px;
         font-size: 14px;
-        box-sizing: border-box;
+        font-family: inherit;
+        transition: border-color 0.3s ease;
     }
 
-    .hint {
-        display: block;
-        margin-top: 5px;
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+    textarea.form-control {
+        resize: vertical;
+        min-height: 80px;
+    }
+
+    /* Display type checkboxes */
+    .checkbox-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 5px;
+    }
+
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        font-weight: normal;
+    }
+
+        .checkbox-label.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-label.disabled input[type="checkbox"] {
+            cursor: not-allowed;
+        }
+
+        .checkbox-label span {
+            font-size: 14px;
+            color: #333;
+        }
+
+    .coming-soon {
+        margin-left: 8px;
         color: #999;
+        font-style: italic;
         font-size: 12px;
     }
 
-    .image-preview, .poster-preview {
+    .section-label {
+        display: block;
+        font-weight: 600;
+        color: #667eea;
+        margin-bottom: 8px;
+    }
+
+    .image-preview {
         margin-top: 15px;
-        padding: 20px;
-        background: #f8f9fa;
-        border-radius: 5px;
         text-align: center;
     }
 
-        .image-preview img, .poster-preview img {
+        .image-preview img {
             max-width: 100%;
             max-height: 400px;
             border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
     .poster-preview {
-        background: #000;
+        margin-top: 20px;
+        text-align: center;
     }
 
         .poster-preview img {
-            max-height: 600px;
-        }
-
-    .alert {
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-    }
-
-    .alert-danger {
-        background: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
-    }
-
-    .alert-success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
-    }
-
-    .success-content {
-        margin-bottom: 15px;
-        font-size: 16px;
-    }
-
-        .success-content strong {
-            font-size: 20px;
-            margin-right: 8px;
-            color: #28a745;
-        }
-
-    .btn {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-    }
-
-    .btn-primary {
-        background: #667eea;
-        color: white;
-    }
-
-        .btn-primary:hover {
-            background: #5568d3;
-        }
-
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-    .btn-secondary {
-        background: #6c757d;
-        color: white;
-        margin-right: 10px;
-    }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-        }
-
-        .btn-secondary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-    .btn-return {
-        background: #28a745;
-        color: white;
-        width: 100%;
-        padding: 12px;
-        font-size: 15px;
-    }
-
-        .btn-return:hover {
-            background: #218838;
+            max-width: 100%;
+            max-height: 500px;
+            border-radius: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
 
     .form-actions {
         display: flex;
-        gap: 10px;
+        gap: 15px;
         justify-content: flex-end;
-        margin-top: 30px;
+        padding: 25px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .btn {
+        padding: 12px 30px;
+        border: none;
+        border-radius: 5px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+    .btn-secondary {
+        background: #f5f5f5;
+        color: #666;
+        border: 1px solid #ddd;
+    }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e8e8e8;
+        }
+
+    @@media (max-width: 768px) {
+        .edit-presentation-container
+
+    {
+        padding: 20px 15px;
+    }
+
+    .form-section {
+        padding: 20px 15px;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+
     }
 </style>
 
@@ -321,6 +432,14 @@
 
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
+
+    // NEW: Poster creation support
+    private bool supportPosterCreation = false;
+
+    // NEW: Display type flags (will be passed to Create Assignment)
+    private bool isNewsOfWeek = true;       // Default checked
+    private bool isWallpaper = false;       // Future feature (disabled)
+    private bool isLogonScreen = false;     // Future feature (disabled)
 
     protected override async Task OnInitializedAsync()
     {
@@ -426,7 +545,7 @@
 
             posterPreview = originalImagePreview; // Temporary - will be replaced with actual poster on save
 
-            errorMessage = "Preview ready. Click 'Save & Generate Poster' to create the final version.";
+            errorMessage = "Preview ready. Click 'Generate & Save' to create the final version.";
         }
         catch (Exception ex)
         {
@@ -438,7 +557,8 @@
         }
     }
 
-    private async Task SaveChanges()
+    // WITH POSTER: Generate poster and save
+    private async Task SaveAndGeneratePoster()
     {
         errorMessage = string.Empty;
         successMessage = string.Empty;
@@ -496,6 +616,11 @@
 
             successMessage = "Presentation updated and poster generated successfully!";
             StateHasChanged();
+
+            // Navigate to schedule with display flags
+            await Task.Delay(1500);
+            // Navigation.NavigateTo($"/presentations/{PresentationId}/schedule?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
+            Navigation.NavigateTo($"/presentations/{PresentationId}/assign?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
         }
         catch (Exception ex)
         {
@@ -507,13 +632,153 @@
         }
     }
 
+    // WITHOUT POSTER: Save without poster generation
+    private async Task SaveWithoutPoster()
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(presentationName))
+        {
+            errorMessage = "Presentation name is required";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+            System.Diagnostics.Debug.WriteLine($"=== SaveWithoutPoster START ===");
+            System.Diagnostics.Debug.WriteLine($"Team folder: {teamFolderName}");
+            System.Diagnostics.Debug.WriteLine($"Presentation ID: {PresentationId}");
+
+            if (string.IsNullOrEmpty(teamFolderName))
+            {
+                errorMessage = "No team selected";
+                return;
+            }
+
+            if (presentation == null)
+            {
+                errorMessage = "Presentation not loaded";
+                return;
+            }
+
+            var basePath = @"C:\Download\NewsCentral";
+
+            // Get fresh presentation data
+            var currentPresentation = await PresentationService.GetPresentationAsync(teamFolderName, PresentationId);
+
+            if (currentPresentation == null)
+            {
+                System.Diagnostics.Debug.WriteLine("ERROR: GetPresentationAsync returned null");
+                errorMessage = "Presentation not found in service";
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Presentation loaded successfully");
+
+            // Update basic fields
+            currentPresentation.Name = presentationName;
+            currentPresentation.Description = presentationDescription;
+            currentPresentation.MoreUrl = moreUrl;
+            currentPresentation.ModifiedBy = AuthService.GetCurrentUser()?.UserID ?? string.Empty;
+            currentPresentation.LastModified = DateTime.UtcNow;
+
+            // Load original image data
+            if (!string.IsNullOrEmpty(currentPresentation.OriginalImagePath))
+            {
+                System.Diagnostics.Debug.WriteLine($"Loading original image: {currentPresentation.OriginalImagePath}");
+
+                var imageData = await PresentationService.GetImageDataAsync(
+                    teamFolderName,
+                    currentPresentation.OriginalImagePath);
+
+                System.Diagnostics.Debug.WriteLine($"Image loaded: {imageData.Length} bytes");
+
+                // Set ContentImageBase64
+                currentPresentation.ContentImageBase64 = Convert.ToBase64String(imageData);
+                System.Diagnostics.Debug.WriteLine($"ContentImageBase64 set");
+
+                // NEW: Copy original image to 'generated' folder
+                var generatedFolderPath = Path.Combine(basePath, teamFolderName, "images", "generated");
+
+                // Ensure generated folder exists
+                if (!Directory.Exists(generatedFolderPath))
+                {
+                    Directory.CreateDirectory(generatedFolderPath);
+                    System.Diagnostics.Debug.WriteLine($"Created 'generated' folder: {generatedFolderPath}");
+                }
+
+                // Create filename for the generated/content image
+                var contentImageFileName = $"content_{currentPresentation.PresentationID}.jpg";
+                var contentImagePath = Path.Combine(generatedFolderPath, contentImageFileName);
+
+                // Write the original image to 'generated' folder
+                await File.WriteAllBytesAsync(contentImagePath, imageData);
+                System.Diagnostics.Debug.WriteLine($"✓ Original image copied to 'generated': {contentImageFileName}");
+
+                // Update GeneratedImagePath to point to the copied file
+                currentPresentation.GeneratedImagePath = $"{teamFolderName}/images/generated/{contentImageFileName}";
+            }
+
+            // Clear poster text (no poster was generated)
+            currentPresentation.PosterText = null;
+
+            System.Diagnostics.Debug.WriteLine($"Creating repository...");
+
+            var repo = new TeamAwareRepository<Presentation>(
+                basePath,
+                teamFolderName,
+                "presentations");
+
+            System.Diagnostics.Debug.WriteLine($"Calling UpdateAsync...");
+
+            await repo.UpdateAsync(currentPresentation);
+
+            System.Diagnostics.Debug.WriteLine($"✓ Update successful!");
+
+            successMessage = "Presentation updated successfully!";
+            StateHasChanged();
+
+            // Navigate to create assignment with display flags
+            await Task.Delay(1500);
+            Navigation.NavigateTo($"/presentations/{PresentationId}/assign?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"=== ERROR ===");
+            System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"Stack: {ex.StackTrace}");
+
+            if (ex.InnerException != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+            }
+
+            errorMessage = $"Error saving presentation: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            System.Diagnostics.Debug.WriteLine($"=== SaveWithoutPoster END ===");
+        }
+    }
+
     private void Cancel()
     {
-        Navigation.NavigateTo("/presentations");
+        // Navigation.NavigateTo("/presentations");
+        // After successful save, navigate back to presentations
+        Navigation.NavigateTo($"/presentations?team={TeamContext.GetCurrentTeamFolderName()}");
     }
 
     private void ReturnToPresentations()
     {
-        Navigation.NavigateTo("/presentations");
+        // Navigation.NavigateTo("/presentations");
+        // After successful save, navigate back to presentations
+        Navigation.NavigateTo($"/presentations?team={TeamContext.GetCurrentTeamFolderName()}");
     }
 }

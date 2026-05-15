@@ -401,6 +401,7 @@
                 return;
             }
 
+            // Create the presentation
             var presentation = await PresentationService.CreatePresentationAsync(
                 teamId,
                 teamFolderName,
@@ -411,22 +412,14 @@
                 selectedFileName
             );
 
-            successMessage = "Presentation created successfully!";
-            
-            // Clear form
-            presentationName = string.Empty;
-            presentationDescription = string.Empty;
-            moreUrl = string.Empty;
-            displayTimeSeconds = 60;
-            selectedFileName = string.Empty;
-            imageData = null;
-            imagePreview = null;
-
-            StateHasChanged();
+            // Navigate directly to Edit page (no success message)
+            Navigation.NavigateTo($"/presentations/edit/{presentation.PresentationID}");
         }
         catch (Exception ex)
         {
             errorMessage = $"Error creating presentation: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"CreatePresentation Error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack: {ex.StackTrace}");
         }
         finally
         {

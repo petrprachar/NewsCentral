@@ -57,7 +57,7 @@ public class PresentationService
         var posterPath = await _posterService.GeneratePosterAsync(
             teamFolderName,
             presentationId,
-            presentation.Version,
+            presentation.Version.ToString(),
             originalImageData,
             headlineText,
             bodyText,
@@ -123,7 +123,7 @@ public class PresentationService
         var presentation = new Presentation
         {
             PresentationID = Guid.NewGuid().ToString(),
-            Version = "1",
+            Version = 1,
             TeamID = teamId,
             TeamFolderName = teamFolderName,
             Name = name,
@@ -135,7 +135,9 @@ public class PresentationService
             ImageName = savedImageName,
             CreatedBy = currentUser.UserID,
             LastModified = DateTime.UtcNow,
-            ModifiedBy = currentUser.UserID
+            ModifiedBy = currentUser.UserID,
+
+            ContentImageBase64 = Convert.ToBase64String(imageData)
         };
 
         var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");

@@ -571,7 +571,7 @@
             var schedule = await ScheduleService.CreateScheduleAsync(
                 teamFolderName,
                 PresentationId,
-                presentation.Version,
+                presentation.Version.ToString(),
                 scheduleStartDate,
                 scheduleEndDate,
                 selectedDays
@@ -589,7 +589,7 @@
                 await AssignmentService.CreateAssignmentAsync(
                     teamFolderName,
                     PresentationId,
-                    presentation.Version,
+                    presentation.Version.ToString(),
                     schedule.ScheduleID,
                     targetTeam.FolderName,
                     requiresApproval

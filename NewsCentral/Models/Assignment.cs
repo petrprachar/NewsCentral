@@ -10,6 +10,12 @@ public class Assignment : IEntity
     public string TargetTeam { get; set; } = string.Empty;
     public AssignmentStatus Status { get; set; } = AssignmentStatus.Draft;
     public bool RequiresApproval { get; set; } = true;
+
+    // NEW: Display type flags
+    public bool IsNewsOfWeek { get; set; } = true;      // Default checked
+    public bool IsWallpaper { get; set; } = false;      // Future feature
+    public bool IsLogonScreen { get; set; } = false;    // Future feature
+
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime DateCreated { get; set; } = DateTime.UtcNow;
     public string? ApprovedBy { get; set; }
