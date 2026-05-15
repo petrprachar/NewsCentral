@@ -2,6 +2,9 @@
 @inject AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject IStringLocalizer Localizer
+@using NewsCentral.Services
+@using NewsCentral.Models
+@inject WindowsIdentityService WindowsIdentityService
 
 <PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>
 
@@ -170,15 +173,54 @@
     private string errorMessage = string.Empty;
     private bool isLoggingIn = false;
 
+    protected override async Task OnInitializedAsync()
+    {
+        System.Diagnostics.Debug.WriteLine("=== Login Page: OnInitializedAsync START ===");
+    
+        try
+        {
+            System.Diagnostics.Debug.WriteLine("Step 1: About to call TryAutoLoginAsync");
+        
+            var autoLoginUser = await AuthService.TryAutoLoginAsync();
+        
+            System.Diagnostics.Debug.WriteLine($"Step 2: TryAutoLoginAsync returned: {(autoLoginUser != null ? "User found" : "null")}");
+        
+            if (autoLoginUser != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {autoLoginUser.Username}");
+                System.Diagnostics.Debug.WriteLine("Step 3: About to navigate to dashboard");
+                Navigation.NavigateTo("/", forceLoad: true);
+                return;
+            }
+        
+            System.Diagnostics.Debug.WriteLine("Auto-login not available, showing login form");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"=== ERROR IN OnInitializedAsync ===");
+            System.Diagnostics.Debug.WriteLine($"Exception Type: {ex.GetType().Name}");
+            System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack Trace: {ex.StackTrace}");
+        
+            if (ex.InnerException != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+            }
+        
+            errorMessage = $"Login initialization error: {ex.Message}";
+        }
+    
+        System.Diagnostics.Debug.WriteLine("=== Login Page: OnInitializedAsync END ===");
+    }
+
+    // EXISTING: Manual login handler (unchanged)
     private async Task HandleLogin()
     {
         errorMessage = string.Empty;
         isLoggingIn = true;
-
         try
         {
             var user = await AuthService.LoginAsync(username, password);
-
             if (user != null)
             {
                 Navigation.NavigateTo("/dashboard");

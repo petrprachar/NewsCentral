@@ -44,9 +44,13 @@ public static class MauiProgram
                 config = new ConfigurationBuilder()
                     .AddJsonStream(stream)
                     .Build();
+                System.Diagnostics.Debug.WriteLine("✓ Configuration loaded from embedded resource");
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to load embedded config: {ex.Message}");
+        }
 
         // Method 2: Try file system if embedded failed
         if (config == null)
@@ -60,9 +64,13 @@ public static class MauiProgram
                     config = new ConfigurationBuilder()
                         .AddJsonFile(appSettingsPath, optional: false, reloadOnChange: false)
                         .Build();
+                    System.Diagnostics.Debug.WriteLine($"✓ Configuration loaded from file: {appSettingsPath}");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to load file config: {ex.Message}");
+            }
         }
 
         // Method 3: Use hardcoded defaults if all else fails
@@ -70,10 +78,13 @@ public static class MauiProgram
         {
             var inMemorySettings = new Dictionary<string, string>
             {
-                {"AppSettings:DataPath", "C:\\Download\\NewsCentral"},
-                {"AppSettings:DefaultAdminUsername", "admin"},
-                {"AppSettings:DefaultAdminPassword", "admin"},
-                {"AppSettings:LockExpirationMinutes", "15"},
+                {"DataPath", "C:\\Download\\NewsCentral"},
+                {"DefaultAdminUsername", "admin"},
+                {"DefaultAdminPassword", "admin"},
+                {"LockExpirationMinutes", "15"},
+                {"Authentication:EnableAutoLogin", "true"},
+                {"Authentication:UseMockUPN", "true"},
+                {"Authentication:MockUPN", "petr.prachar@company.com"},
                 {"AI:ClaudeApiKey", ""},
                 {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
                 {"AI:OpenAIApiKey", ""},
@@ -85,17 +96,60 @@ public static class MauiProgram
             config = new ConfigurationBuilder()
                 .AddInMemoryCollection(inMemorySettings!)
                 .Build();
+            System.Diagnostics.Debug.WriteLine("⚠ Using hardcoded default configuration");
         }
 
-        // DEBUG: Check which method worked
-        System.Diagnostics.Debug.WriteLine($"DataPath: {config["AppSettings:DataPath"]}");
-        System.Diagnostics.Debug.WriteLine("Configuration loaded successfully!");
-
+        // Add configuration to builder
         builder.Configuration.AddConfiguration(config);
 
-        // Register services
-        builder.Services.AddSingleton<AppConfiguration>();
-        builder.Services.AddSingleton<AuthenticationService>();
+        // DEBUG: Verify configuration values
+        System.Diagnostics.Debug.WriteLine("=== CONFIGURATION CHECK ===");
+        System.Diagnostics.Debug.WriteLine($"DataPath: '{config["DataPath"]}'");
+        System.Diagnostics.Debug.WriteLine($"EnableAutoLogin: '{config["Authentication:EnableAutoLogin"]}'");
+        System.Diagnostics.Debug.WriteLine($"UseMockUPN: '{config["Authentication:UseMockUPN"]}'");
+        System.Diagnostics.Debug.WriteLine($"MockUPN: '{config["Authentication:MockUPN"]}'");
+        System.Diagnostics.Debug.WriteLine("=== END CONFIGURATION CHECK ===");
+
+        // Create and register AppConfiguration
+        var dataPath = config["DataPath"];
+        if (string.IsNullOrEmpty(dataPath))
+        {
+            dataPath = "C:\\Download\\NewsCentral";
+            System.Diagnostics.Debug.WriteLine($"⚠ DataPath was empty, using fallback: {dataPath}");
+        }
+
+        // Create AppConfiguration from IConfiguration
+        var appConfig = new AppConfiguration(config);
+
+        // Verify DataPath was loaded
+        if (string.IsNullOrEmpty(appConfig.DataPath))
+        {
+            System.Diagnostics.Debug.WriteLine("⚠ WARNING: AppConfig.DataPath is empty!");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"✓ AppConfig.DataPath set to: '{appConfig.DataPath}'");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"AppConfig.DataPath set to: '{appConfig.DataPath}'");
+
+        builder.Services.AddSingleton(appConfig);
+
+        // Register WindowsIdentityService (needs to be before AuthenticationService)
+        builder.Services.AddSingleton<WindowsIdentityService>();
+
+        // Register AuthenticationService with dependencies
+        builder.Services.AddSingleton<AuthenticationService>(sp =>
+        {
+            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
+            var windowsIdentityService = sp.GetRequiredService<WindowsIdentityService>();
+
+            System.Diagnostics.Debug.WriteLine($"Creating AuthenticationService with DataPath: '{appConfiguration.DataPath}'");
+
+            return new AuthenticationService(appConfiguration, windowsIdentityService);
+        });
+
+        // Register other services
         builder.Services.AddSingleton<TeamService>();
         builder.Services.AddSingleton<UserService>();
         builder.Services.AddSingleton<PosterGenerationService>();
@@ -115,10 +169,10 @@ public static class MauiProgram
             return factory.Create("Resources.Resources", typeof(MauiProgram).Assembly.GetName().Name!);
         });
 
-        // TEMPORARY: Force German for testing
-        var culture = new System.Globalization.CultureInfo("es");
-        System.Globalization.CultureInfo.CurrentCulture = culture;
-        System.Globalization.CultureInfo.CurrentUICulture = culture;
+        // Set culture for testing
+        var culture = new CultureInfo("es");
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = culture;
 
         return builder.Build();
     }

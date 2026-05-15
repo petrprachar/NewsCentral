@@ -1,6 +1,11 @@
-﻿using NewsCentral.Configuration;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
+using Microsoft.Extensions.Configuration;
+using NewsCentral.Configuration;
+
 
 namespace NewsCentral.Services;
 
@@ -8,15 +13,18 @@ public class AuthenticationService
 {
     private readonly JsonFileRepository<UsersCollection> _userRepo;
     private readonly AppConfiguration _config;
+    private readonly WindowsIdentityService _windowsIdentityService;
+
     private User? _currentUser;
 
-    public AuthenticationService(AppConfiguration config)
+    public AuthenticationService(AppConfiguration config, WindowsIdentityService windowsIdentityService)
     {
         _config = config;
         _userRepo = new JsonFileRepository<UsersCollection>(
             Path.Combine(config.DataPath, "config"),
             ""
         );
+        _windowsIdentityService = windowsIdentityService;
     }
 
     public async Task InitializeAsync()
@@ -93,6 +101,55 @@ public class AuthenticationService
 
         _currentUser = user;
         return user;
+    }
+
+    public async Task<User?> TryAutoLoginAsync()
+    {
+        if (!_windowsIdentityService.IsAutoLoginEnabled())
+        {
+            System.Diagnostics.Debug.WriteLine("Auto-login is disabled");
+            return null;
+        }
+
+        var upn = _windowsIdentityService.GetCurrentUserUPN();
+
+        if (string.IsNullOrEmpty(upn))
+        {
+            System.Diagnostics.Debug.WriteLine("Could not detect UPN");
+            return null;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"Attempting auto-login with UPN: {upn}");
+
+        // Load users collection (same pattern as LoginAsync)
+        var usersCollection = await _userRepo.GetByIdAsync("users");
+
+        if (usersCollection == null)
+        {
+            System.Diagnostics.Debug.WriteLine("No users collection found in system");
+            return null;
+        }
+
+        // Search for user with matching UPN
+        var user = usersCollection.Users.FirstOrDefault(u =>
+            !string.IsNullOrEmpty(u.UPN) &&
+            u.UPN.Equals(upn, StringComparison.OrdinalIgnoreCase) &&
+            u.IsActive);  // ← Also check IsActive like LoginAsync does
+
+        if (user != null)
+        {
+            // Update last login (same as LoginAsync)
+            user.LastLogin = DateTime.UtcNow;
+            usersCollection.LastModified = DateTime.UtcNow;
+            await _userRepo.UpdateAsync(usersCollection);
+
+            _currentUser = user;
+            System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {user.Username}");
+            return user;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"No active user found with UPN: {upn}");
+        return null;
     }
 
     public void Logout()

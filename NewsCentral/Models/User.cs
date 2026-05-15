@@ -6,6 +6,7 @@ public class User : IEntity
     public string Username { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public string? UPN { get; set; }
     public string PasswordHash { get; set; } = string.Empty;
     public bool IsSystemAdmin { get; set; } = false;
     public bool IsActive { get; set; } = true;
