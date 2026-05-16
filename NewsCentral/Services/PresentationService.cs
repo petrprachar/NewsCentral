@@ -180,6 +180,9 @@ public class PresentationService
         return await repo.UpdateAsync(presentation);
     }
 
+    /// <summary>
+    /// Moves a presentation and all its related assignments and schedules to the deleted folder
+    /// </summary>
     public async Task<bool> DeletePresentationAsync(string teamFolderName, string presentationId)
     {
         var currentUser = _authService.GetCurrentUser();
@@ -193,16 +196,66 @@ public class PresentationService
 
         if (presentation == null)
         {
-            return false;
+            throw new InvalidOperationException($"Presentation {presentationId} not found");
         }
 
-        // Only creator or SystemAdmin can delete
-        if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
+        // Check permissions
+        if (!_authService.IsSystemAdmin() && presentation.CreatedBy != currentUser.UserID)
         {
-            throw new UnauthorizedAccessException("You can only delete your own presentations");
+            throw new UnauthorizedAccessException("You don't have permission to delete this presentation");
         }
 
-        return await repo.DeleteAsync(presentationId);
+        // Create deleted folder (single folder, no subfolders)
+        var teamContentPath = Path.Combine(_basePath, teamFolderName, "content");
+        var deletedPath = Path.Combine(teamContentPath, "deleted");
+        Directory.CreateDirectory(deletedPath);
+
+        // Move presentation file to deleted folder
+        var presentationSourcePath = Path.Combine(teamContentPath, "presentations", $"pres_{presentationId}.json");
+        var presentationDestPath = Path.Combine(deletedPath, $"pres_{presentationId}.json");
+
+        if (File.Exists(presentationSourcePath))
+        {
+            File.Move(presentationSourcePath, presentationDestPath, overwrite: true);
+            System.Diagnostics.Debug.WriteLine($"✓ Moved presentation pres_{presentationId} to deleted folder");
+        }
+
+        // Find and move all related assignments
+        var assignmentRepo = new TeamAwareRepository<Assignment>(_basePath, teamFolderName, "assignments");
+        var allAssignments = await assignmentRepo.GetAllAsync();
+        var relatedAssignments = allAssignments.Where(a => a.PresentationID == presentationId).ToList();
+
+        foreach (var assignment in relatedAssignments)
+        {
+            var assignmentSourcePath = Path.Combine(teamContentPath, "assignments", $"assign_{assignment.AssignmentID}.json");
+            var assignmentDestPath = Path.Combine(deletedPath, $"assign_{assignment.AssignmentID}.json");
+
+            if (File.Exists(assignmentSourcePath))
+            {
+                File.Move(assignmentSourcePath, assignmentDestPath, overwrite: true);
+                System.Diagnostics.Debug.WriteLine($"✓ Moved assignment assign_{assignment.AssignmentID} to deleted folder");
+            }
+        }
+
+        // Find and move all related schedules
+        var scheduleRepo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var allSchedules = await scheduleRepo.GetAllAsync();
+        var relatedSchedules = allSchedules.Where(s => s.PresentationID == presentationId).ToList();
+
+        foreach (var schedule in relatedSchedules)
+        {
+            var scheduleSourcePath = Path.Combine(teamContentPath, "schedules", $"sched_{schedule.ScheduleID}.json");
+            var scheduleDestPath = Path.Combine(deletedPath, $"sched_{schedule.ScheduleID}.json");
+
+            if (File.Exists(scheduleSourcePath))
+            {
+                File.Move(scheduleSourcePath, scheduleDestPath, overwrite: true);
+                System.Diagnostics.Debug.WriteLine($"✓ Moved schedule sched_{schedule.ScheduleID} to deleted folder");
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"✓ Presentation {presentationId} and {relatedAssignments.Count} assignments, {relatedSchedules.Count} schedules moved to deleted folder");
+        return true;
     }
 
     public async Task<byte[]> GetImageDataAsync(string teamFolderName, string imagePath)

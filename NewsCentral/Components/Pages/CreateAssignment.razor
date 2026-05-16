@@ -50,7 +50,7 @@
                     <input type="date" @bind="scheduleEndDate" class="form-control" />
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" hidden>
                     <label>Days of Week: *</label>
                     <div class="days-checkboxes">
                         <label><input type="checkbox" @bind="monday" /> Monday</label>
@@ -496,8 +496,12 @@
                 Console.WriteLine($"  - {team.Name} ({team.FolderName})");
             }
 
-            // DON'T auto-select anything - completely empty
+            // Auto-select current team by default
             selectedTeams.Clear();
+            if (currentTeam != null)
+            {
+                selectedTeams.Add(currentTeam.TeamID);
+            }
         }
         catch (Exception ex)
         {

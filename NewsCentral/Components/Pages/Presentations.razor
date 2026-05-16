@@ -1,6 +1,7 @@
 ﻿@page "/presentations"
 @using NewsCentral.Models
 @using NewsCentral.Services
+@using NewsCentral.Components.Shared
 @inject PresentationService PresentationService
 @inject TeamContextService TeamContext
 @inject AuthenticationService AuthService
@@ -95,7 +96,7 @@
 
                         @if (CanDelete(presentation))
                         {
-                            <button @onclick="() => DeletePresentation(presentation)"
+                            <button @onclick="() => ShowDeleteConfirmation(presentation)"
                                     class="btn btn-danger">
                                 Delete
                             </button>
@@ -106,6 +107,16 @@
         </div>
     }
 </div>
+
+<!-- NEW: Confirmation Dialog -->
+<ConfirmDialog IsVisible="@showDeleteConfirm"
+               Title="Delete Presentation"
+               Message="@deleteConfirmMessage"
+               ConfirmText="Delete"
+               CancelText="Cancel"
+               DialogType="danger"
+               OnConfirm="ConfirmDeletePresentation"
+               OnCancel="CancelDeletePresentation" />
 
 <style>
     .presentations-container {
@@ -322,6 +333,11 @@
     private string successMessage = string.Empty;
     private string currentTeamName = string.Empty;
 
+    // NEW: Delete confirmation state
+    private bool showDeleteConfirm = false;
+    private Presentation? presentationToDelete = null;
+    private string deleteConfirmMessage = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadPresentations();
@@ -381,7 +397,8 @@
         Navigation.NavigateTo($"/presentations/{presentationId}/assign");
     }
 
-    private async Task DeletePresentation(Presentation presentation)
+    // NEW: Show delete confirmation
+    private void ShowDeleteConfirmation(Presentation presentation)
     {
         if (!CanDelete(presentation))
         {
@@ -389,18 +406,34 @@
             return;
         }
 
-        // Add confirmation dialog here if desired
-        var confirmed = true; // Replace with actual confirmation dialog
+        presentationToDelete = presentation;
+        deleteConfirmMessage = $"Are you sure you want to delete the presentation '{presentation.Name}'? This action cannot be undone.";
+        showDeleteConfirm = true;
+    }
 
-        if (!confirmed)
-            return;
+    // NEW: Confirm delete
+    private async Task ConfirmDeletePresentation()
+    {
+        if (presentationToDelete == null) return;
 
         try
         {
             var teamFolderName = TeamContext.GetCurrentTeamFolderName();
-            await PresentationService.DeletePresentationAsync(teamFolderName, presentation.PresentationID);
+
+            if (string.IsNullOrEmpty(teamFolderName))
+            {
+                errorMessage = "No team selected. Cannot delete presentation.";
+                showDeleteConfirm = false;
+                presentationToDelete = null;
+                return;
+            }
+
+            await PresentationService.DeletePresentationAsync(teamFolderName, presentationToDelete.PresentationID);
 
             successMessage = "Presentation deleted successfully";
+            showDeleteConfirm = false;
+            presentationToDelete = null;
+
             await LoadPresentations();
 
             // Clear success message after 3 seconds
@@ -411,7 +444,16 @@
         catch (Exception ex)
         {
             errorMessage = $"Error deleting presentation: {ex.Message}";
+            showDeleteConfirm = false;
+            presentationToDelete = null;
         }
+    }
+
+    // NEW: Cancel delete
+    private void CancelDeletePresentation()
+    {
+        showDeleteConfirm = false;
+        presentationToDelete = null;
     }
 
     private bool CanDelete(Presentation presentation)

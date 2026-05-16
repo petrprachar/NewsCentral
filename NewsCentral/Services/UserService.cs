@@ -39,6 +39,55 @@ public class UserService
         return users.FirstOrDefault(u => u.Username.Equals(username, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task UpdateUserUPNAsync(string userId, string? upn)
+    {
+        var usersCollection = await _userRepo.GetByIdAsync("users");
+        if (usersCollection == null)
+        {
+            throw new InvalidOperationException("Users collection not found");
+        }
+
+        var user = usersCollection.Users.FirstOrDefault(u => u.UserID == userId);
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found");
+        }
+
+        user.UPN = string.IsNullOrWhiteSpace(upn) ? null : upn.Trim();
+
+        usersCollection.LastModified = DateTime.UtcNow;
+        await _userRepo.UpdateAsync(usersCollection);
+    }
+
+    public async Task CreateUserWithUPNAsync(string username, string email, string displayName, string password, bool isSystemAdmin, string? upn)
+    {
+        // First create the user normally
+        await CreateUserAsync(username, email, displayName, password, isSystemAdmin);
+
+        // Then update the UPN if provided
+        if (!string.IsNullOrWhiteSpace(upn))
+        {
+            var usersCollection = await _userRepo.GetByIdAsync("users");
+            var newUser = usersCollection?.Users.FirstOrDefault(u => u.Username == username);
+
+            if (newUser != null)
+            {
+                newUser.UPN = upn.Trim();
+                usersCollection!.LastModified = DateTime.UtcNow;
+                await _userRepo.UpdateAsync(usersCollection);
+            }
+        }
+    }
+
+    public async Task UpdateUserWithUPNAsync(string userId, string email, string displayName, bool isActive, string? upn)
+    {
+        // First update basic info
+        await UpdateUserAsync(userId, email, displayName, isActive);
+
+        // Then update UPN
+        await UpdateUserUPNAsync(userId, upn);
+    }
+
     public async Task<User> CreateUserAsync(string username, string email, string displayName, string password, bool isSystemAdmin = false)
     {
         var currentUser = _authService.GetCurrentUser();

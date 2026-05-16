@@ -255,4 +255,49 @@ public class AssignmentService
 
         return await repo.UpdateAsync(assignment);
     }
+
+    /// <summary>
+    /// Moves an assignment to the deleted folder instead of permanently deleting it
+    /// </summary>
+    public async Task DeleteAssignmentAsync(string sourceTeamFolderName, string assignmentId)
+    {
+        var currentUser = _authService.GetCurrentUser();
+        if (currentUser == null)
+        {
+            throw new UnauthorizedAccessException("Not authenticated");
+        }
+
+        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
+        var assignment = await repo.GetByIdAsync(assignmentId);
+
+        if (assignment == null)
+        {
+            throw new InvalidOperationException($"Assignment {assignmentId} not found");
+        }
+
+        // Only creator or SystemAdmin can delete
+        if (assignment.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
+        {
+            throw new UnauthorizedAccessException("Only the creator or system admin can delete this assignment");
+        }
+
+        // Create deleted folder (single folder)
+        var teamContentPath = Path.Combine(_basePath, sourceTeamFolderName, "content");
+        var deletedPath = Path.Combine(teamContentPath, "deleted");
+        Directory.CreateDirectory(deletedPath);
+
+        // Move assignment file to deleted folder
+        var assignmentSourcePath = Path.Combine(teamContentPath, "assignments", $"assign_{assignmentId}.json");
+        var assignmentDestPath = Path.Combine(deletedPath, $"assign_{assignmentId}.json");
+
+        if (File.Exists(assignmentSourcePath))
+        {
+            File.Move(assignmentSourcePath, assignmentDestPath, overwrite: true);
+            System.Diagnostics.Debug.WriteLine($"✓ Moved assignment assign_{assignmentId} to deleted folder by {currentUser.Username}");
+        }
+        else
+        {
+            throw new InvalidOperationException($"Assignment file not found: {assignmentSourcePath}");
+        }
+    }
 }
