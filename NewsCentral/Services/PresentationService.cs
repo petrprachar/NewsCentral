@@ -205,10 +205,12 @@ public class PresentationService
             throw new UnauthorizedAccessException("You don't have permission to delete this presentation");
         }
 
-        // Create deleted folder (single folder, no subfolders)
-        var teamContentPath = Path.Combine(_basePath, teamFolderName, "content");
-        var deletedPath = Path.Combine(teamContentPath, "deleted");
+        // Create deleted folder at team root level (NOT under content)
+        var teamRootPath = Path.Combine(_basePath, teamFolderName);
+        var deletedPath = Path.Combine(teamRootPath, "deleted");
         Directory.CreateDirectory(deletedPath);
+
+        var teamContentPath = Path.Combine(teamRootPath, "content");
 
         // Move presentation file to deleted folder
         var presentationSourcePath = Path.Combine(teamContentPath, "presentations", $"pres_{presentationId}.json");

@@ -281,10 +281,12 @@ public class AssignmentService
             throw new UnauthorizedAccessException("Only the creator or system admin can delete this assignment");
         }
 
-        // Create deleted folder (single folder)
-        var teamContentPath = Path.Combine(_basePath, sourceTeamFolderName, "content");
-        var deletedPath = Path.Combine(teamContentPath, "deleted");
+        // Create deleted folder at team root level (NOT under content)
+        var teamRootPath = Path.Combine(_basePath, sourceTeamFolderName);
+        var deletedPath = Path.Combine(teamRootPath, "deleted");
         Directory.CreateDirectory(deletedPath);
+
+        var teamContentPath = Path.Combine(teamRootPath, "content");
 
         // Move assignment file to deleted folder
         var assignmentSourcePath = Path.Combine(teamContentPath, "assignments", $"assign_{assignmentId}.json");
