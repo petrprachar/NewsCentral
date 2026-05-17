@@ -17,6 +17,8 @@ public class AuthenticationService
 
     private User? _currentUser;
 
+    public event Action? OnAuthenticationStateChanged;
+
     public AuthenticationService(AppConfiguration config, WindowsIdentityService windowsIdentityService)
     {
         _config = config;
@@ -100,6 +102,7 @@ public class AuthenticationService
         await _userRepo.UpdateAsync(usersCollection);
 
         _currentUser = user;
+        OnAuthenticationStateChanged?.Invoke();
         return user;
     }
 
@@ -148,6 +151,16 @@ public class AuthenticationService
             return user;
         }
 
+        if (user != null)
+        {
+            _currentUser = user;
+
+            // Notify subscribers
+            OnAuthenticationStateChanged?.Invoke();
+
+            return user;
+        }
+
         System.Diagnostics.Debug.WriteLine($"No active user found with UPN: {upn}");
         return null;
     }
@@ -155,6 +168,9 @@ public class AuthenticationService
     public void Logout()
     {
         _currentUser = null;
+
+        // Notify subscribers that authentication state changed
+        OnAuthenticationStateChanged?.Invoke();
     }
 
     public User? GetCurrentUser()

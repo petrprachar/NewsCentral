@@ -1,0 +1,362 @@
+﻿@page "/index-management"
+@using NewsCentral.Services
+@using NewsCentral.Models
+@using Microsoft.Extensions.Localization
+@inject IStringLocalizer<IndexManagement> Localizer
+@inject IndexGenerationService IndexService
+@inject TeamService TeamService
+@inject TeamContextService TeamContext
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>@Localizer["PageTitle"]</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>@Localizer["PageTitle"]</h1>
+        <p class="page-description">@Localizer["PageDescription"]</p>
+    </div>
+
+    @if (!isAuthorized)
+    {
+        <div class="alert alert-danger">
+            <strong>@Localizer["AccessDenied"]</strong>
+            <p>@Localizer["AccessDeniedMessage"]</p>
+        </div>
+        return;
+    }
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>@Localizer["CurrentTeamSection"]</h5>
+        </div>
+        <div class="card-body">
+            @if (!string.IsNullOrEmpty(currentTeamFolder))
+            {
+                <div class="team-info mb-3">
+                    <strong>@Localizer["CurrentTeam"]:</strong> @currentTeamName (@currentTeamFolder)
+                </div>
+
+                @if (currentIndexInfo != null)
+                {
+                    <div class="index-info mb-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p>
+                                    <strong>@Localizer["IndexExists"]:</strong>
+                                    @if (currentIndexInfo.Exists)
+                                    {
+                                        <span class="badge bg-success">@Localizer["Yes"]</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning">@Localizer["No"]</span>
+                                    }
+                                </p>
+                                @if (currentIndexInfo.Exists)
+                                {
+                                    <p><strong>@Localizer["LastGenerated"]:</strong> @currentIndexInfo.GeneratedAt?.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                                    <p><strong>@Localizer["TotalAssignments"]:</strong> @currentIndexInfo.TotalAssignments</p>
+                                }
+                            </div>
+                            <div class="col-md-6">
+                                @if (currentIndexInfo.Exists)
+                                {
+                                    <p><strong>@Localizer["ActiveAssignments"]:</strong> @currentIndexInfo.ActiveAssignments</p>
+                                    <p><strong>@Localizer["UpcomingAssignments"]:</strong> @currentIndexInfo.UpcomingAssignments</p>
+                                    <p><strong>@Localizer["ExpiredAssignments"]:</strong> @currentIndexInfo.ExpiredAssignments</p>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <button class="btn btn-primary" @onclick="RegenerateCurrentTeamIndex" disabled="@isRegenerating">
+                    @if (isRegenerating && regenerationType == "current")
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        @Localizer["Regenerating"]
+                    }
+                    else
+                    {
+                        <i class="bi bi-arrow-clockwise me-2"></i>
+                        @Localizer["RegenerateCurrentTeam"]
+                    }
+                </button>
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    @Localizer["NoTeamSelected"]
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>@Localizer["AllTeamsSection"]</h5>
+        </div>
+        <div class="card-body">
+            <p>@Localizer["AllTeamsDescription"]</p>
+
+            @if (allTeamsInfo != null && allTeamsInfo.Count > 0)
+            {
+                <div class="table-responsive mb-3">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>@Localizer["Team"]</th>
+                                <th>@Localizer["IndexExists"]</th>
+                                <th>@Localizer["LastGenerated"]</th>
+                                <th>@Localizer["TotalAssignments"]</th>
+                                <th>@Localizer["ActiveAssignments"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var info in allTeamsInfo)
+                            {
+                                <tr>
+                                    <td><strong>@info.TeamName</strong><br /><small class="text-muted">@info.TeamFolder</small></td>
+                                    <td>
+                                        @if (info.Exists)
+                                        {
+                                            <span class="badge bg-success">@Localizer["Yes"]</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning">@Localizer["No"]</span>
+                                        }
+                                    </td>
+                                    <td>@info.GeneratedAt?.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@info.TotalAssignments</td>
+                                    <td>@info.ActiveAssignments</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <button class="btn btn-warning" @onclick="RegenerateAllIndexes" disabled="@isRegenerating">
+                @if (isRegenerating && regenerationType == "all")
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    @Localizer["RegeneratingAll"]
+                }
+                else
+                {
+                    <i class="bi bi-arrow-repeat me-2"></i>
+                    @Localizer["RegenerateAllTeams"]
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle me-2"></i>
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAuthorized = false;
+    private string? currentTeamFolder;
+    private string? currentTeamName;
+    private IndexInfo? currentIndexInfo;
+    private List<IndexInfo> allTeamsInfo = new();
+    private bool isRegenerating = false;
+    private string? regenerationType;
+    private string? successMessage;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var currentUser = AuthService.GetCurrentUser();
+        if (currentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        // Only SystemAdmin can access this page
+        isAuthorized = currentUser.IsSystemAdmin;
+
+        if (!isAuthorized)
+        {
+            return;
+        }
+
+        currentTeamFolder = TeamContext.CurrentTeamFolderName;
+        if (!string.IsNullOrEmpty(currentTeamFolder))
+        {
+            var team = await TeamService.GetTeamByFolderNameAsync(currentTeamFolder);
+            currentTeamName = team?.Name ?? currentTeamFolder;
+        }
+
+        await LoadIndexInformation();
+    }
+
+    private async Task LoadIndexInformation()
+    {
+        try
+        {
+            // Load current team index info
+            if (!string.IsNullOrEmpty(currentTeamFolder))
+            {
+                currentIndexInfo = await GetIndexInfoAsync(currentTeamFolder);
+            }
+
+            // Load all teams index info
+            var allTeams = await TeamService.GetAllTeamsAsync();
+            allTeamsInfo.Clear();
+
+            foreach (var team in allTeams)
+            {
+                var info = await GetIndexInfoAsync(team.FolderName);
+                info.TeamName = team.Name;
+                allTeamsInfo.Add(info);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading index information: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"Error in LoadIndexInformation: {ex.Message}");
+        }
+    }
+
+    private async Task<IndexInfo> GetIndexInfoAsync(string teamFolder)
+    {
+        var info = new IndexInfo
+        {
+            TeamFolder = teamFolder,
+            Exists = IndexService.IndexFileExists(teamFolder)
+        };
+
+        if (info.Exists)
+        {
+            try
+            {
+                var indexPath = IndexService.GetIndexFilePath(teamFolder);
+                var jsonContent = await File.ReadAllTextAsync(indexPath);
+                var indexData = System.Text.Json.JsonSerializer.Deserialize<Models.IndexFile.TeamIndexFile>(
+                    jsonContent,
+                    Configuration.JsonConfiguration.GetIndexJsonOptions());
+
+                if (indexData != null)
+                {
+                    info.GeneratedAt = indexData.GeneratedAt;
+                    info.TotalAssignments = indexData.Statistics?.TotalPublishedAssignments ?? 0;
+                    info.ActiveAssignments = indexData.Statistics?.ActiveAssignments ?? 0;
+                    info.UpcomingAssignments = indexData.Statistics?.UpcomingAssignments ?? 0;
+                    info.ExpiredAssignments = indexData.Statistics?.ExpiredAssignments ?? 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error reading index for {teamFolder}: {ex.Message}");
+            }
+        }
+
+        return info;
+    }
+
+    private async Task RegenerateCurrentTeamIndex()
+    {
+        if (string.IsNullOrEmpty(currentTeamFolder) || isRegenerating)
+        {
+            return;
+        }
+
+        try
+        {
+            isRegenerating = true;
+            regenerationType = "current";
+            successMessage = null;
+            errorMessage = null;
+            StateHasChanged();
+
+            System.Diagnostics.Debug.WriteLine($"=== Manual Regeneration: {currentTeamFolder} ===");
+
+            await IndexService.GenerateAndSaveIndexAsync(currentTeamFolder);
+
+            successMessage = Localizer["RegenerationSuccess", currentTeamName ?? currentTeamFolder];
+
+            // Reload index information
+            await LoadIndexInformation();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = Localizer["RegenerationError", ex.Message];
+            System.Diagnostics.Debug.WriteLine($"Error regenerating index: {ex.Message}");
+        }
+        finally
+        {
+            isRegenerating = false;
+            regenerationType = null;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RegenerateAllIndexes()
+    {
+        if (isRegenerating)
+        {
+            return;
+        }
+
+        try
+        {
+            isRegenerating = true;
+            regenerationType = "all";
+            successMessage = null;
+            errorMessage = null;
+            StateHasChanged();
+
+            System.Diagnostics.Debug.WriteLine("=== Manual Regeneration: ALL TEAMS ===");
+
+            var successCount = await IndexService.RegenerateAllIndexesAsync();
+
+            successMessage = Localizer["RegenerationAllSuccess", successCount, allTeamsInfo.Count];
+
+            // Reload index information
+            await LoadIndexInformation();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = Localizer["RegenerationError", ex.Message];
+            System.Diagnostics.Debug.WriteLine($"Error regenerating all indexes: {ex.Message}");
+        }
+        finally
+        {
+            isRegenerating = false;
+            regenerationType = null;
+            StateHasChanged();
+        }
+    }
+
+    private class IndexInfo
+    {
+        public string TeamFolder { get; set; } = string.Empty;
+        public string TeamName { get; set; } = string.Empty;
+        public bool Exists { get; set; }
+        public DateTime? GeneratedAt { get; set; }
+        public int TotalAssignments { get; set; }
+        public int ActiveAssignments { get; set; }
+        public int UpcomingAssignments { get; set; }
+        public int ExpiredAssignments { get; set; }
+    }
+}

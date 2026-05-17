@@ -1,6 +1,11 @@
 ﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace NewsCentral.Services;
 
@@ -9,15 +14,18 @@ public class AssignmentService
     private readonly string _basePath;
     private readonly AuthenticationService _authService;
     private readonly TeamService _teamService;
+    private readonly IndexGenerationService _indexGenerationService;
 
     public AssignmentService(
         AppConfiguration config,
         AuthenticationService authService,
-        TeamService teamService)
+        TeamService teamService,
+        IndexGenerationService indexGenerationService)
     {
         _basePath = config.DataPath;
         _authService = authService;
         _teamService = teamService;
+        _indexGenerationService = indexGenerationService;
     }
 
     public async Task<List<Assignment>> GetAssignmentsForTeamAsync(string teamFolderName)
@@ -100,9 +108,9 @@ public class AssignmentService
         string scheduleId,
         string targetTeamFolderName,
         bool requiresApproval,
-        bool isNewsOfWeek,      
-        bool isWallpaper,       
-        bool isLogonScreen)     
+        bool isNewsOfWeek,
+        bool isWallpaper,
+        bool isLogonScreen)
     {
         var currentUser = _authService.GetCurrentUser();
         if (currentUser == null)
@@ -267,6 +275,7 @@ public class AssignmentService
 
     /// <summary>
     /// Moves an assignment to the deleted folder instead of permanently deleting it
+    /// NEW: Regenerates index if assignment was published
     /// </summary>
     public async Task DeleteAssignmentAsync(string sourceTeamFolderName, string assignmentId)
     {
@@ -290,6 +299,14 @@ public class AssignmentService
             throw new UnauthorizedAccessException("Only the creator or system admin can delete this assignment");
         }
 
+        System.Diagnostics.Debug.WriteLine($"=== DeleteAssignment: {assignmentId} ===");
+        System.Diagnostics.Debug.WriteLine($"Status: {assignment.Status}");
+        System.Diagnostics.Debug.WriteLine($"Source: {assignment.SourceTeam}, Target: {assignment.TargetTeam}");
+
+        // Store target team and status for index regeneration
+        var targetTeam = assignment.TargetTeam;
+        var wasPublished = assignment.Status == AssignmentStatus.Published;
+
         // Create deleted folder at team root level (NOT under content)
         var teamRootPath = Path.Combine(_basePath, sourceTeamFolderName);
         var deletedPath = Path.Combine(teamRootPath, "deleted");
@@ -310,5 +327,28 @@ public class AssignmentService
         {
             throw new InvalidOperationException($"Assignment file not found: {assignmentSourcePath}");
         }
+
+        // NEW: If assignment was published, regenerate index for target team
+        if (wasPublished && !string.IsNullOrEmpty(targetTeam))
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"→ Regenerating index for target team after deletion: {targetTeam}");
+                await _indexGenerationService.GenerateAndSaveIndexAsync(targetTeam);
+                System.Diagnostics.Debug.WriteLine($"  ✓ Index file regenerated for {targetTeam}");
+            }
+            catch (Exception indexEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"  ⚠ WARNING: Index generation failed after deletion: {indexEx.Message}");
+                // Don't fail the delete operation if index generation fails
+                // Admin can manually regenerate later if needed
+            }
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"  Assignment was not published - no index regeneration needed");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"=== DeleteAssignment Complete ===");
     }
 }

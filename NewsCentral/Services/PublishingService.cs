@@ -1,6 +1,12 @@
 ﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 
 namespace NewsCentral.Services;
 
@@ -11,19 +17,22 @@ public class PublishingService
     private readonly ScheduleService _scheduleService;
     private readonly AssignmentService _assignmentService;
     private readonly AuthenticationService _authService;
+    private readonly IndexGenerationService _indexGenerationService;
 
     public PublishingService(
         AppConfiguration config,
+        AuthenticationService authService,
+        AssignmentService assignmentService,
         PresentationService presentationService,
         ScheduleService scheduleService,
-        AssignmentService assignmentService,
-        AuthenticationService authService)
+        IndexGenerationService indexGenerationService)
     {
         _basePath = config.DataPath;
+        _authService = authService;
+        _assignmentService = assignmentService;
         _presentationService = presentationService;
         _scheduleService = scheduleService;
-        _assignmentService = assignmentService;
-        _authService = authService;
+        _indexGenerationService = indexGenerationService;
     }
 
     public async Task<PublishResult> PublishAssignmentAsync(
@@ -42,6 +51,8 @@ public class PublishingService
 
         try
         {
+            System.Diagnostics.Debug.WriteLine($"=== PublishAssignment: {assignmentId} ===");
+
             // Get assignment
             var assignment = await _assignmentService.GetAssignmentAsync(
                 sourceTeamFolderName,
@@ -53,6 +64,8 @@ public class PublishingService
                 result.ErrorMessage = "Assignment not found";
                 return result;
             }
+
+            System.Diagnostics.Debug.WriteLine($"Source: {assignment.SourceTeam} → Target: {assignment.TargetTeam}");
 
             // Verify assignment is approved
             if (assignment.Status != AssignmentStatus.Approved)
@@ -95,150 +108,148 @@ public class PublishingService
             }
 
             // Copy files to target team
-            Console.WriteLine($"Publishing to {assignment.TargetTeam}...");
+            System.Diagnostics.Debug.WriteLine($"Copying files to {assignment.TargetTeam}...");
             var publishedPaths = new List<string>();
 
             // 1. Copy presentation JSON (includes embedded base64 image)
             try
             {
-                Console.WriteLine("Copying presentation JSON...");
+                System.Diagnostics.Debug.WriteLine("→ Copying presentation JSON...");
                 var presentationPath = await CopyPresentationToTargetAsync(
                     presentation,
                     assignment.TargetTeam);
                 publishedPaths.Add(presentationPath);
-                Console.WriteLine($"  ✓ Presentation: {presentationPath}");
+                System.Diagnostics.Debug.WriteLine($"  ✓ Presentation: {presentationPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  ERROR copying presentation: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying presentation: {ex.Message}");
                 throw; // Critical - cannot proceed without presentation
             }
 
             // 2. Copy schedule JSON
             try
             {
-                Console.WriteLine("Copying schedule JSON...");
+                System.Diagnostics.Debug.WriteLine("→ Copying schedule JSON...");
                 var schedulePath = await CopyScheduleToTargetAsync(
                     schedule,
                     assignment.TargetTeam,
                     assignment.PresentationID);
                 publishedPaths.Add(schedulePath);
-                Console.WriteLine($"  ✓ Schedule: {schedulePath}");
+                System.Diagnostics.Debug.WriteLine($"  ✓ Schedule: {schedulePath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  ERROR copying schedule: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying schedule: {ex.Message}");
                 throw; // Critical - cannot proceed without schedule
             }
 
-            // 3. NEW: Copy assignment JSON to target team
-            /*
+            // 3. Copy assignment JSON to target team
             try
             {
-                Console.WriteLine("Copying assignment metadata...");
+                System.Diagnostics.Debug.WriteLine("→ Copying assignment JSON...");
                 var assignmentPath = await CopyAssignmentToTargetAsync(
                     assignment,
                     assignment.TargetTeam);
                 publishedPaths.Add(assignmentPath);
-                Console.WriteLine($"  ✓ Assignment: {assignmentPath}");
+                System.Diagnostics.Debug.WriteLine($"  ✓ Assignment: {assignmentPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  WARNING: Could not copy assignment metadata - {ex.Message}");
-                // Non-critical - target team can still use the content
+                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying assignment: {ex.Message}");
+                throw; // Critical - assignment needed for tracking
             }
-            */
-            // Update assignment status
-            // System.Diagnostics.Debug.WriteLine($"Updating assignment status... ({publishedPaths.Count} files)");
+
+            // 4. Update assignment status in SOURCE team
             try
             {
+                System.Diagnostics.Debug.WriteLine("→ Updating assignment status...");
                 var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-
-                // System.Diagnostics.Debug.WriteLine($"  Current status: {assignment.Status}");
-                // System.Diagnostics.Debug.WriteLine($"  Setting status to: Published");
 
                 assignment.Status = AssignmentStatus.Published;
                 assignment.PublishedBy = currentUser.UserID;
                 assignment.PublishedDate = DateTime.UtcNow;
                 assignment.PublishedPaths = publishedPaths;
 
-                // System.Diagnostics.Debug.WriteLine($"  PublishedBy: {assignment.PublishedBy}");
-                // System.Diagnostics.Debug.WriteLine($"  PublishedDate: {assignment.PublishedDate}");
-                // System.Diagnostics.Debug.WriteLine($"  PublishedPaths count: {publishedPaths.Count}");
-
-                // System.Diagnostics.Debug.WriteLine($"  Calling repo.UpdateAsync...");
                 await repo.UpdateAsync(assignment);
-                // System.Diagnostics.Debug.WriteLine($"  ✓ Assignment updated successfully");
+                System.Diagnostics.Debug.WriteLine($"  ✓ Status updated to Published");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // System.Diagnostics.Debug.WriteLine($"  ✗ ERROR updating assignment!");
-                // System.Diagnostics.Debug.WriteLine($"  Exception type: {ex.GetType().Name}");
-                // System.Diagnostics.Debug.WriteLine($"  Exception message: {ex.Message}");
-                // System.Diagnostics.Debug.WriteLine($"  Stack trace: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR updating assignment: {ex.Message}");
                 throw; // Re-throw to propagate the error
             }
 
-
-            // 4. OPTIONAL: Copy physical image files for reference/backup
+            // 5. OPTIONAL: Copy physical image files for reference/backup
             // (The poster is already embedded in ContentImageBase64, but we keep originals for editing)
             if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
             {
                 try
                 {
-                    Console.WriteLine("Copying poster image file (optional backup)...");
+                    System.Diagnostics.Debug.WriteLine("→ Copying poster image file (optional backup)...");
                     var posterPath = await CopyImageToTargetAsync(
                         presentation.GeneratedImagePath,
-                        sourceTeamFolderName,    // ← FIXED: Added source team parameter
+                        sourceTeamFolderName,
                         assignment.TargetTeam,
                         "generated");
                     publishedPaths.Add(posterPath);
-                    Console.WriteLine($"  ✓ Poster file: {posterPath}");
+                    System.Diagnostics.Debug.WriteLine($"  ✓ Poster file: {posterPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"  WARNING: Could not copy poster file - {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"  ⚠ WARNING: Could not copy poster file - {ex.Message}");
                     // Non-critical - embedded image in JSON is sufficient
                 }
-            }
-            else
-            {
-                Console.WriteLine("  No GeneratedImagePath - skipping poster copy");
             }
 
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
                 try
                 {
-                    Console.WriteLine("Copying original image file (optional backup)...");
+                    System.Diagnostics.Debug.WriteLine("→ Copying original image file (optional backup)...");
                     var originalPath = await CopyImageToTargetAsync(
                         presentation.OriginalImagePath,
-                        sourceTeamFolderName,    // ← FIXED: Added source team parameter
+                        sourceTeamFolderName,
                         assignment.TargetTeam,
                         "original");
                     publishedPaths.Add(originalPath);
-                    Console.WriteLine($"  ✓ Original file: {originalPath}");
+                    System.Diagnostics.Debug.WriteLine($"  ✓ Original file: {originalPath}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"  WARNING: Could not copy original file - {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"  ⚠ WARNING: Could not copy original file - {ex.Message}");
                     // Non-critical - not needed for display
                 }
             }
-            else
+
+            // 6. NEW: Regenerate index file for TARGET team
+            try
             {
-                Console.WriteLine("  No OriginalImagePath - skipping original copy");
+                System.Diagnostics.Debug.WriteLine($"→ Regenerating index for target team: {assignment.TargetTeam}");
+                await _indexGenerationService.GenerateAndSaveIndexAsync(assignment.TargetTeam);
+                System.Diagnostics.Debug.WriteLine($"  ✓ Index file regenerated for {assignment.TargetTeam}");
+            }
+            catch (Exception indexEx)
+            {
+                // Don't fail the publish if index generation fails
+                System.Diagnostics.Debug.WriteLine($"  ⚠ WARNING: Index generation failed: {indexEx.Message}");
+                System.Diagnostics.Debug.WriteLine($"  Publishing succeeded, but clients may not see update until next manual regeneration");
+                // Publishing succeeded, so we still return success
             }
 
             result.Success = true;
             result.PublishedPaths = publishedPaths;
             result.Message = $"Successfully published to {assignment.TargetTeam}";
 
-            Console.WriteLine($"=== SUCCESS: Published {publishedPaths.Count} files ===");
+            System.Diagnostics.Debug.WriteLine($"=== SUCCESS: Published {publishedPaths.Count} files ===");
             return result;
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"=== PUBLISH FAILED ===");
+            System.Diagnostics.Debug.WriteLine($"Error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack: {ex.StackTrace}");
+
             result.Success = false;
             result.ErrorMessage = $"Publishing error: {ex.Message}";
             return result;
@@ -255,12 +266,13 @@ public class PublishingService
         var fileName = $"pres_{presentation.PresentationID}.json";
         var targetPath = Path.Combine(targetFolder, fileName);
 
-        var json = System.Text.Json.JsonSerializer.Serialize(presentation, new System.Text.Json.JsonSerializerOptions
+        var jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
-            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-        });
+            Converters = { new JsonStringEnumConverter() }
+        };
 
+        var json = JsonSerializer.Serialize(presentation, jsonOptions);
         await File.WriteAllTextAsync(targetPath, json);
 
         return $"{targetTeamFolderName}/content/presentations/{fileName}";
@@ -279,7 +291,6 @@ public class PublishingService
         {
             ScheduleID = schedule.ScheduleID,
             PresentationID = presentationId,
-            Version = schedule.Version,
             DateCreated = schedule.DateCreated,
             ScheduleCreated = schedule.ScheduleCreated,
             ScheduleStart = schedule.ScheduleStart,
@@ -293,30 +304,26 @@ public class PublishingService
         var fileName = $"sched_{schedule.ScheduleID}.json";
         var targetPath = Path.Combine(targetFolder, fileName);
 
-        var json = System.Text.Json.JsonSerializer.Serialize(scheduleCopy, new System.Text.Json.JsonSerializerOptions
+        var jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
-            Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-        });
+            Converters = { new JsonStringEnumConverter() }
+        };
 
+        var json = JsonSerializer.Serialize(scheduleCopy, jsonOptions);
         await File.WriteAllTextAsync(targetPath, json);
 
         return $"{targetTeamFolderName}/content/schedules/{fileName}";
     }
 
     private async Task<string> CopyImageToTargetAsync(
-        string imagePathFromJson,  // Path stored in presentation JSON (might be wrong team)
-        string sourceTeamFolder,   // ← NEW: The actual source team we're copying FROM
-        string targetTeamFolder,   // The target team we're copying TO
-        string imageType)          // "generated" or "original"
+        string imagePathFromJson,
+        string sourceTeamFolder,
+        string targetTeamFolder,
+        string imageType)
     {
-        Console.WriteLine($"  CopyImage - JSON path: {imagePathFromJson}");
-        Console.WriteLine($"  CopyImage - Source team: {sourceTeamFolder}");
-        Console.WriteLine($"  CopyImage - Target team: {targetTeamFolder}");
-
         // Extract just the filename
         var fileName = Path.GetFileName(imagePathFromJson);
-        Console.WriteLine($"  CopyImage - Filename: {fileName}");
 
         // Build source path
         var sourcePath = Path.Combine(
@@ -334,21 +341,16 @@ public class PublishingService
             imageType,
             fileName);
 
-        Console.WriteLine($"  Source: {sourcePath}");
-        Console.WriteLine($"  Target: {targetPath}");
-
         // Check if source file exists
         if (!File.Exists(sourcePath))
         {
-            var error = $"Source image not found: {sourcePath}";
-            Console.WriteLine($"  ERROR: {error}");
-            throw new IOException(error);
+            throw new IOException($"Source image not found: {sourcePath}");
         }
 
         // Check if source and target are the same (self-assignment)
         if (string.Equals(sourcePath, targetPath, StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine($"  Source and target are the same - skipping copy");
+            System.Diagnostics.Debug.WriteLine($"  Source and target are identical - skipping copy");
             return $"{targetTeamFolder}/images/{imageType}/{fileName}";
         }
 
@@ -356,81 +358,54 @@ public class PublishingService
         var targetDir = Path.GetDirectoryName(targetPath);
         if (targetDir != null && !Directory.Exists(targetDir))
         {
-            Console.WriteLine($"  Creating directory: {targetDir}");
             Directory.CreateDirectory(targetDir);
         }
 
         // Copy file with FileShare.ReadWrite to allow other processes to keep it open
-        try
+        using (var sourceStream = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite))
         {
-            Console.WriteLine($"  Copying file (with shared read access)...");
-
-            // Open source with FileShare.ReadWrite (allows other processes to read)
-            using (var sourceStream = new FileStream(
-                sourcePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite))  // ← KEY FIX: Allow sharing
+            using (var targetStream = new FileStream(
+                targetPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None))
             {
-                // Create/overwrite target
-                using (var targetStream = new FileStream(
-                    targetPath,
-                    FileMode.Create,
-                    FileAccess.Write,
-                    FileShare.None))
-                {
-                    await sourceStream.CopyToAsync(targetStream);
-                }
+                await sourceStream.CopyToAsync(targetStream);
             }
-
-            Console.WriteLine($"  ✓ File copied successfully");
-        }
-        catch (IOException ioEx)
-        {
-            Console.WriteLine($"  ERROR: {ioEx.Message}");
-            throw;
         }
 
         return $"{targetTeamFolder}/images/{imageType}/{fileName}";
     }
 
     private async Task<string> CopyAssignmentToTargetAsync(
-    Assignment assignment,
-    string targetTeamFolder)
+        Assignment assignment,
+        string targetTeamFolder)
     {
-        Console.WriteLine($"  Copying assignment to target team...");
+        System.Diagnostics.Debug.WriteLine($"  Copying assignment to target team...");
 
-        // Build target path
-        var targetPath = Path.Combine(
-            _basePath,
-            targetTeamFolder,
-            "content",
-            "assignments",
-            $"assign_{assignment.AssignmentID}.json");
+        var targetFolder = Path.Combine(_basePath, targetTeamFolder, "content", "assignments");
+        Directory.CreateDirectory(targetFolder);
 
-        Console.WriteLine($"  Target: {targetPath}");
+        var fileName = $"assign_{assignment.AssignmentID}.json";
+        var targetPath = Path.Combine(targetFolder, fileName);
 
-        // Ensure target directory exists
-        var targetDir = Path.GetDirectoryName(targetPath);
-        if (targetDir != null && !Directory.Exists(targetDir))
+        // Serialize the assignment
+        var jsonOptions = new JsonSerializerOptions
         {
-            Console.WriteLine($"  Creating directory: {targetDir}");
-            Directory.CreateDirectory(targetDir);
-        }
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
 
-        // Create a repository for the target team
-        var targetRepo = new TeamAwareRepository<Assignment>(
-            _basePath,
-            targetTeamFolder,
-            "assignments");
+        var json = JsonSerializer.Serialize(assignment, jsonOptions);
+        await File.WriteAllTextAsync(targetPath, json);
 
-        // Save a copy of the assignment to target team
-        // The assignment already has Published status and all metadata
-        await targetRepo.CreateAsync(assignment);
+        System.Diagnostics.Debug.WriteLine($"  ✓ Assignment file created at: {targetPath}");
 
-        Console.WriteLine($"  ✓ Assignment copied to target");
-
-        return $"{targetTeamFolder}/content/assignments/assign_{assignment.AssignmentID}.json";
+        return $"{targetTeamFolder}/content/assignments/{fileName}";
     }
 }
 
