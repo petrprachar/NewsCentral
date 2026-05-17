@@ -45,6 +45,17 @@
                                     <h3 class="presentation-title" title="@item.PresentationDescription">
                                         @item.PresentationName
                                     </h3>
+
+                                    <!-- NEW: Display type badges -->
+                                    @if (item.Presentation != null && (item.Presentation.IsNewsOfWeek || item.Presentation.IsWallpaper || item.Presentation.IsLogonScreen))
+                                    {
+                                        <div class="display-badges-inline">
+                                            <DisplayTypeBadges ShowNewsOfWeek="@item.Presentation.IsNewsOfWeek"
+                                                               ShowWallpaper="@item.Presentation.IsWallpaper"
+                                                               ShowLogonScreen="@item.Presentation.IsLogonScreen" />
+                                        </div>
+                                    }
+
                                     <p class="meta">To: <strong>@item.TargetTeamName</strong></p>
                                 </div>
                                 <div class="status-badge warning">Pending</div>
@@ -140,6 +151,17 @@
                                     <h3 class="presentation-title" title="@item.PresentationDescription">
                                         @item.PresentationName
                                     </h3>
+
+                                    <!-- NEW: Display type badges -->
+                                    @if (item.Presentation != null && (item.Presentation.IsNewsOfWeek || item.Presentation.IsWallpaper || item.Presentation.IsLogonScreen))
+                                    {
+                                        <div class="display-badges-inline">
+                                            <DisplayTypeBadges ShowNewsOfWeek="@item.Presentation.IsNewsOfWeek"
+                                                               ShowWallpaper="@item.Presentation.IsWallpaper"
+                                                               ShowLogonScreen="@item.Presentation.IsLogonScreen" />
+                                        </div>
+                                    }
+
                                     <p class="meta">
                                         To: <strong>@item.TargetTeamName</strong> |
                                         Published: @item.Assignment.PublishedDate?.ToString("MMM dd, yyyy")
@@ -201,6 +223,17 @@
                                     <h3 class="presentation-title" title="@item.PresentationDescription">
                                         @item.PresentationName
                                     </h3>
+
+                                    <!-- NEW: Display type badges -->
+                                    @if (item.Presentation != null && (item.Presentation.IsNewsOfWeek || item.Presentation.IsWallpaper || item.Presentation.IsLogonScreen))
+                                    {
+                                        <div class="display-badges-inline">
+                                            <DisplayTypeBadges ShowNewsOfWeek="@item.Presentation.IsNewsOfWeek"
+                                                               ShowWallpaper="@item.Presentation.IsWallpaper"
+                                                               ShowLogonScreen="@item.Presentation.IsLogonScreen" />
+                                        </div>
+                                    }
+
                                     <p class="meta">To: <strong>@item.TargetTeamName</strong></p>
                                 </div>
                                 <div class="status-badge danger">Rejected</div>
@@ -537,6 +570,7 @@
             opacity: 1;
         }
     }
+
 </style>
 
 @code {
@@ -620,7 +654,8 @@
                     TargetTeamName = targetTeam?.Name ?? assignment.TargetTeam,
                     ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
                     ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
-                    DaysOfWeek = schedule?.DaysOfWeek ?? ""
+                    DaysOfWeek = schedule?.DaysOfWeek ?? "",
+                    Presentation = presentation
                 };
 
                 myAssignments.Add(viewModel);
@@ -787,5 +822,6 @@
         public DateTime ScheduleStart { get; set; }
         public DateTime ScheduleEnd { get; set; }
         public string DaysOfWeek { get; set; } = string.Empty;
+        public Presentation? Presentation { get; set; }  // Store presentation reference
     }
 }

@@ -99,7 +99,10 @@ public class AssignmentService
         string presentationVersion,
         string scheduleId,
         string targetTeamFolderName,
-        bool requiresApproval)
+        bool requiresApproval,
+        bool isNewsOfWeek,      
+        bool isWallpaper,       
+        bool isLogonScreen)     
     {
         var currentUser = _authService.GetCurrentUser();
         if (currentUser == null)
@@ -117,6 +120,12 @@ public class AssignmentService
             TargetTeam = targetTeamFolderName,
             Status = requiresApproval ? AssignmentStatus.PendingApproval : AssignmentStatus.Approved,
             RequiresApproval = requiresApproval,
+
+            // NEW: Copy display flags from presentation
+            IsNewsOfWeek = isNewsOfWeek,
+            IsWallpaper = isWallpaper,
+            IsLogonScreen = isLogonScreen,
+
             CreatedBy = currentUser.UserID,
             DateCreated = DateTime.UtcNow
         };

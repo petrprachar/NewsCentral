@@ -21,6 +21,11 @@ namespace NewsCentral.Models
         public string ImageOriginalName { get; set; } = string.Empty;
         public string ImageName { get; set; } = string.Empty;
 
+        //Display type flags
+        public bool IsNewsOfWeek { get; set; } = false;
+        public bool IsWallpaper { get; set; } = false;
+        public bool IsLogonScreen { get; set; } = false;
+
         // Base64 content
         public string ContentImageBase64 { get; set; } = string.Empty;
 

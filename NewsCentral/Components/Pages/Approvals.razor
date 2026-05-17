@@ -36,8 +36,19 @@
                     <div class="approval-header">
                         <div>
                             <h3>@approval.PresentationName</h3>
+
+                            <!-- NEW: Display type badges -->
+                            @if (approval.Presentation != null && (approval.Presentation.IsNewsOfWeek || approval.Presentation.IsWallpaper || approval.Presentation.IsLogonScreen))
+                            {
+                                <div class="display-badges-inline">
+                                    <DisplayTypeBadges ShowNewsOfWeek="@approval.Presentation.IsNewsOfWeek"
+                                                       ShowWallpaper="@approval.Presentation.IsWallpaper"
+                                                       ShowLogonScreen="@approval.Presentation.IsLogonScreen" />
+                                </div>
+                            }
+
                             <p class="meta">
-                                From: <strong>@approval.SourceTeamName</strong> 
+                                From: <strong>@approval.SourceTeamName</strong>
                                 → To: <strong>@approval.TargetTeamName</strong>
                             </p>
                         </div>
@@ -334,6 +345,11 @@
         justify-content: flex-end;
         margin-top: 20px;
     }
+
+    .display-badges-inline {
+        margin: 8px 0;
+    }
+
 </style>
 
 @code {
@@ -400,7 +416,8 @@
                     PosterPreview = posterPreview,
                     ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
                     ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
-                    DaysOfWeek = schedule?.DaysOfWeek ?? ""
+                    DaysOfWeek = schedule?.DaysOfWeek ?? "",
+                    Presentation = presentation  // Store presentation reference
                 });
             }
         }
@@ -521,5 +538,6 @@
         public DateTime ScheduleStart { get; set; }
         public DateTime ScheduleEnd { get; set; }
         public string DaysOfWeek { get; set; } = string.Empty;
+        public Presentation? Presentation { get; set; }
     }
 }

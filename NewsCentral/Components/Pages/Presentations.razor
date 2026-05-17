@@ -68,6 +68,16 @@
                     <div class="card-content">
                         <h3 class="card-title">@presentation.Name</h3>
 
+                        <!-- NEW: Display type badges -->
+                        @if (presentation.IsNewsOfWeek || presentation.IsWallpaper || presentation.IsLogonScreen)
+                        {
+                            <div class="display-badges-container">
+                                <DisplayTypeBadges ShowNewsOfWeek="@presentation.IsNewsOfWeek"
+                                                   ShowWallpaper="@presentation.IsWallpaper"
+                                                   ShowLogonScreen="@presentation.IsLogonScreen" />
+                            </div>
+                        }
+
                         @if (!string.IsNullOrEmpty(presentation.Description))
                         {
                             <p class="card-description">@presentation.Description</p>
@@ -323,6 +333,11 @@
         .btn {
             width: 100%;
         }
+    }
+
+    .display-badges-container {
+        margin: 10px 0 12px 0;
+        min-height: 26px;
     }
 </style>
 

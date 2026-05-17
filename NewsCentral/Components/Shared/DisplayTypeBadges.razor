@@ -1,0 +1,59 @@
+﻿@* Display Type Badges Component *@
+
+@if (ShowNewsOfWeek)
+{
+    <span class="display-badge news-of-week">
+        📰 News of the Week
+    </span>
+}
+
+@if (ShowWallpaper)
+{
+    <span class="display-badge wallpaper">
+        🖼️ Wallpaper
+    </span>
+}
+
+@if (ShowLogonScreen)
+{
+    <span class="display-badge logon-screen">
+        🔐 Logon Screen
+    </span>
+}
+
+<style>
+    .display-badge {
+        display: inline-block;
+        padding: 5px 12px;
+        margin: 3px 5px 3px 0;
+        border-radius: 14px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        line-height: 1.4;
+    }
+
+    .display-badge.news-of-week {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+    }
+
+    .display-badge.wallpaper {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        box-shadow: 0 2px 4px rgba(240, 147, 251, 0.3);
+    }
+
+    .display-badge.logon-screen {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        box-shadow: 0 2px 4px rgba(79, 172, 254, 0.3);
+    }
+</style>
+
+@code {
+    [Parameter] public bool ShowNewsOfWeek { get; set; }
+    [Parameter] public bool ShowWallpaper { get; set; }
+    [Parameter] public bool ShowLogonScreen { get; set; }
+}

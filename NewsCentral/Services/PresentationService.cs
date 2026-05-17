@@ -27,7 +27,11 @@ public class PresentationService
     string presentationId,
     string headlineText,
     string bodyText,
-    string ctaText)
+    string ctaText,
+    bool isNewsOfWeek,
+    bool isWallpaper,
+    bool isLogonScreen
+    )
     {
         var currentUser = _authService.GetCurrentUser();
         if (currentUser == null)
@@ -73,6 +77,10 @@ public class PresentationService
         presentation.ContentImageBase64 = posterBase64;
         presentation.LastModified = DateTime.UtcNow;
         presentation.ModifiedBy = currentUser.UserID;
+
+        presentation.IsNewsOfWeek = isNewsOfWeek;
+        presentation.IsWallpaper = isWallpaper;
+        presentation.IsLogonScreen = isLogonScreen;
 
         return await repo.UpdateAsync(presentation);
     }
@@ -176,6 +184,78 @@ public class PresentationService
         presentation.MoreUrl = moreUrl;
         presentation.LastModified = DateTime.UtcNow;
         presentation.ModifiedBy = currentUser.UserID;
+
+        return await repo.UpdateAsync(presentation);
+    }
+
+    /// <summary>
+    /// Updates presentation with all fields including display flags
+    /// </summary>
+    public async Task<Presentation> UpdatePresentationFullAsync(
+        string teamFolderName,
+        string presentationId,
+        string name,
+        string description,
+        string moreUrl,
+        bool isNewsOfWeek,
+        bool isWallpaper,
+        bool isLogonScreen)
+    {
+        var currentUser = _authService.GetCurrentUser();
+        if (currentUser == null)
+        {
+            throw new UnauthorizedAccessException("Not authenticated");
+        }
+
+        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId);
+
+        if (presentation == null)
+        {
+            throw new InvalidOperationException($"Presentation {presentationId} not found");
+        }
+
+        // Only creator or SystemAdmin can edit
+        if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
+        {
+            throw new UnauthorizedAccessException("You can only edit your own presentations");
+        }
+
+        // Update basic fields
+        presentation.Name = name;
+        presentation.Description = description;
+        presentation.MoreUrl = moreUrl;
+
+        // Update display flags
+        presentation.IsNewsOfWeek = isNewsOfWeek;
+        presentation.IsWallpaper = isWallpaper;
+        presentation.IsLogonScreen = isLogonScreen;
+
+        // Update audit fields
+        presentation.LastModified = DateTime.UtcNow;
+        presentation.ModifiedBy = currentUser.UserID;
+
+        // If no poster exists, copy original image to ContentImageBase64
+        if (string.IsNullOrEmpty(presentation.ContentImageBase64) &&
+            !string.IsNullOrEmpty(presentation.OriginalImagePath))
+        {
+            var originalImagePath = Path.Combine(_basePath, presentation.OriginalImagePath);
+            if (File.Exists(originalImagePath))
+            {
+                var imageData = await File.ReadAllBytesAsync(originalImagePath);
+                presentation.ContentImageBase64 = Convert.ToBase64String(imageData);
+
+                // Also save to generated folder
+                var generatedFolderPath = Path.Combine(_basePath, teamFolderName, "images", "generated");
+                Directory.CreateDirectory(generatedFolderPath);
+
+                var contentImageFileName = $"content_{presentation.PresentationID}.jpg";
+                var contentImagePath = Path.Combine(generatedFolderPath, contentImageFileName);
+                await File.WriteAllBytesAsync(contentImagePath, imageData);
+
+                presentation.GeneratedImagePath = $"{teamFolderName}/images/generated/{contentImageFileName}";
+            }
+        }
 
         return await repo.UpdateAsync(presentation);
     }

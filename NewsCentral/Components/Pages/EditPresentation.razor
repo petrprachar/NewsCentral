@@ -61,12 +61,12 @@
                 <input type="text" @bind="moreUrl" class="form-control" placeholder="https://example.com/more-info" />
             </div>
 
-            <!-- NEW: Display Type Checkboxes -->
+            <!-- Display Type Checkboxes -->
             <div class="form-group">
                 <label class="section-label">Display Types:</label>
                 <div class="checkbox-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" @bind="isNewsOfWeek" disabled />
+                        <input type="checkbox" @bind="isNewsOfWeek" />
                         <span>News of the Week</span>
                     </label>
                     <label class="checkbox-label disabled">
@@ -491,6 +491,11 @@
             presentationDescription = presentation.Description;
             moreUrl = presentation.MoreUrl;
 
+            // Load display type flags from Presentation
+            isNewsOfWeek = presentation.IsNewsOfWeek;
+            isWallpaper = presentation.IsWallpaper;
+            isLogonScreen = presentation.IsLogonScreen;
+
             // Load original image preview
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
@@ -557,6 +562,57 @@
         }
     }
 
+    // WITHOUT POSTER: Save without poster generation
+    private async Task SaveWithoutPoster()
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(presentationName))
+        {
+            errorMessage = "Presentation name is required";
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+            if (string.IsNullOrEmpty(teamFolderName))
+            {
+                errorMessage = "No team selected";
+                return;
+            }
+
+            // Call the comprehensive update method
+            await PresentationService.UpdatePresentationFullAsync(
+                teamFolderName,
+                PresentationId,
+                presentationName,
+                presentationDescription,
+                moreUrl,
+                isNewsOfWeek,
+                isWallpaper,
+                isLogonScreen);
+
+            successMessage = "Presentation updated successfully!";
+            StateHasChanged();
+
+            await Task.Delay(1500);
+            Navigation.NavigateTo($"/presentations/{PresentationId}/assign");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving presentation: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
     // WITH POSTER: Generate poster and save
     private async Task SaveAndGeneratePoster()
     {
@@ -593,23 +649,27 @@
                 return;
             }
 
-            // Update basic details
-            await PresentationService.UpdatePresentationAsync(
+            // First update basic details with display flags
+            await PresentationService.UpdatePresentationFullAsync(
                 teamFolderName,
                 PresentationId,
                 presentationName,
                 presentationDescription,
-                moreUrl
-            );
+                moreUrl,
+                isNewsOfWeek,
+                isWallpaper,
+                isLogonScreen);
 
-            // Generate poster with text
+            // Then generate poster (this also updates display flags)
             var updatedPresentation = await PresentationService.UpdatePresentationWithPosterAsync(
                 teamFolderName,
                 PresentationId,
                 headlineText,
                 bodyText,
-                ctaText
-            );
+                ctaText,
+                isNewsOfWeek,
+                isWallpaper,
+                isLogonScreen);
 
             // Show generated poster
             posterPreview = $"data:image/jpeg;base64,{updatedPresentation.ContentImageBase64}";
@@ -617,10 +677,8 @@
             successMessage = "Presentation updated and poster generated successfully!";
             StateHasChanged();
 
-            // Navigate to schedule with display flags
             await Task.Delay(1500);
-            // Navigation.NavigateTo($"/presentations/{PresentationId}/schedule?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
-            Navigation.NavigateTo($"/presentations/{PresentationId}/assign?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
+            Navigation.NavigateTo($"/presentations/{PresentationId}/assign");
         }
         catch (Exception ex)
         {
@@ -629,142 +687,6 @@
         finally
         {
             isSaving = false;
-        }
-    }
-
-    // WITHOUT POSTER: Save without poster generation
-    private async Task SaveWithoutPoster()
-    {
-        errorMessage = string.Empty;
-        successMessage = string.Empty;
-
-        // Validation
-        if (string.IsNullOrWhiteSpace(presentationName))
-        {
-            errorMessage = "Presentation name is required";
-            return;
-        }
-
-        isSaving = true;
-
-        try
-        {
-            var teamFolderName = TeamContext.GetCurrentTeamFolderName();
-            System.Diagnostics.Debug.WriteLine($"=== SaveWithoutPoster START ===");
-            System.Diagnostics.Debug.WriteLine($"Team folder: {teamFolderName}");
-            System.Diagnostics.Debug.WriteLine($"Presentation ID: {PresentationId}");
-
-            if (string.IsNullOrEmpty(teamFolderName))
-            {
-                errorMessage = "No team selected";
-                return;
-            }
-
-            if (presentation == null)
-            {
-                errorMessage = "Presentation not loaded";
-                return;
-            }
-
-            var basePath = @"C:\Download\NewsCentral";
-
-            // Get fresh presentation data
-            var currentPresentation = await PresentationService.GetPresentationAsync(teamFolderName, PresentationId);
-
-            if (currentPresentation == null)
-            {
-                System.Diagnostics.Debug.WriteLine("ERROR: GetPresentationAsync returned null");
-                errorMessage = "Presentation not found in service";
-                return;
-            }
-
-            System.Diagnostics.Debug.WriteLine($"Presentation loaded successfully");
-
-            // Update basic fields
-            currentPresentation.Name = presentationName;
-            currentPresentation.Description = presentationDescription;
-            currentPresentation.MoreUrl = moreUrl;
-            currentPresentation.ModifiedBy = AuthService.GetCurrentUser()?.UserID ?? string.Empty;
-            currentPresentation.LastModified = DateTime.UtcNow;
-
-            // Load original image data
-            if (!string.IsNullOrEmpty(currentPresentation.OriginalImagePath))
-            {
-                System.Diagnostics.Debug.WriteLine($"Loading original image: {currentPresentation.OriginalImagePath}");
-
-                var imageData = await PresentationService.GetImageDataAsync(
-                    teamFolderName,
-                    currentPresentation.OriginalImagePath);
-
-                System.Diagnostics.Debug.WriteLine($"Image loaded: {imageData.Length} bytes");
-
-                // Set ContentImageBase64
-                currentPresentation.ContentImageBase64 = Convert.ToBase64String(imageData);
-                System.Diagnostics.Debug.WriteLine($"ContentImageBase64 set");
-
-                // NEW: Copy original image to 'generated' folder
-                var generatedFolderPath = Path.Combine(basePath, teamFolderName, "images", "generated");
-
-                // Ensure generated folder exists
-                if (!Directory.Exists(generatedFolderPath))
-                {
-                    Directory.CreateDirectory(generatedFolderPath);
-                    System.Diagnostics.Debug.WriteLine($"Created 'generated' folder: {generatedFolderPath}");
-                }
-
-                // Create filename for the generated/content image
-                var contentImageFileName = $"content_{currentPresentation.PresentationID}.jpg";
-                var contentImagePath = Path.Combine(generatedFolderPath, contentImageFileName);
-
-                // Write the original image to 'generated' folder
-                await File.WriteAllBytesAsync(contentImagePath, imageData);
-                System.Diagnostics.Debug.WriteLine($"✓ Original image copied to 'generated': {contentImageFileName}");
-
-                // Update GeneratedImagePath to point to the copied file
-                currentPresentation.GeneratedImagePath = $"{teamFolderName}/images/generated/{contentImageFileName}";
-            }
-
-            // Clear poster text (no poster was generated)
-            currentPresentation.PosterText = null;
-
-            System.Diagnostics.Debug.WriteLine($"Creating repository...");
-
-            var repo = new TeamAwareRepository<Presentation>(
-                basePath,
-                teamFolderName,
-                "presentations");
-
-            System.Diagnostics.Debug.WriteLine($"Calling UpdateAsync...");
-
-            await repo.UpdateAsync(currentPresentation);
-
-            System.Diagnostics.Debug.WriteLine($"✓ Update successful!");
-
-            successMessage = "Presentation updated successfully!";
-            StateHasChanged();
-
-            // Navigate to create assignment with display flags
-            await Task.Delay(1500);
-            Navigation.NavigateTo($"/presentations/{PresentationId}/assign?isNewsOfWeek={isNewsOfWeek}&isWallpaper={isWallpaper}&isLogonScreen={isLogonScreen}");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"=== ERROR ===");
-            System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().Name}");
-            System.Diagnostics.Debug.WriteLine($"Stack: {ex.StackTrace}");
-
-            if (ex.InnerException != null)
-            {
-                System.Diagnostics.Debug.WriteLine($"Inner Exception: {ex.InnerException.Message}");
-            }
-
-            errorMessage = $"Error saving presentation: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-            System.Diagnostics.Debug.WriteLine($"=== SaveWithoutPoster END ===");
         }
     }
 

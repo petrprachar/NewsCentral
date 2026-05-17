@@ -1,5 +1,6 @@
 ﻿@page "/presentations/{presentationId}/assign"
 @using NewsCentral.Models
+@using NewsCentral.Components.Shared
 @inject Services.PresentationService PresentationService
 @inject Services.ScheduleService ScheduleService
 @inject Services.AssignmentService AssignmentService
@@ -34,6 +35,17 @@
                 <div class="presentation-info">
                     <strong>@presentation.Name</strong>
                     <p>@presentation.Description</p>
+        
+                    <!-- NEW: Display type badges -->
+                    @if (presentation.IsNewsOfWeek || presentation.IsWallpaper || presentation.IsLogonScreen)
+                    {
+                        <div class="display-badges-container">
+                            <DisplayTypeBadges 
+                                ShowNewsOfWeek="@presentation.IsNewsOfWeek"
+                                ShowWallpaper="@presentation.IsWallpaper"
+                                ShowLogonScreen="@presentation.IsLogonScreen" />
+                        </div>
+                    }
                 </div>
             </div>
 
@@ -382,6 +394,10 @@
         background: #fff3cd;
         border-color: #ffc107;
     }
+
+    .display-badges-container {
+        margin-top: 12px;
+    }
 </style>
 
 @code
@@ -596,7 +612,10 @@
                     presentation.Version.ToString(),
                     schedule.ScheduleID,
                     targetTeam.FolderName,
-                    requiresApproval
+                    requiresApproval,
+                    presentation.IsNewsOfWeek,
+                    presentation.IsWallpaper, 
+                    presentation.IsLogonScreen
                 );
 
                 createdCount++;
