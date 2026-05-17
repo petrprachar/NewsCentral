@@ -1,11 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
-using Microsoft.Extensions.Configuration;
 using NewsCentral.Configuration;
-
 
 namespace NewsCentral.Services;
 
@@ -14,7 +14,6 @@ public class AuthenticationService
     private readonly JsonFileRepository<UsersCollection> _userRepo;
     private readonly AppConfiguration _config;
     private readonly WindowsIdentityService _windowsIdentityService;
-
     private User? _currentUser;
 
     public event Action? OnAuthenticationStateChanged;
@@ -31,12 +30,10 @@ public class AuthenticationService
 
     public async Task InitializeAsync()
     {
-        // Check if users.json exists
         var usersExist = await _userRepo.ExistsAsync("users");
 
         if (!usersExist)
         {
-            // First-time setup: Create default admin user
             await CreateDefaultAdminAsync();
         }
     }
@@ -47,7 +44,7 @@ public class AuthenticationService
         {
             UserID = "admin-001",
             Username = _config.DefaultAdminUsername,
-            Email = "admin@newscental.local",
+            Email = "admin@newscentral.local",
             DisplayName = "System Administrator",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(_config.DefaultAdminPassword),
             IsSystemAdmin = true,
@@ -66,44 +63,69 @@ public class AuthenticationService
 
         await _userRepo.CreateAsync(usersCollection);
 
-        Console.WriteLine("Default admin user created:");
-        Console.WriteLine($"Username: {_config.DefaultAdminUsername}");
-        Console.WriteLine($"Password: {_config.DefaultAdminPassword}");
-        Console.WriteLine("IMPORTANT: Change password after first login!");
+        System.Diagnostics.Debug.WriteLine("Default admin user created:");
+        System.Diagnostics.Debug.WriteLine($"Username: {_config.DefaultAdminUsername}");
+        System.Diagnostics.Debug.WriteLine($"Password: {_config.DefaultAdminPassword}");
+        System.Diagnostics.Debug.WriteLine("IMPORTANT: Change password after first login!");
     }
 
     public async Task<User?> LoginAsync(string username, string password)
     {
-        var usersCollection = await _userRepo.GetByIdAsync("users");
+        System.Diagnostics.Debug.WriteLine($"=== LoginAsync: {username} ===");
 
-        if (usersCollection == null)
+        try
         {
-            throw new InvalidOperationException("No users found in system");
+            System.Diagnostics.Debug.WriteLine("Loading users from repository...");
+            var usersCollection = await _userRepo.GetByIdAsync("users");
+
+            if (usersCollection == null)
+            {
+                System.Diagnostics.Debug.WriteLine("ERROR: No users collection found");
+                throw new InvalidOperationException("No users found in system");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"Users collection loaded: {usersCollection.Users.Count} users found");
+
+            var user = usersCollection.Users.FirstOrDefault(u =>
+                u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) &&
+                u.IsActive);
+
+            if (user == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"Login failed: User '{username}' not found or inactive");
+                var availableUsers = string.Join(", ", usersCollection.Users.Select(u => $"{u.Username} (Active: {u.IsActive})"));
+                System.Diagnostics.Debug.WriteLine($"Available users: {availableUsers}");
+                return null;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"User found: {user.Username}, verifying password...");
+
+            if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            {
+                System.Diagnostics.Debug.WriteLine($"Login failed: Invalid password for user '{username}'");
+                return null;
+            }
+
+            System.Diagnostics.Debug.WriteLine("Password verified successfully");
+
+            // Update last login
+            user.LastLogin = DateTime.UtcNow;
+            usersCollection.LastModified = DateTime.UtcNow;
+            await _userRepo.UpdateAsync(usersCollection);
+
+            _currentUser = user;
+            System.Diagnostics.Debug.WriteLine($"Login successful: {user.Username} (IsSystemAdmin: {user.IsSystemAdmin})");
+
+            OnAuthenticationStateChanged?.Invoke();
+
+            return user;
         }
-
-        var user = usersCollection.Users.FirstOrDefault(u =>
-            u.Username.Equals(username, StringComparison.OrdinalIgnoreCase) &&
-            u.IsActive);
-
-        if (user == null)
+        catch (Exception ex)
         {
-            return null;
+            System.Diagnostics.Debug.WriteLine($"Login error: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+            throw;
         }
-
-        // Verify password
-        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-        {
-            return null;
-        }
-
-        // Update last login
-        user.LastLogin = DateTime.UtcNow;
-        usersCollection.LastModified = DateTime.UtcNow;
-        await _userRepo.UpdateAsync(usersCollection);
-
-        _currentUser = user;
-        OnAuthenticationStateChanged?.Invoke();
-        return user;
     }
 
     public async Task<User?> TryAutoLoginAsync()
@@ -124,7 +146,6 @@ public class AuthenticationService
 
         System.Diagnostics.Debug.WriteLine($"Attempting auto-login with UPN: {upn}");
 
-        // Load users collection (same pattern as LoginAsync)
         var usersCollection = await _userRepo.GetByIdAsync("users");
 
         if (usersCollection == null)
@@ -133,31 +154,22 @@ public class AuthenticationService
             return null;
         }
 
-        // Search for user with matching UPN
         var user = usersCollection.Users.FirstOrDefault(u =>
             !string.IsNullOrEmpty(u.UPN) &&
             u.UPN.Equals(upn, StringComparison.OrdinalIgnoreCase) &&
-            u.IsActive);  // ← Also check IsActive like LoginAsync does
+            u.IsActive);
 
         if (user != null)
         {
-            // Update last login (same as LoginAsync)
             user.LastLogin = DateTime.UtcNow;
             usersCollection.LastModified = DateTime.UtcNow;
             await _userRepo.UpdateAsync(usersCollection);
 
             _currentUser = user;
-            System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {user.Username}");
-            return user;
-        }
 
-        if (user != null)
-        {
-            _currentUser = user;
-
-            // Notify subscribers
             OnAuthenticationStateChanged?.Invoke();
 
+            System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {user.Username}");
             return user;
         }
 
@@ -168,8 +180,6 @@ public class AuthenticationService
     public void Logout()
     {
         _currentUser = null;
-
-        // Notify subscribers that authentication state changed
         OnAuthenticationStateChanged?.Invoke();
     }
 

@@ -77,21 +77,21 @@ public static class MauiProgram
         if (config == null)
         {
             var inMemorySettings = new Dictionary<string, string>
-            {
-                {"DataPath", "C:\\Download\\NewsCentral"},
-                {"DefaultAdminUsername", "admin"},
-                {"DefaultAdminPassword", "admin"},
-                {"LockExpirationMinutes", "15"},
-                {"Authentication:EnableAutoLogin", "true"},
-                {"Authentication:UseMockUPN", "true"},
-                {"Authentication:MockUPN", "petr.prachar@company.com"},
-                {"AI:ClaudeApiKey", ""},
-                {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
-                {"AI:OpenAIApiKey", ""},
-                {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
-                {"Storage:AzureBlobConnectionString", ""},
-                {"Storage:DefaultStorageType", "NetworkShare"}
-            };
+        {
+            {"DataPath", "C:\\Download\\NewsCentral"},
+            {"DefaultAdminUsername", "admin"},
+            {"DefaultAdminPassword", "admin"},
+            {"LockExpirationMinutes", "15"},
+            {"Authentication:EnableAutoLogin", "true"},
+            {"Authentication:UseMockUPN", "true"},
+            {"Authentication:MockUPN", "petr.prachar@company.com"},
+            {"AI:ClaudeApiKey", ""},
+            {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
+            {"AI:OpenAIApiKey", ""},
+            {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
+            {"Storage:AzureBlobConnectionString", ""},
+            {"Storage:DefaultStorageType", "NetworkShare"}
+        };
 
             config = new ConfigurationBuilder()
                 .AddInMemoryCollection(inMemorySettings!)
@@ -131,8 +131,6 @@ public static class MauiProgram
             System.Diagnostics.Debug.WriteLine($"✓ AppConfig.DataPath set to: '{appConfig.DataPath}'");
         }
 
-        System.Diagnostics.Debug.WriteLine($"AppConfig.DataPath set to: '{appConfig.DataPath}'");
-
         builder.Services.AddSingleton(appConfig);
 
         // Register WindowsIdentityService (needs to be before AuthenticationService)
@@ -153,14 +151,30 @@ public static class MauiProgram
         builder.Services.AddSingleton<TeamService>();
         builder.Services.AddSingleton<UserService>();
         builder.Services.AddSingleton<PosterGenerationService>();
-
         builder.Services.AddSingleton<IndexGenerationService>();
-
         builder.Services.AddSingleton<PresentationService>();
         builder.Services.AddSingleton<TeamContextService>();
         builder.Services.AddSingleton<ScheduleService>();
         builder.Services.AddSingleton<AssignmentService>();
         builder.Services.AddSingleton<PublishingService>();
+
+        // Register DataSeederService with IConfiguration dependency
+
+        /*
+         Environment-Specific:
+        -----------------------
+            You can have different settings for different environments:
+            appsettings.json - Default
+            appsettings.Development.json - Dev environment
+            appsettings.Production.json - Production
+        */
+
+        builder.Services.AddSingleton<DataSeederService>(sp =>
+        {
+            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            return new DataSeederService(appConfiguration, configuration);
+        });
 
         // Add localization
         builder.Services.AddLocalization();
@@ -177,8 +191,32 @@ public static class MauiProgram
         CultureInfo.CurrentCulture = culture;
         CultureInfo.CurrentUICulture = culture;
 
-        return builder.Build();
+        // BUILD THE APP (this creates the 'app' variable)
+        var app = builder.Build();
+
+        // Initialize data on first run (AFTER app is built)
+        // InitializeDataAsync(app.Services).GetAwaiter().GetResult();
+
+        // Return the app
+        return app;
     }
+
+    // Initialize data method
+    /*
+    private static async Task InitializeDataAsync(IServiceProvider services)
+    {
+        try
+        {
+            var seeder = services.GetRequiredService<DataSeederService>();
+            await seeder.InitializeIfNeededAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ERROR during initialization: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+    */
 }
 
 #pragma warning restore CA1416

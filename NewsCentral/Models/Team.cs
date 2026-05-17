@@ -22,6 +22,7 @@ public class TeamsCollection : IEntity
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
     public string ModifiedBy { get; set; } = string.Empty;
 
+    // IEntity implementation (TeamsCollection always has ID "teams")
     public string GetId() => "teams";
     public void SetId(string id) { } // No-op, ID is always "teams"
 }
