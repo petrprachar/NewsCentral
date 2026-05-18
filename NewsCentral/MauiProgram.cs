@@ -77,21 +77,25 @@ public static class MauiProgram
         if (config == null)
         {
             var inMemorySettings = new Dictionary<string, string>
-        {
-            {"DataPath", "C:\\Download\\NewsCentral"},
-            {"DefaultAdminUsername", "admin"},
-            {"DefaultAdminPassword", "admin"},
-            {"LockExpirationMinutes", "15"},
-            {"Authentication:EnableAutoLogin", "true"},
-            {"Authentication:UseMockUPN", "true"},
-            {"Authentication:MockUPN", "petr.prachar@company.com"},
-            {"AI:ClaudeApiKey", ""},
-            {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
-            {"AI:OpenAIApiKey", ""},
-            {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
-            {"Storage:AzureBlobConnectionString", ""},
-            {"Storage:DefaultStorageType", "NetworkShare"}
-        };
+            {
+                {"DataPath", "C:\\Download\\NewsCentral"},
+                {"DefaultAdminUsername", "admin"},
+                {"DefaultAdminPassword", "admin"},
+                {"LockExpirationMinutes", "15"},
+                {"Authentication:EnableAutoLogin", "true"},
+                {"Authentication:UseMockUPN", "true"},
+                {"Authentication:MockUPN", "petr.prachar@company.com"},
+                {"AI:ClaudeApiKey", ""},
+                {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
+                {"AI:OpenAIApiKey", ""},
+                {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
+                {"Storage:AzureBlobConnectionString", ""},
+                {"Storage:DefaultStorageType", "NetworkShare"},
+                {"Storage:EnableBlobDistribution",   "false"},
+                {"Storage:DistributionMode",          "Local"},
+                {"Storage:LocalDistributionPath",     "C:\\Download\\NewsCentralDist"},
+                {"Storage:AzureBlobContainerName",    "newscentral"}
+            };
 
             config = new ConfigurationBuilder()
                 .AddInMemoryCollection(inMemorySettings!)
@@ -133,6 +137,34 @@ public static class MauiProgram
 
         builder.Services.AddSingleton(appConfig);
 
+        // ── Authoring tier storage (always local / Azure Files SMB) ─────────
+        // LocalStorageService resolves all paths against AppConfig.DataPath.
+        // When Azure Files is mounted as a drive, no code changes are needed.
+        builder.Services.AddSingleton<IStorageService, LocalStorageService>();
+
+        // ── Distribution tier storage (config-driven) ────────────────────────
+        // EnableBlobDistribution = false  → NullBlobDistributionService  (dev)
+        // EnableBlobDistribution = true
+        //   DistributionMode = "Local"    → LocalBlobDistributionService  (test)
+        //   DistributionMode = "AzureBlob"→ AzureBlobDistributionService  (prod)
+        builder.Services.AddSingleton<IBlobDistributionService>(sp =>
+        {
+            var cfg = sp.GetRequiredService<AppConfiguration>();
+
+            if (!cfg.EnableBlobDistribution)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "IBlobDistributionService: NULL (EnableBlobDistribution=false)");
+                return new NullBlobDistributionService();
+            }
+
+            return cfg.DistributionMode switch
+            {
+                "AzureBlob" => (IBlobDistributionService)new AzureBlobDistributionService(cfg),
+                _ => new LocalBlobDistributionService(cfg)
+            };
+        });
+
         // Register WindowsIdentityService (needs to be before AuthenticationService)
         builder.Services.AddSingleton<WindowsIdentityService>();
 
@@ -173,7 +205,8 @@ public static class MauiProgram
         {
             var appConfiguration = sp.GetRequiredService<AppConfiguration>();
             var configuration = sp.GetRequiredService<IConfiguration>();
-            return new DataSeederService(appConfiguration, configuration);
+            var storageService = sp.GetRequiredService<IStorageService>();
+            return new DataSeederService(storageService, appConfiguration, configuration);
         });
 
         // Add localization

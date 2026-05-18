@@ -1,43 +1,38 @@
-﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace NewsCentral.Services;
 
 public class AssignmentService
 {
-    private readonly string _basePath;
+    private readonly IStorageService _storage;
     private readonly AuthenticationService _authService;
     private readonly TeamService _teamService;
     private readonly IndexGenerationService _indexGenerationService;
 
     public AssignmentService(
-        AppConfiguration config,
+        IStorageService storage,
         AuthenticationService authService,
         TeamService teamService,
         IndexGenerationService indexGenerationService)
     {
-        _basePath = config.DataPath;
-        _authService = authService;
-        _teamService = teamService;
-        _indexGenerationService = indexGenerationService;
+        _storage                 = storage;
+        _authService             = authService;
+        _teamService             = teamService;
+        _indexGenerationService  = indexGenerationService;
     }
+
+    // ── Queries ──────────────────────────────────────────────────────────────
 
     public async Task<List<Assignment>> GetAssignmentsForTeamAsync(string teamFolderName)
     {
-        var repo = new TeamAwareRepository<Assignment>(_basePath, teamFolderName, "assignments");
+        var repo = new TeamAwareRepository<Assignment>(_storage, teamFolderName, "assignments");
         return await repo.GetAllAsync();
     }
 
     public async Task<List<Assignment>> GetAllAssignmentsAsync()
     {
-        // Get assignments from all teams
-        var allTeams = await _teamService.GetAllTeamsAsync();
+        var allTeams       = await _teamService.GetAllTeamsAsync();
         var allAssignments = new List<Assignment>();
 
         foreach (var team in allTeams)
@@ -58,12 +53,13 @@ public class AssignmentService
             throw new UnauthorizedAccessException("Not authenticated");
         }
 
-        Console.WriteLine($"DEBUG: Current user: {currentUser.Username}, IsSystemAdmin: {currentUser.IsSystemAdmin}");
+        Console.WriteLine(
+            $"DEBUG: Current user: {currentUser.Username}, " +
+            $"IsSystemAdmin: {currentUser.IsSystemAdmin}");
 
         var allAssignments = await GetAllAssignmentsAsync();
         Console.WriteLine($"DEBUG: Total assignments loaded: {allAssignments.Count}");
 
-        // Filter for PendingApproval status first
         var pendingAssignments = allAssignments
             .Where(a => a.Status == AssignmentStatus.PendingApproval)
             .ToList();
@@ -72,23 +68,25 @@ public class AssignmentService
 
         foreach (var a in pendingAssignments)
         {
-            Console.WriteLine($"DEBUG: Assignment {a.AssignmentID} - Status: {a.Status}, TargetTeam: {a.TargetTeam}");
+            Console.WriteLine(
+                $"DEBUG: Assignment {a.AssignmentID} — " +
+                $"Status: {a.Status}, TargetTeam: {a.TargetTeam}");
         }
 
-        // SystemAdmin sees ALL pending approvals
         if (currentUser.IsSystemAdmin)
         {
-            Console.WriteLine("DEBUG: User is SystemAdmin - returning all pending");
+            Console.WriteLine("DEBUG: User is SystemAdmin — returning all pending");
             return pendingAssignments;
         }
 
-        // Regular users see approvals for teams where they have ContentApprover role
         var userApproverTeams = currentUser.TeamRoles
-            .Where(tr => tr.Roles.Contains("ContentApprover") || tr.Roles.Contains("TeamAdmin"))
+            .Where(tr => tr.Roles.Contains("ContentApprover") ||
+                         tr.Roles.Contains("TeamAdmin"))
             .Select(tr => tr.TeamFolderName)
             .ToList();
 
-        Console.WriteLine($"DEBUG: User approver teams: {string.Join(", ", userApproverTeams)}");
+        Console.WriteLine(
+            $"DEBUG: User approver teams: {string.Join(", ", userApproverTeams)}");
 
         return pendingAssignments
             .Where(a => userApproverTeams.Contains(a.TargetTeam))
@@ -97,9 +95,11 @@ public class AssignmentService
 
     public async Task<Assignment?> GetAssignmentAsync(string teamFolderName, string assignmentId)
     {
-        var repo = new TeamAwareRepository<Assignment>(_basePath, teamFolderName, "assignments");
+        var repo = new TeamAwareRepository<Assignment>(_storage, teamFolderName, "assignments");
         return await repo.GetByIdAsync(assignmentId);
     }
+
+    // ── Commands ─────────────────────────────────────────────────────────────
 
     public async Task<Assignment> CreateAssignmentAsync(
         string sourceTeamFolderName,
@@ -112,34 +112,29 @@ public class AssignmentService
         bool isWallpaper,
         bool isLogonScreen)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
         var assignment = new Assignment
         {
-            AssignmentID = Guid.NewGuid().ToString(),
-            PresentationID = presentationId,
+            AssignmentID        = Guid.NewGuid().ToString(),
+            PresentationID      = presentationId,
             PresentationVersion = presentationVersion,
-            ScheduleID = scheduleId,
-            SourceTeam = sourceTeamFolderName,
-            TargetTeam = targetTeamFolderName,
-            Status = requiresApproval ? AssignmentStatus.PendingApproval : AssignmentStatus.Approved,
-            RequiresApproval = requiresApproval,
-
-            // NEW: Copy display flags from presentation
-            IsNewsOfWeek = isNewsOfWeek,
-            IsWallpaper = isWallpaper,
-            IsLogonScreen = isLogonScreen,
-
-            CreatedBy = currentUser.UserID,
-            DateCreated = DateTime.UtcNow
+            ScheduleID          = scheduleId,
+            SourceTeam          = sourceTeamFolderName,
+            TargetTeam          = targetTeamFolderName,
+            Status              = requiresApproval
+                                    ? AssignmentStatus.PendingApproval
+                                    : AssignmentStatus.Approved,
+            RequiresApproval    = requiresApproval,
+            IsNewsOfWeek        = isNewsOfWeek,
+            IsWallpaper         = isWallpaper,
+            IsLogonScreen       = isLogonScreen,
+            CreatedBy           = currentUser.UserID,
+            DateCreated         = DateTime.UtcNow
         };
 
-        // Save in source team folder
-        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
+        var repo = new TeamAwareRepository<Assignment>(_storage, sourceTeamFolderName, "assignments");
         return await repo.CreateAsync(assignment);
     }
 
@@ -148,26 +143,17 @@ public class AssignmentService
         string assignmentId,
         string? approvalNotes = null)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-        var assignment = await repo.GetByIdAsync(assignmentId);
-
-        if (assignment == null)
-        {
-            throw new InvalidOperationException($"Assignment {assignmentId} not found");
-        }
+        var repo       = new TeamAwareRepository<Assignment>(_storage, sourceTeamFolderName, "assignments");
+        var assignment = await repo.GetByIdAsync(assignmentId)
+            ?? throw new InvalidOperationException($"Assignment {assignmentId} not found");
 
         if (assignment.Status != AssignmentStatus.PendingApproval)
-        {
-            throw new InvalidOperationException($"Assignment is not pending approval (status: {assignment.Status})");
-        }
+            throw new InvalidOperationException(
+                $"Assignment is not pending approval (status: {assignment.Status})");
 
-        // Check if user is approver for target team
         if (!currentUser.IsSystemAdmin)
         {
             var hasApproverRole = currentUser.TeamRoles.Any(tr =>
@@ -175,14 +161,13 @@ public class AssignmentService
                 tr.Roles.Contains("ContentApprover"));
 
             if (!hasApproverRole)
-            {
-                throw new UnauthorizedAccessException("You don't have permission to approve for this team");
-            }
+                throw new UnauthorizedAccessException(
+                    "You don't have permission to approve for this team");
         }
 
-        assignment.Status = AssignmentStatus.Approved;
-        assignment.ApprovedBy = currentUser.UserID;
-        assignment.ApprovedDate = DateTime.UtcNow;
+        assignment.Status        = AssignmentStatus.Approved;
+        assignment.ApprovedBy    = currentUser.UserID;
+        assignment.ApprovedDate  = DateTime.UtcNow;
         assignment.ApprovalNotes = approvalNotes;
 
         return await repo.UpdateAsync(assignment);
@@ -193,26 +178,17 @@ public class AssignmentService
         string assignmentId,
         string rejectionReason)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-        var assignment = await repo.GetByIdAsync(assignmentId);
-
-        if (assignment == null)
-        {
-            throw new InvalidOperationException($"Assignment {assignmentId} not found");
-        }
+        var repo       = new TeamAwareRepository<Assignment>(_storage, sourceTeamFolderName, "assignments");
+        var assignment = await repo.GetByIdAsync(assignmentId)
+            ?? throw new InvalidOperationException($"Assignment {assignmentId} not found");
 
         if (assignment.Status != AssignmentStatus.PendingApproval)
-        {
-            throw new InvalidOperationException($"Assignment is not pending approval (status: {assignment.Status})");
-        }
+            throw new InvalidOperationException(
+                $"Assignment is not pending approval (status: {assignment.Status})");
 
-        // Check if user is approver for target team
         if (!currentUser.IsSystemAdmin)
         {
             var hasApproverRole = currentUser.TeamRoles.Any(tr =>
@@ -220,15 +196,14 @@ public class AssignmentService
                 tr.Roles.Contains("ContentApprover"));
 
             if (!hasApproverRole)
-            {
-                throw new UnauthorizedAccessException("You don't have permission to reject for this team");
-            }
+                throw new UnauthorizedAccessException(
+                    "You don't have permission to reject for this team");
         }
 
-        assignment.Status = AssignmentStatus.Rejected;
-        assignment.RejectedBy = currentUser.UserID;
-        assignment.RejectedDate = DateTime.UtcNow;
-        assignment.RejectionReason = rejectionReason;
+        assignment.Status           = AssignmentStatus.Rejected;
+        assignment.RejectedBy       = currentUser.UserID;
+        assignment.RejectedDate     = DateTime.UtcNow;
+        assignment.RejectionReason  = rejectionReason;
 
         return await repo.UpdateAsync(assignment);
     }
@@ -238,117 +213,100 @@ public class AssignmentService
         string assignmentId,
         string? cancellationReason = null)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-        var assignment = await repo.GetByIdAsync(assignmentId);
+        var repo       = new TeamAwareRepository<Assignment>(_storage, sourceTeamFolderName, "assignments");
+        var assignment = await repo.GetByIdAsync(assignmentId)
+            ?? throw new InvalidOperationException($"Assignment {assignmentId} not found");
 
-        if (assignment == null)
-        {
-            throw new InvalidOperationException($"Assignment {assignmentId} not found");
-        }
-
-        // Can only cancel if Draft or PendingApproval
         if (assignment.Status != AssignmentStatus.Draft &&
             assignment.Status != AssignmentStatus.PendingApproval)
-        {
-            throw new InvalidOperationException($"Cannot cancel assignment with status: {assignment.Status}");
-        }
+            throw new InvalidOperationException(
+                $"Cannot cancel assignment with status: {assignment.Status}");
 
-        // Only creator or SystemAdmin can cancel
         if (assignment.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-        {
             throw new UnauthorizedAccessException("Only the creator can cancel this assignment");
-        }
 
-        assignment.Status = AssignmentStatus.Cancelled;
-        assignment.CancelledBy = currentUser.UserID;
-        assignment.CancelledDate = DateTime.UtcNow;
-        assignment.CancellationReason = cancellationReason;
+        assignment.Status              = AssignmentStatus.Cancelled;
+        assignment.CancelledBy         = currentUser.UserID;
+        assignment.CancelledDate       = DateTime.UtcNow;
+        assignment.CancellationReason  = cancellationReason;
 
         return await repo.UpdateAsync(assignment);
     }
 
     /// <summary>
-    /// Moves an assignment to the deleted folder instead of permanently deleting it
-    /// NEW: Regenerates index if assignment was published
+    /// Soft-deletes an assignment by moving it to the team's flat deleted/ folder.
+    /// If the assignment was published, regenerates the target team's index
+    /// (which also pushes the updated index.json to blob distribution).
     /// </summary>
     public async Task DeleteAssignmentAsync(string sourceTeamFolderName, string assignmentId)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Assignment>(_basePath, sourceTeamFolderName, "assignments");
-        var assignment = await repo.GetByIdAsync(assignmentId);
+        var repo       = new TeamAwareRepository<Assignment>(_storage, sourceTeamFolderName, "assignments");
+        var assignment = await repo.GetByIdAsync(assignmentId)
+            ?? throw new InvalidOperationException($"Assignment {assignmentId} not found");
 
-        if (assignment == null)
+        if (!currentUser.IsSystemAdmin && assignment.CreatedBy != currentUser.UserID)
         {
-            throw new InvalidOperationException($"Assignment {assignmentId} not found");
-        }
+            // ContentAuthor of the source team can also delete
+            // (mirrors CanDeletePublished permission in Assignments.razor)
+            var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+                tr.TeamFolderName == sourceTeamFolderName &&
+                tr.Roles.Contains("ContentAuthor"));
 
-        // Only creator or SystemAdmin can delete
-        if (assignment.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-        {
-            throw new UnauthorizedAccessException("Only the creator or system admin can delete this assignment");
+            if (!hasContentAuthorRole)
+                throw new UnauthorizedAccessException(
+                    "Only the assignment creator, a ContentAuthor of this team, " +
+                    "or a SystemAdmin can delete this assignment");
         }
 
         System.Diagnostics.Debug.WriteLine($"=== DeleteAssignment: {assignmentId} ===");
         System.Diagnostics.Debug.WriteLine($"Status: {assignment.Status}");
-        System.Diagnostics.Debug.WriteLine($"Source: {assignment.SourceTeam}, Target: {assignment.TargetTeam}");
+        System.Diagnostics.Debug.WriteLine(
+            $"Source: {assignment.SourceTeam}, Target: {assignment.TargetTeam}");
 
-        // Store target team and status for index regeneration
-        var targetTeam = assignment.TargetTeam;
-        var wasPublished = assignment.Status == AssignmentStatus.Published;
+        var targetTeam    = assignment.TargetTeam;
+        var wasPublished  = assignment.Status == AssignmentStatus.Published;
 
-        // Create deleted folder at team root level (NOT under content)
-        var teamRootPath = Path.Combine(_basePath, sourceTeamFolderName);
-        var deletedPath = Path.Combine(teamRootPath, "deleted");
-        Directory.CreateDirectory(deletedPath);
+        // Soft-delete: move to flat {team}/deleted/ folder.
+        // MoveFileAsync creates the deleted/ folder if it does not exist.
+        var sourcePath = $"{sourceTeamFolderName}/content/assignments/assign_{assignmentId}.json";
+        var destPath   = $"{sourceTeamFolderName}/deleted/assign_{assignmentId}.json";
 
-        var teamContentPath = Path.Combine(teamRootPath, "content");
+        await _storage.MoveFileAsync(sourcePath, destPath);
 
-        // Move assignment file to deleted folder
-        var assignmentSourcePath = Path.Combine(teamContentPath, "assignments", $"assign_{assignmentId}.json");
-        var assignmentDestPath = Path.Combine(deletedPath, $"assign_{assignmentId}.json");
+        System.Diagnostics.Debug.WriteLine(
+            $"✓ Moved assign_{assignmentId} to deleted folder by {currentUser.Username}");
 
-        if (File.Exists(assignmentSourcePath))
-        {
-            File.Move(assignmentSourcePath, assignmentDestPath, overwrite: true);
-            System.Diagnostics.Debug.WriteLine($"✓ Moved assignment assign_{assignmentId} to deleted folder by {currentUser.Username}");
-        }
-        else
-        {
-            throw new InvalidOperationException($"Assignment file not found: {assignmentSourcePath}");
-        }
-
-        // NEW: If assignment was published, regenerate index for target team
+        // Regenerate index for the target team so agents/viewers see the removal.
+        // IndexGenerationService.GenerateAndSaveIndexAsync pushes to blob automatically.
         if (wasPublished && !string.IsNullOrEmpty(targetTeam))
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"→ Regenerating index for target team after deletion: {targetTeam}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"→ Regenerating index for target team: {targetTeam}");
                 await _indexGenerationService.GenerateAndSaveIndexAsync(targetTeam);
-                System.Diagnostics.Debug.WriteLine($"  ✓ Index file regenerated for {targetTeam}");
+                System.Diagnostics.Debug.WriteLine($"  ✓ Index regenerated for {targetTeam}");
             }
-            catch (Exception indexEx)
+            catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"  ⚠ WARNING: Index generation failed after deletion: {indexEx.Message}");
-                // Don't fail the delete operation if index generation fails
-                // Admin can manually regenerate later if needed
+                System.Diagnostics.Debug.WriteLine(
+                    $"  ⚠ WARNING: Index regeneration failed: {ex.Message}");
+                // Non-fatal — the assignment is already soft-deleted;
+                // index can be manually regenerated from the admin UI.
             }
         }
         else
         {
-            System.Diagnostics.Debug.WriteLine($"  Assignment was not published - no index regeneration needed");
+            System.Diagnostics.Debug.WriteLine(
+                "  Assignment was not published — no index regeneration needed");
         }
 
-        System.Diagnostics.Debug.WriteLine($"=== DeleteAssignment Complete ===");
+        System.Diagnostics.Debug.WriteLine("=== DeleteAssignment Complete ===");
     }
 }

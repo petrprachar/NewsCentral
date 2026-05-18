@@ -1,363 +1,424 @@
-﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Models.IndexFile;
 using NewsCentral.Repositories;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using NewsCentral.Configuration;
 
-namespace NewsCentral.Services
+namespace NewsCentral.Services;
+
+public class IndexGenerationService
 {
-    public class IndexGenerationService
+    private readonly IStorageService _storage;
+    private readonly IBlobDistributionService _blobDistribution;
+    private readonly IServiceProvider _serviceProvider;
+    private readonly AuthenticationService _authService;
+
+    private const string IndexFileName = "index.json";
+
+    public IndexGenerationService(
+        IStorageService storage,
+        IBlobDistributionService blobDistribution,
+        IServiceProvider serviceProvider,
+        AuthenticationService authService)
     {
-        private readonly string _basePath;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly AuthenticationService _authService;
+        _storage          = storage;
+        _blobDistribution = blobDistribution;
+        _serviceProvider  = serviceProvider;
+        _authService      = authService;
+    }
 
-        private const string INDEX_FILENAME = "index.json";
+    // ── Index path ───────────────────────────────────────────────────────────
 
-        public IndexGenerationService(
-            AppConfiguration config,
-            IServiceProvider serviceProvider,
-            AuthenticationService authService)
+    /// <summary>
+    /// Returns the relative path for a team's index file.
+    /// e.g. "team-alpha/index.json"
+    /// NOTE: Previously returned a full OS path; now returns a relative path
+    /// consistent with IStorageService conventions.
+    /// </summary>
+    public string GetIndexFilePath(string teamFolderName) =>
+        $"{teamFolderName}/{IndexFileName}";
+
+    // ── Generation ───────────────────────────────────────────────────────────
+
+    public async Task<TeamIndexFile> GenerateIndexForTeamAsync(string teamFolderName)
+    {
+        System.Diagnostics.Debug.WriteLine($"=== GenerateIndexForTeam: {teamFolderName} ===");
+
+        var teamService       = _serviceProvider.GetRequiredService<TeamService>();
+        var assignmentService = _serviceProvider.GetRequiredService<AssignmentService>();
+
+        var team = await teamService.GetTeamByFolderNameAsync(teamFolderName);
+        if (team == null)
+            throw new InvalidOperationException($"Team not found: {teamFolderName}");
+
+        var index = new TeamIndexFile
         {
-            _basePath = config.DataPath;
-            _serviceProvider = serviceProvider;
-            _authService = authService;
-        }
+            TeamFolderName       = teamFolderName,
+            TeamName             = team.Name,
+            GeneratedAt          = DateTime.UtcNow,
+            Version              = "1.0.0",
+            PublishedAssignments = new List<PublishedAssignmentIndex>()
+        };
 
-        public async Task<TeamIndexFile> GenerateIndexForTeamAsync(string teamFolderName)
+        var allAssignments = await assignmentService.GetAssignmentsForTeamAsync(teamFolderName);
+
+        var publishedAssignments = allAssignments
+            .Where(a => a.Status == AssignmentStatus.Published)
+            .OrderByDescending(a => a.PublishedDate ?? a.DateCreated)
+            .ToList();
+
+        System.Diagnostics.Debug.WriteLine(
+            $"Found {publishedAssignments.Count} published assignments");
+
+        foreach (var assignment in publishedAssignments)
         {
-            System.Diagnostics.Debug.WriteLine($"=== GenerateIndexForTeam: {teamFolderName} ===");
-
-            // Lazy resolve services
-            var teamService = _serviceProvider.GetRequiredService<TeamService>();
-            var assignmentService = _serviceProvider.GetRequiredService<AssignmentService>();
-
-            var team = await teamService.GetTeamByFolderNameAsync(teamFolderName);
-            if (team == null)
-            {
-                throw new InvalidOperationException($"Team not found: {teamFolderName}");
-            }
-
-            var index = new TeamIndexFile
-            {
-                TeamFolderName = teamFolderName,
-                TeamName = team.Name,
-                GeneratedAt = DateTime.UtcNow,
-                Version = "1.0.0",
-                PublishedAssignments = new List<PublishedAssignmentIndex>()
-            };
-
-            var allAssignments = await assignmentService.GetAssignmentsForTeamAsync(teamFolderName);
-
-            var publishedAssignments = allAssignments
-                .Where(a => a.Status == AssignmentStatus.Published)
-                .OrderByDescending(a => a.PublishedDate ?? a.DateCreated)
-                .ToList();
-
-            System.Diagnostics.Debug.WriteLine($"Found {publishedAssignments.Count} published assignments");
-
-            foreach (var assignment in publishedAssignments)
-            {
-                try
-                {
-                    var indexEntry = await BuildIndexEntryAsync(teamFolderName, assignment);
-                    if (indexEntry != null)
-                    {
-                        index.PublishedAssignments.Add(indexEntry);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error building index entry for assignment {assignment.AssignmentID}: {ex.Message}");
-                }
-            }
-
-            index.Statistics = CalculateStatistics(index.PublishedAssignments);
-            index.IndexHash = CalculateIndexHash(index);
-
-            System.Diagnostics.Debug.WriteLine($"Index generated with {index.PublishedAssignments.Count} entries");
-
-            return index;
-        }
-
-        private async Task<PublishedAssignmentIndex?> BuildIndexEntryAsync(string teamFolderName, Assignment assignment)
-        {
-            // Lazy resolve services
-            var presentationService = _serviceProvider.GetRequiredService<PresentationService>();
-            var scheduleService = _serviceProvider.GetRequiredService<ScheduleService>();
-            var teamService = _serviceProvider.GetRequiredService<TeamService>();
-
-            var presentation = await presentationService.GetPresentationAsync(
-                assignment.SourceTeam,
-                assignment.PresentationID);
-
-            if (presentation == null)
-            {
-                System.Diagnostics.Debug.WriteLine($"Presentation not found: {assignment.PresentationID}");
-                return null;
-            }
-
-            var schedule = await scheduleService.GetScheduleAsync(
-                assignment.SourceTeam,
-                assignment.ScheduleID);
-
-            if (schedule == null)
-            {
-                System.Diagnostics.Debug.WriteLine($"Schedule not found: {assignment.ScheduleID}");
-                return null;
-            }
-
-            var sourceTeam = await teamService.GetTeamByFolderNameAsync(assignment.SourceTeam);
-
-            var contentInfo = await BuildContentInfoAsync(presentation);
-
-            var indexEntry = new PublishedAssignmentIndex
-            {
-                AssignmentId = assignment.AssignmentID,
-                PresentationId = presentation.PresentationID,
-                ScheduleId = schedule.ScheduleID,
-
-                PresentationName = presentation.Name,
-                PresentationDescription = presentation.Description,
-                PresentationVersion = presentation.Version,
-                PresentationLastModified = presentation.LastModified,
-
-                ScheduleStart = DateTime.SpecifyKind(schedule.ScheduleStart, DateTimeKind.Unspecified),
-                ScheduleEnd = DateTime.SpecifyKind(schedule.ScheduleEnd, DateTimeKind.Unspecified),
-                DaysOfWeek = schedule.DaysOfWeek,
-
-                PublishedDate = assignment.PublishedDate ?? assignment.DateCreated,
-                PublishedBy = assignment.PublishedBy ?? assignment.CreatedBy,
-
-                DisplayTypes = new DisplayTypeInfo
-                {
-                    IsNewsOfWeek = presentation.IsNewsOfWeek,
-                    IsWallpaper = presentation.IsWallpaper,
-                    IsLogonScreen = presentation.IsLogonScreen
-                },
-
-                Content = contentInfo,
-
-                SourceTeamFolderName = assignment.SourceTeam,
-                SourceTeamName = sourceTeam?.Name ?? assignment.SourceTeam
-            };
-
-            return indexEntry;
-        }
-
-        private async Task<ContentInfo> BuildContentInfoAsync(Presentation presentation)
-        {
-            var imagePath = !string.IsNullOrEmpty(presentation.GeneratedImagePath)
-                ? presentation.GeneratedImagePath
-                : presentation.OriginalImagePath;
-
-            var contentInfo = new ContentInfo
-            {
-                ImagePath = imagePath,
-                MoreInfoUrl = presentation.MoreUrl,
-                ImageLastModified = presentation.LastModified
-            };
-
-            if (!string.IsNullOrEmpty(imagePath))
-            {
-                var fullImagePath = Path.Combine(_basePath, imagePath);
-
-                if (File.Exists(fullImagePath))
-                {
-                    try
-                    {
-                        var fileInfo = new FileInfo(fullImagePath);
-                        contentInfo.ImageSizeBytes = fileInfo.Length;
-
-                        var imageHash = await CalculateFileHashAsync(fullImagePath);
-                        contentInfo.ImageHash = $"sha256:{imageHash}";
-
-                        System.Diagnostics.Debug.WriteLine($"Image: {Path.GetFileName(imagePath)} - Size: {contentInfo.ImageSizeBytes} bytes, Hash: {imageHash.Substring(0, 16)}...");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error processing image {imagePath}: {ex.Message}");
-                    }
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"Warning: Image file not found: {fullImagePath}");
-                }
-            }
-
-            return contentInfo;
-        }
-
-        private IndexStatistics CalculateStatistics(List<PublishedAssignmentIndex> assignments)
-        {
-            var now = DateTime.Now;
-
-            var stats = new IndexStatistics
-            {
-                TotalPublishedAssignments = assignments.Count,
-                ActiveAssignments = 0,
-                UpcomingAssignments = 0,
-                ExpiredAssignments = 0
-            };
-
-            foreach (var assignment in assignments)
-            {
-                var scheduleStart = assignment.ScheduleStart;
-                var scheduleEnd = assignment.ScheduleEnd;
-
-                if (now >= scheduleStart && now <= scheduleEnd)
-                {
-                    stats.ActiveAssignments++;
-                }
-                else if (now < scheduleStart)
-                {
-                    stats.UpcomingAssignments++;
-                }
-                else if (now > scheduleEnd)
-                {
-                    stats.ExpiredAssignments++;
-                }
-            }
-
-            return stats;
-        }
-
-        public async Task SaveIndexFileAsync(string teamFolderName, TeamIndexFile index)
-        {
-            var indexPath = GetIndexFilePath(teamFolderName);
-
-            var directory = Path.GetDirectoryName(indexPath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            var jsonOptions = JsonConfiguration.GetIndexJsonOptions();
-            var jsonContent = JsonSerializer.Serialize(index, jsonOptions);
-
-            await File.WriteAllTextAsync(indexPath, jsonContent, Encoding.UTF8);
-
-            System.Diagnostics.Debug.WriteLine($"✓ Index file saved: {indexPath}");
-            System.Diagnostics.Debug.WriteLine($"  Size: {jsonContent.Length} bytes");
-            System.Diagnostics.Debug.WriteLine($"  Entries: {index.PublishedAssignments.Count}");
-        }
-
-        public async Task GenerateAndSaveIndexAsync(string teamFolderName)
-        {
-            System.Diagnostics.Debug.WriteLine($"=== GenerateAndSaveIndex: {teamFolderName} ===");
-
-            var index = await GenerateIndexForTeamAsync(teamFolderName);
-            await SaveIndexFileAsync(teamFolderName, index);
-
-            System.Diagnostics.Debug.WriteLine($"✓ Index generation complete for {teamFolderName}");
-        }
-
-        public string GetIndexFilePath(string teamFolderName)
-        {
-            return Path.Combine(_basePath, teamFolderName, INDEX_FILENAME);
-        }
-
-        public bool IndexFileExists(string teamFolderName)
-        {
-            var indexPath = GetIndexFilePath(teamFolderName);
-            return File.Exists(indexPath);
-        }
-
-        public async Task<string?> GetCurrentIndexHashAsync(string teamFolderName)
-        {
-            var indexPath = GetIndexFilePath(teamFolderName);
-
-            if (!File.Exists(indexPath))
-            {
-                return null;
-            }
-
             try
             {
-                var jsonContent = await File.ReadAllTextAsync(indexPath);
-                var jsonOptions = JsonConfiguration.GetIndexJsonOptions();
-                var index = JsonSerializer.Deserialize<TeamIndexFile>(jsonContent, jsonOptions);
-
-                return index?.IndexHash;
+                var entry = await BuildIndexEntryAsync(teamFolderName, assignment);
+                if (entry != null)
+                    index.PublishedAssignments.Add(entry);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error reading index hash: {ex.Message}");
-                return null;
+                System.Diagnostics.Debug.WriteLine(
+                    $"Error building index entry for {assignment.AssignmentID}: {ex.Message}");
             }
         }
 
-        private async Task<string> CalculateFileHashAsync(string filePath)
+        index.Statistics = CalculateStatistics(index.PublishedAssignments);
+        index.IndexHash  = CalculateIndexHash(index);
+
+        System.Diagnostics.Debug.WriteLine(
+            $"Index generated with {index.PublishedAssignments.Count} entries");
+
+        return index;
+    }
+
+    private async Task<PublishedAssignmentIndex?> BuildIndexEntryAsync(
+        string teamFolderName,
+        Assignment assignment)
+    {
+        var presentationService = _serviceProvider.GetRequiredService<PresentationService>();
+        var scheduleService     = _serviceProvider.GetRequiredService<ScheduleService>();
+        var teamService         = _serviceProvider.GetRequiredService<TeamService>();
+
+        var presentation = await presentationService.GetPresentationAsync(
+            assignment.SourceTeam, assignment.PresentationID);
+
+        if (presentation == null)
         {
-            using var sha256 = SHA256.Create();
-            using var stream = File.OpenRead(filePath);
-            var hashBytes = await sha256.ComputeHashAsync(stream);
-            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+            System.Diagnostics.Debug.WriteLine(
+                $"Presentation not found: {assignment.PresentationID}");
+            return null;
         }
 
-        private string CalculateIndexHash(TeamIndexFile index)
+        var schedule = await scheduleService.GetScheduleAsync(
+            assignment.SourceTeam, assignment.ScheduleID);
+
+        if (schedule == null)
         {
-            var indexForHashing = new
+            System.Diagnostics.Debug.WriteLine(
+                $"Schedule not found: {assignment.ScheduleID}");
+            return null;
+        }
+
+        var sourceTeam   = await teamService.GetTeamByFolderNameAsync(assignment.SourceTeam);
+        var contentInfo  = await BuildContentInfoAsync(presentation);
+
+        return new PublishedAssignmentIndex
+        {
+            AssignmentId  = assignment.AssignmentID,
+            PresentationId = presentation.PresentationID,
+            ScheduleId    = schedule.ScheduleID,
+
+            PresentationName         = presentation.Name,
+            PresentationDescription  = presentation.Description,
+            PresentationVersion      = presentation.Version,
+            PresentationLastModified = presentation.LastModified,
+
+            ScheduleStart = DateTime.SpecifyKind(schedule.ScheduleStart, DateTimeKind.Unspecified),
+            ScheduleEnd   = DateTime.SpecifyKind(schedule.ScheduleEnd,   DateTimeKind.Unspecified),
+            DaysOfWeek    = schedule.DaysOfWeek,
+
+            PublishedDate = assignment.PublishedDate ?? assignment.DateCreated,
+            PublishedBy   = assignment.PublishedBy   ?? assignment.CreatedBy,
+
+            DisplayTypes = new DisplayTypeInfo
             {
-                index.TeamFolderName,
-                index.TeamName,
-                index.GeneratedAt,
-                index.Version,
-                index.PublishedAssignments,
-                index.Statistics
-            };
+                IsNewsOfWeek  = presentation.IsNewsOfWeek,
+                IsWallpaper   = presentation.IsWallpaper,
+                IsLogonScreen = presentation.IsLogonScreen
+            },
 
-            var jsonOptions = JsonConfiguration.GetIndexJsonOptions();
-            var jsonContent = JsonSerializer.Serialize(indexForHashing, jsonOptions);
+            Content = contentInfo,
 
-            using var sha256 = SHA256.Create();
-            var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(jsonContent));
-            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
-        }
+            SourceTeamFolderName = assignment.SourceTeam,
+            SourceTeamName       = sourceTeam?.Name ?? assignment.SourceTeam
+        };
+    }
 
-        public async Task<int> RegenerateAllIndexesAsync()
+    private async Task<ContentInfo> BuildContentInfoAsync(Presentation presentation)
+    {
+        // imagePath is already a relative path stored in the Presentation record,
+        // e.g. "team-alpha/images/generated/poster_abc_v1.jpg"
+        var imagePath = !string.IsNullOrEmpty(presentation.GeneratedImagePath)
+            ? presentation.GeneratedImagePath
+            : presentation.OriginalImagePath;
+
+        var contentInfo = new ContentInfo
         {
-            System.Diagnostics.Debug.WriteLine("=== RegenerateAllIndexes ===");
+            ImagePath         = imagePath,
+            MoreInfoUrl       = presentation.MoreUrl,
+            ImageLastModified = presentation.LastModified
+        };
 
-            // Lazy resolve service
-            var teamService = _serviceProvider.GetRequiredService<TeamService>();
-            var allTeams = await teamService.GetAllTeamsAsync();
-            var successCount = 0;
-
-            foreach (var team in allTeams)
+        if (!string.IsNullOrEmpty(imagePath))
+        {
+            if (await _storage.FileExistsAsync(imagePath))
             {
                 try
                 {
-                    await GenerateAndSaveIndexAsync(team.FolderName);
-                    successCount++;
+                    contentInfo.ImageSizeBytes = await _storage.GetFileSizeAsync(imagePath);
+
+                    var imageHash = await CalculateFileHashAsync(imagePath);
+                    contentInfo.ImageHash = $"sha256:{imageHash}";
+
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Image: {Path.GetFileName(imagePath)} — " +
+                        $"Size: {contentInfo.ImageSizeBytes} bytes, " +
+                        $"Hash: {imageHash[..16]}...");
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Error generating index for {team.FolderName}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine(
+                        $"Error processing image {imagePath}: {ex.Message}");
                 }
             }
-
-            System.Diagnostics.Debug.WriteLine($"✓ Regenerated {successCount} of {allTeams.Count} team indexes");
-            return successCount;
-        }
-
-        public async Task DeleteIndexFileAsync(string teamFolderName)
-        {
-            var indexPath = GetIndexFilePath(teamFolderName);
-
-            if (File.Exists(indexPath))
+            else
             {
-                await Task.Run(() => File.Delete(indexPath));
-                System.Diagnostics.Debug.WriteLine($"✓ Index file deleted: {indexPath}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"Warning: image not found in authoring tier: {imagePath}");
             }
         }
+
+        return contentInfo;
+    }
+
+    private IndexStatistics CalculateStatistics(List<PublishedAssignmentIndex> assignments)
+    {
+        var now = DateTime.Now;
+
+        var stats = new IndexStatistics
+        {
+            TotalPublishedAssignments = assignments.Count,
+            ActiveAssignments         = 0,
+            UpcomingAssignments       = 0,
+            ExpiredAssignments        = 0
+        };
+
+        foreach (var a in assignments)
+        {
+            if      (now >= a.ScheduleStart && now <= a.ScheduleEnd) stats.ActiveAssignments++;
+            else if (now <  a.ScheduleStart)                         stats.UpcomingAssignments++;
+            else if (now >  a.ScheduleEnd)                           stats.ExpiredAssignments++;
+        }
+
+        return stats;
+    }
+
+    // ── Save / Delete ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Writes index.json to the authoring tier AND pushes it to blob distribution
+    /// in a single operation. This is the only place index.json is written —
+    /// both tiers are always kept in sync.
+    /// </summary>
+    public async Task SaveIndexFileAsync(string teamFolderName, TeamIndexFile index)
+    {
+        var relativePath = GetIndexFilePath(teamFolderName);
+        var jsonOptions  = JsonConfiguration.GetIndexJsonOptions();
+        var jsonContent  = JsonSerializer.Serialize(index, jsonOptions);
+
+        // ── Authoring tier (Azure Files / local disk) ────────────────────────
+        await _storage.WriteTextAsync(relativePath, jsonContent);
+
+        // ── Distribution tier (Azure Blob / local dist folder / null) ────────
+        // Blob push is non-critical: a failed push leaves authoring correct.
+        // The index can be manually re-pushed via RegenerateAllIndexesAsync.
+        try
+        {
+            await _blobDistribution.UploadTextAsync(relativePath, jsonContent);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"⚠ WARNING: index.json blob push failed for {teamFolderName}: {ex.Message}");
+            // Do not rethrow — authoring tier write succeeded; blob is recoverable.
+        }
+
+        System.Diagnostics.Debug.WriteLine($"✓ Index saved: {relativePath}");
+        System.Diagnostics.Debug.WriteLine($"  Size:    {jsonContent.Length} bytes");
+        System.Diagnostics.Debug.WriteLine($"  Entries: {index.PublishedAssignments.Count}");
+    }
+
+    public async Task GenerateAndSaveIndexAsync(string teamFolderName)
+    {
+        System.Diagnostics.Debug.WriteLine($"=== GenerateAndSaveIndex: {teamFolderName} ===");
+        var index = await GenerateIndexForTeamAsync(teamFolderName);
+        await SaveIndexFileAsync(teamFolderName, index);
+        System.Diagnostics.Debug.WriteLine($"✓ Index generation complete for {teamFolderName}");
+    }
+
+    /// <summary>
+    /// Deletes index.json from both the authoring tier and the blob distribution tier.
+    /// </summary>
+    public async Task DeleteIndexFileAsync(string teamFolderName)
+    {
+        var relativePath = GetIndexFilePath(teamFolderName);
+
+        // Authoring tier — no-op if file does not exist
+        await _storage.DeleteFileAsync(relativePath);
+
+        // Distribution tier — remove from blob so agents stop seeing stale data
+        try
+        {
+            await _blobDistribution.DeleteAsync(relativePath);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"⚠ WARNING: index.json blob delete failed for {teamFolderName}: {ex.Message}");
+        }
+
+        System.Diagnostics.Debug.WriteLine($"✓ Index deleted: {relativePath}");
+    }
+
+    // ── Query helpers ────────────────────────────────────────────────────────
+
+    public async Task<bool> IndexFileExistsAsync(string teamFolderName) =>
+        await _storage.FileExistsAsync(GetIndexFilePath(teamFolderName));
+
+    /// <summary>
+    /// Synchronous wrapper kept for call sites that cannot be made async easily.
+    /// Prefer IndexFileExistsAsync where possible.
+    /// </summary>
+    public bool IndexFileExists(string teamFolderName) =>
+        _storage.FileExistsAsync(GetIndexFilePath(teamFolderName)).GetAwaiter().GetResult();
+
+    public async Task<string?> GetCurrentIndexHashAsync(string teamFolderName)
+    {
+        var relativePath = GetIndexFilePath(teamFolderName);
+        var jsonContent  = await _storage.ReadTextAsync(relativePath);
+
+        if (jsonContent == null) return null;
+
+        try
+        {
+            var jsonOptions = JsonConfiguration.GetIndexJsonOptions();
+            var index = JsonSerializer.Deserialize<TeamIndexFile>(jsonContent, jsonOptions);
+            return index?.IndexHash;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error reading index hash: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads and deserializes the team's index file from the authoring tier.
+    /// Returns null if the file does not exist or cannot be parsed.
+    /// Use this instead of GetIndexFilePath + File.ReadAllTextAsync in UI code.
+    /// </summary>
+    public async Task<TeamIndexFile?> ReadIndexAsync(string teamFolderName)
+    {
+        var jsonContent = await _storage.ReadTextAsync(GetIndexFilePath(teamFolderName));
+        if (jsonContent == null) return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<TeamIndexFile>(
+                jsonContent,
+                JsonConfiguration.GetIndexJsonOptions());
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Error deserializing index for {teamFolderName}: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task<int> RegenerateAllIndexesAsync()
+    {
+        System.Diagnostics.Debug.WriteLine("=== RegenerateAllIndexes ===");
+
+        var teamService  = _serviceProvider.GetRequiredService<TeamService>();
+        var allTeams     = await teamService.GetAllTeamsAsync();
+        var successCount = 0;
+
+        foreach (var team in allTeams)
+        {
+            try
+            {
+                await GenerateAndSaveIndexAsync(team.FolderName);
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"Error generating index for {team.FolderName}: {ex.Message}");
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine(
+            $"✓ Regenerated {successCount} of {allTeams.Count} team indexes");
+
+        return successCount;
+    }
+
+    // ── Hashing ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Streams a file through SHA-256 without loading it fully into memory.
+    /// relativePath is passed directly to IStorageService.OpenReadAsync —
+    /// the stream need not be seekable.
+    /// </summary>
+    private async Task<string> CalculateFileHashAsync(string relativePath)
+    {
+        using var sha256 = SHA256.Create();
+
+        var stream = await _storage.OpenReadAsync(relativePath);
+        if (stream == null)
+            throw new FileNotFoundException($"File not found for hashing: {relativePath}");
+
+        using (stream)
+        {
+            var hashBytes = await sha256.ComputeHashAsync(stream);
+            return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        }
+    }
+
+    private string CalculateIndexHash(TeamIndexFile index)
+    {
+        var indexForHashing = new
+        {
+            index.TeamFolderName,
+            index.TeamName,
+            index.GeneratedAt,
+            index.Version,
+            index.PublishedAssignments,
+            index.Statistics
+        };
+
+        var jsonOptions = JsonConfiguration.GetIndexJsonOptions();
+        var jsonContent = JsonSerializer.Serialize(indexForHashing, jsonOptions);
+
+        using var sha256   = SHA256.Create();
+        var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(jsonContent));
+        return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
     }
 }

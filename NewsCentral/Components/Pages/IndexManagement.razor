@@ -250,12 +250,7 @@
         {
             try
             {
-                var indexPath = IndexService.GetIndexFilePath(teamFolder);
-                var jsonContent = await File.ReadAllTextAsync(indexPath);
-                var indexData = System.Text.Json.JsonSerializer.Deserialize<Models.IndexFile.TeamIndexFile>(
-                    jsonContent,
-                    Configuration.JsonConfiguration.GetIndexJsonOptions());
-
+                var indexData = await IndexService.ReadIndexAsync(teamFolder);
                 if (indexData != null)
                 {
                     info.GeneratedAt = indexData.GeneratedAt;
@@ -267,7 +262,8 @@
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error reading index for {teamFolder}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"Error reading index for {teamFolder}: {ex.Message}");
             }
         }
 
