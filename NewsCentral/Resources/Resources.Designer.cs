@@ -124,6 +124,33 @@ namespace NewsCentral.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Create your first assignment to get started.
+        /// </summary>
+        public static string Assignments_CreateYourFirstAssignment {
+            get {
+                return ResourceManager.GetString("Assignments.CreateYourFirstAssignment", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to View and manage all assignments for your team.
+        /// </summary>
+        public static string Assignments_ViewAndManageAssignments {
+            get {
+                return ResourceManager.GetString("Assignments.ViewAndManageAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to View and manage all team assignments.
+        /// </summary>
+        public static string Assignments_ViewAndManageTeamAssignments {
+            get {
+                return ResourceManager.GetString("Assignments.ViewAndManageTeamAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Back to Dashboard.
         /// </summary>
         public static string BackToDashboard {
@@ -1020,6 +1047,114 @@ namespace NewsCentral.Resources {
         public static string SelectImage {
             get {
                 return ResourceManager.GetString("SelectImage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Administrator Settings.
+        /// </summary>
+        public static string Settings_AdminSettings {
+            get {
+                return ResourceManager.GetString("Settings.AdminSettings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Current password is required.
+        /// </summary>
+        public static string Settings_CurrentPasswordRequired {
+            get {
+                return ResourceManager.GetString("Settings.CurrentPasswordRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Display Name.
+        /// </summary>
+        public static string Settings_DisplayName {
+            get {
+                return ResourceManager.GetString("Settings.DisplayName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Language.
+        /// </summary>
+        public static string Settings_Language {
+            get {
+                return ResourceManager.GetString("Settings.Language", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Changing language will reload the page.
+        /// </summary>
+        public static string Settings_LanguageChangeRequiresReload {
+            get {
+                return ResourceManager.GetString("Settings.LanguageChangeRequiresReload", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Last Login.
+        /// </summary>
+        public static string Settings_LastLogin {
+            get {
+                return ResourceManager.GetString("Settings.LastLogin", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage Teams.
+        /// </summary>
+        public static string Settings_ManageTeams {
+            get {
+                return ResourceManager.GetString("Settings.ManageTeams", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage Users.
+        /// </summary>
+        public static string Settings_ManageUsers {
+            get {
+                return ResourceManager.GetString("Settings.ManageUsers", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage your account and preferences.
+        /// </summary>
+        public static string Settings_ManageYourSettings {
+            get {
+                return ResourceManager.GetString("Settings.ManageYourSettings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Settings.
+        /// </summary>
+        public static string Settings_Settings {
+            get {
+                return ResourceManager.GetString("Settings.Settings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User ID.
+        /// </summary>
+        public static string Settings_UserID {
+            get {
+                return ResourceManager.GetString("Settings.UserID", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User Profile.
+        /// </summary>
+        public static string Settings_UserProfile {
+            get {
+                return ResourceManager.GetString("Settings.UserProfile", resourceCulture);
             }
         }
         

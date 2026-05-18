@@ -1,284 +1,375 @@
-﻿@page "/dashboard"
-@page "/"
-@inject NewsCentral.Services.AuthenticationService AuthService
-@inject NavigationManager Navigation
-@inject Services.TeamContextService TeamContext
+﻿@page "/"
+@using NewsCentral.Services
 @using NewsCentral.Models
-@using NewsCentral.Components.Shared
+@using Microsoft.Extensions.Localization
+@inject AuthenticationService AuthService
+@inject TeamService TeamService
+@inject TeamContextService TeamContext
+@inject NavigationManager Navigation
+@inject IStringLocalizer<Dashboard> Localizer
 
-<PageTitle>Dashboard - NewsCentral</PageTitle>
+<PageTitle>@Localizer["Dashboard"] - NewsCentral</PageTitle>
 
 <div class="dashboard-container">
-    <div class="header">
+    <div class="page-header">
         <h1>Welcome to NewsCentral</h1>
-        <div class="user-info">
-            <span>👤 @currentUser?.DisplayName</span>
-            @if (currentUser?.IsSystemAdmin == true)
-            {
-                <span class="badge badge-admin">System Admin</span>
-            }
-            @if (currentUser?.IsSystemAdmin == true)
-            {
-                <a href="/teams" class="btn btn-link">Teams</a>
-                <a href="/users" class="btn btn-link">Users</a>
-            }
-            @if (HasContentAuthorRole() || currentUser?.IsSystemAdmin == true)
-            {
-                <a href="/presentations" class="btn btn-link">Presentations</a>
-            }
 
-
-            @if (HasContentAuthorRole() || currentUser?.IsSystemAdmin == true)
-            {
-                <a href="/my-assignments" class="btn btn-link">My Assignments</a>
-            }
-
-
-            @if (HasContentApproverRole() || currentUser?.IsSystemAdmin == true)
-            {
-                <a href="/approvals" class="btn btn-link">Approvals</a>
-            }
-            <button @onclick="HandleLogout" class="btn btn-secondary">Logout</button>
-        </div>
+        @if (currentUser != null)
+        {
+            <div class="user-badge">
+                <i class="bi bi-person-circle"></i>
+                <span>@currentUser.DisplayName</span>
+                @if (currentUser.IsSystemAdmin)
+                {
+                    <span class="badge bg-primary ms-2">System Admin</span>
+                }
+            </div>
+        }
     </div>
 
-    @if (!AuthService.IsSystemAdmin())
+    @* Team Selector *@
+    @if (currentUser != null && availableTeams.Any())
     {
-        <div class="team-selector-container">
-            <TeamSelector />
+        <div class="team-selector-card">
+            <label class="form-label">Current Team:</label>
+            <select class="form-select" @bind="selectedTeamFolderName" @bind:after="OnTeamChanged">
+                @foreach (var team in availableTeams)
+                {
+                    <option value="@team.FolderName">@team.Name</option>
+                }
+            </select>
+        </div>
+    }
+    else if (currentUser != null && !availableTeams.Any())
+    {
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            No teams available. Please contact your administrator.
         </div>
     }
 
-    <div class="dashboard-content">
-        <div class="welcome-card">
-            <h2>🎉 Authentication Working!</h2>
-            <p>You are now logged in as: <strong>@currentUser?.Username</strong></p>
-            <p>Email: @currentUser?.Email</p>
-            <p>User ID: @currentUser?.UserID</p>
-            <p>Last Login: @currentUser?.LastLogin?.ToString("yyyy-MM-dd HH:mm:ss")</p>
-            
-            @if (currentUser?.IsSystemAdmin == true)
+    @if (currentUser != null)
+    {
+        @* Authentication Status Card *@
+        <div class="info-card auth-card">
+            <div class="card-icon">🎉</div>
+            <h3>Authentication Working!</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">You are now logged in as:</span>
+                    <span class="info-value">@currentUser.Username</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">@currentUser.Email</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">User ID:</span>
+                    <span class="info-value"><code>@currentUser.UserID</code></span>
+                </div>
+                @if (currentUser.LastLogin.HasValue)
+                {
+                    <div class="info-item">
+                        <span class="info-label">Last Login:</span>
+                        <span class="info-value">@currentUser.LastLogin.Value.ToString("yyyy-MM-dd HH:mm:ss")</span>
+                    </div>
+                }
+            </div>
+
+            @if (currentUser.Username == "admin")
             {
-                <div class="admin-notice">
-                    <p><strong>⚠️ Important:</strong> You are using the default admin account.</p>
-                    <p>Please change your password as soon as possible.</p>
-                    <p>(Password change feature coming in next phase)</p>
+                <div class="warning-box">
+                    <div class="warning-icon">⚠️</div>
+                    <div class="warning-content">
+                        <strong>Important:</strong> You are using the default admin account.
+                        <br />
+                        Please change your password as soon as possible.
+                        <br />
+                        <em>(Password change feature coming in next phase)</em>
+                    </div>
                 </div>
             }
         </div>
 
-        <div class="info-card">
-            <h3>📁 Data Location</h3>
-            <p><code>C:\Download\NewsCentral\config\users.json</code></p>
-            <p class="hint">You can check this file to see your user data stored as JSON</p>
-        </div>
+        <div class="features-grid">
+            @* Data Location Card *@
+            <div class="info-card">
+                <div class="card-icon">📁</div>
+                <h3>Data Location</h3>
+                <div class="data-path">
+                    <code>C:\Download\NewsCentral\config\users.json</code>
+                </div>
+                <p class="card-description">You can check this file to see your user data stored as JSON</p>
+            </div>
 
-        <div class="info-card">
-            <h3>✅ Completed Features</h3>
-            <ul>
-                <li>✓ User authentication with BCrypt password hashing</li>
-                <li>✓ First-time setup (auto-create admin user)</li>
-                <li>✓ Session management</li>
-                <li>✓ JSON file-based user repository</li>
-                <li>✓ Login/logout functionality</li>
-            </ul>
-        </div>
+            @* Completed Features Card *@
+            <div class="info-card">
+                <div class="card-icon">✅</div>
+                <h3>Completed Features</h3>
+                <ul class="feature-list">
+                    <li>✓ User authentication with BCrypt password hashing</li>
+                    <li>✓ First-time setup (auto-create admin user)</li>
+                    <li>✓ Session management</li>
+                    <li>✓ JSON file-based user repository</li>
+                    <li>✓ Login/logout functionality</li>
+                </ul>
+            </div>
 
-        <div class="info-card">
-            <h3>🚀 Coming Next</h3>
-            <ul>
-                <li>Team management</li>
-                <li>User management</li>
-                <li>Role assignment</li>
-                <li>Content creation</li>
-            </ul>
+            @* Coming Next Card *@
+            <div class="info-card">
+                <div class="card-icon">🚀</div>
+                <h3>Coming Next</h3>
+                <ul class="feature-list">
+                    <li>Team management</li>
+                    <li>User management</li>
+                    <li>Role assignment</li>
+                    <li>Content creation</li>
+                </ul>
+            </div>
         </div>
-        <div class="info-card">
-            <h3>🔐 Account Settings</h3>
-            <p>Manage your account security</p>
-            <a href="/change-password" class="btn btn-primary">Change Password</a>
-        </div>
-    </div>
+    }
 </div>
 
 <style>
     .dashboard-container {
-        padding: 20px;
-        max-width: 1200px;
+        padding: 30px;
+        max-width: 1400px;
         margin: 0 auto;
     }
 
-    .header {
+    .page-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 30px;
-        padding-bottom: 20px;
-        border-bottom: 2px solid #eee;
     }
 
-    .header h1 {
+    .page-header h1 {
         margin: 0;
+        font-size: 2rem;
         color: #333;
     }
 
-    .user-info {
+    .user-badge {
         display: flex;
         align-items: center;
-        gap: 15px;
+        gap: 10px;
+        padding: 10px 20px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .badge {
-        padding: 5px 10px;
-        border-radius: 5px;
-        font-size: 12px;
+    .user-badge i {
+        font-size: 1.5rem;
+        color: #667eea;
+    }
+
+    .team-selector-card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+
+    .team-selector-card label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 10px;
+    }
+
+    .team-selector-card select {
+        max-width: 400px;
+    }
+
+    .info-card {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+
+    .auth-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .card-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+    }
+
+    .info-card h3 {
+        margin: 0 0 20px 0;
+        font-size: 1.5rem;
+    }
+
+    .auth-card h3 {
+        color: white;
+    }
+
+    .info-grid {
+        display: grid;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .info-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .info-value {
+        font-size: 1.1rem;
         font-weight: 600;
     }
 
-    .badge-admin {
-        background: #667eea;
-        color: white;
+    .info-value code {
+        background: rgba(255,255,255,0.2);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.9rem;
     }
 
-    .btn {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
+    .warning-box {
+        margin-top: 20px;
+        padding: 15px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 8px;
+        border-left: 4px solid #ffc107;
+        display: flex;
+        gap: 15px;
     }
 
-    .btn-secondary {
-        background: #6c757d;
-        color: white;
+    .warning-icon {
+        font-size: 1.5rem;
     }
 
-    .btn-secondary:hover {
-        background: #5a6268;
+    .warning-content {
+        flex: 1;
     }
 
-    .dashboard-content {
+    .features-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         gap: 20px;
     }
 
-    .welcome-card, .info-card {
-        background: white;
-        padding: 25px;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    }
-
-    .welcome-card {
-        grid-column: 1 / -1;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-
-    .welcome-card h2 {
-        margin-top: 0;
-    }
-
-    .admin-notice {
-        margin-top: 20px;
+    .data-path {
+        background: #f8f9fa;
         padding: 15px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 5px;
-        border-left: 4px solid #ffc107;
+        border-radius: 6px;
+        margin-bottom: 15px;
     }
 
-    .info-card h3 {
-        margin-top: 0;
-        color: #667eea;
+    .data-path code {
+        color: #0056b3;
+        word-break: break-all;
     }
 
-    .info-card ul {
+    .card-description {
+        color: #666;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    .feature-list {
         list-style: none;
         padding: 0;
+        margin: 0;
     }
 
-    .info-card li {
+    .feature-list li {
         padding: 8px 0;
         border-bottom: 1px solid #eee;
     }
 
-    .info-card li:last-child {
+    .feature-list li:last-child {
         border-bottom: none;
-    }
-
-    code {
-        background: #f5f5f5;
-        padding: 2px 6px;
-        border-radius: 3px;
-        font-family: 'Courier New', monospace;
-        font-size: 13px;
-    }
-
-    .hint {
-        font-size: 13px;
-        color: #666;
-        font-style: italic;
-    }
-    .btn-link {
-        background: transparent;
-        color: #667eea;
-        text-decoration: none;
-        padding: 8px 16px;
-        border-radius: 5px;
-    }
-
-    .btn-link:hover {
-        background: rgba(102, 126, 234, 0.1);
-    }
-
-    .info-card .btn {
-        margin-top: 10px;
-    }
-
-    .team-selector-container {
-        margin-bottom: 30px;
     }
 </style>
 
 @code {
     private User? currentUser;
+    private List<Team> availableTeams = new();
+    private string? selectedTeamFolderName;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        // Check if user is authenticated
-        if (!AuthService.IsAuthenticated())
+        currentUser = AuthService.GetCurrentUser();
+
+        if (currentUser == null)
         {
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo("/login");
             return;
         }
 
-        currentUser = AuthService.GetCurrentUser();
+        await LoadTeamsAsync();
     }
 
-    private void HandleLogout()
+    private async Task LoadTeamsAsync()
     {
-        AuthService.Logout();
-        Navigation.NavigateTo("/login", forceLoad: true);
+        try
+        {
+            // SystemAdmin sees ALL teams
+            if (currentUser!.IsSystemAdmin)
+            {
+                System.Diagnostics.Debug.WriteLine("Loading all teams for SystemAdmin");
+                availableTeams = await TeamService.GetAllTeamsAsync();
+                System.Diagnostics.Debug.WriteLine($"Loaded {availableTeams.Count} teams for SystemAdmin");
+            }
+            // Regular users see only their assigned teams
+            else if (currentUser.TeamRoles.Any())
+            {
+                System.Diagnostics.Debug.WriteLine("Loading teams from user's TeamRoles");
+                var allTeams = await TeamService.GetAllTeamsAsync();
+                var userTeamFolders = currentUser.TeamRoles.Select(tr => tr.TeamFolderName).ToList();
+                availableTeams = allTeams.Where(t => userTeamFolders.Contains(t.FolderName)).ToList();
+                System.Diagnostics.Debug.WriteLine($"Loaded {availableTeams.Count} teams for user");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("User has no team assignments");
+                availableTeams = new List<Team>();
+            }
+
+            // Set current selected team
+            selectedTeamFolderName = TeamContext.CurrentTeamFolderName;
+
+            // If no team selected, auto-select first available
+            if (string.IsNullOrEmpty(selectedTeamFolderName) && availableTeams.Any())
+            {
+                var firstTeam = availableTeams[0];
+                selectedTeamFolderName = firstTeam.FolderName;
+                TeamContext.SetCurrentTeam(firstTeam.TeamID, firstTeam.FolderName);
+                System.Diagnostics.Debug.WriteLine($"Auto-selected team: {firstTeam.Name} ({firstTeam.FolderName})");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading teams: {ex.Message}");
+        }
     }
 
-    private bool HasContentAuthorRole()
+    private void OnTeamChanged()
     {
-        if (currentUser == null) return false;
-    
-        return currentUser.TeamRoles.Any(tr => 
-            tr.Roles.Contains("ContentAuthor") || 
-            tr.Roles.Contains("ContentApprover") || 
-            tr.Roles.Contains("TeamAdmin"));
-    }
-
-    private bool HasContentApproverRole()
-    {
-        if (currentUser == null) return false;
-
-        return currentUser.TeamRoles.Any(tr =>
-            tr.Roles.Contains("ContentApprover") ||
-            tr.Roles.Contains("TeamAdmin"));
+        if (!string.IsNullOrEmpty(selectedTeamFolderName))
+        {
+            var team = availableTeams.FirstOrDefault(t => t.FolderName == selectedTeamFolderName);
+            if (team != null)
+            {
+                TeamContext.SetCurrentTeam(team.TeamID, team.FolderName);
+                System.Diagnostics.Debug.WriteLine($"Team changed to: {team.Name} ({team.FolderName})");
+                StateHasChanged();
+            }
+        }
     }
 }
