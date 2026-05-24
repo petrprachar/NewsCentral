@@ -1,4 +1,4 @@
-﻿namespace NewsCentral.Models;
+namespace NewsCentral.Models;
 
 public class User : IEntity
 {
@@ -14,7 +14,6 @@ public class User : IEntity
     public DateTime? LastLogin { get; set; }
     public List<TeamRole> TeamRoles { get; set; } = new();
 
-    // IEntity implementation
     public string GetId() => UserID;
     public void SetId(string id) => UserID = id;
 }
@@ -33,7 +32,6 @@ public class UsersCollection : IEntity
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
     public string ModifiedBy { get; set; } = string.Empty;
 
-    // IEntity implementation (UsersCollection always has ID "users")
     public string GetId() => "users";
-    public void SetId(string id) { } // No-op, ID is always "users"
+    public void SetId(string id) { }
 }

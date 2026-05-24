@@ -1,4 +1,4 @@
-﻿namespace NewsCentral.Models;
+namespace NewsCentral.Models;
 
 public class Schedule : IEntity
 {
@@ -9,7 +9,7 @@ public class Schedule : IEntity
     public DateTime ScheduleCreated { get; set; } = DateTime.UtcNow;
     public DateTime ScheduleStart { get; set; } = DateTime.MinValue;
     public DateTime ScheduleEnd { get; set; } = DateTime.MaxValue;
-    public string DaysOfWeek { get; set; } = "1,2,3,4,5,6,7"; // Mon-Sun default
+    public string DaysOfWeek { get; set; } = "1,2,3,4,5,6,7";
     public bool IsActive { get; set; } = true;
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime LastModified { get; set; } = DateTime.UtcNow;

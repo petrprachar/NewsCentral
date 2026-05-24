@@ -1,4 +1,4 @@
-﻿namespace NewsCentral.Models;
+namespace NewsCentral.Models;
 
 public class Assignment : IEntity
 {
@@ -11,10 +11,9 @@ public class Assignment : IEntity
     public AssignmentStatus Status { get; set; } = AssignmentStatus.Draft;
     public bool RequiresApproval { get; set; } = true;
 
-    // NEW: Display type flags
-    public bool IsNewsOfWeek { get; set; } = true;      // Default checked
-    public bool IsWallpaper { get; set; } = false;      // Future feature
-    public bool IsLogonScreen { get; set; } = false;    // Future feature
+    public bool IsNewsOfWeek { get; set; } = true;
+    public bool IsWallpaper { get; set; } = false;
+    public bool IsLogonScreen { get; set; } = false;
 
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime DateCreated { get; set; } = DateTime.UtcNow;

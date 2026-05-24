@@ -1,4 +1,4 @@
-﻿namespace NewsCentral.Models;
+namespace NewsCentral.Models;
 
 public interface IEntity
 {
