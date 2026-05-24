@@ -109,7 +109,7 @@ public sealed class SyncService(
     {
         if (string.IsNullOrEmpty(assignment.Content.ImagePath)) return;
 
-        var relativePath = $"{teamFolder}/{assignment.Content.ImagePath}";
+        var relativePath = assignment.Content.ImagePath;
         var storedHash   = cache.ReadStoredHash(relativePath);
 
         if (storedHash == assignment.Content.ImageHash && cache.FileExists(relativePath))
