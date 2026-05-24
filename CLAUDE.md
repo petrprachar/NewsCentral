@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -91,7 +91,7 @@ The solution provides a structured communication channel between content author 
 |---|---|---|
 | NewsCentral | C# / .NET 9 MAUI Blazor Hybrid | Active development |
 | NewsCentral.Shared | C# / .NET 9 class library | Implemented |
-| NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Scaffolded |
+| NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Implemented |
 | NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Not yet started |
 | NewsTester | C# — to be decided at design time | Future |
 | Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `JsonStringEnumConverter`) | — |
@@ -109,7 +109,7 @@ The solution provides a structured communication channel between content author 
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app
-├── NewsService\                 .NET 9 Windows Service — cache sync agent
+├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented)
 └── (NewsViewer — not yet added)
 ```
 
@@ -133,6 +133,30 @@ NewsCentral.Shared\
 ```
 
 All model namespaces are `NewsCentral.Models` and `NewsCentral.Models.IndexFile` — identical to their previous location in the NewsCentral project, so no using-directive changes were required in NewsCentral when the shared library was extracted.
+
+### NewsService — Service Layout
+
+```
+NewsService\
+├── Configuration\
+│   ├── ServiceConfiguration.cs    typed POCOs bound from appsettings.json
+│   └── RegistryConfiguration.cs   reads HKLM overrides; registry wins over config
+├── Models\
+│   ├── StatusFile.cs              status.json structure
+│   └── ServiceState.cs            servicestate.json structure
+├── Services\
+│   ├── IRepositoryReader.cs       abstraction over Share / Azure repository
+│   ├── LocalShareRepositoryReader.cs  file share implementation (primary)
+│   ├── AzureBlobRepositoryReader.cs   Azure stub — Phase 2
+│   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
+│   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
+│   ├── TelemetryUploader.cs       copies uploads\session-*.json to repository
+│   └── SyncService.cs             orchestrates the five-step poll cycle
+├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + enum converter)
+├── Worker.cs                      BackgroundService host; reads interval from registry
+├── Program.cs                     DI wiring; storage mode resolved from registry at startup
+└── appsettings.json
+```
 
 ### Project References
 
@@ -578,38 +602,69 @@ See [Section 4 — Solution Structure](#4-solution-structure) for the full file 
 
 **Type:** .NET 9 Windows Service (`Microsoft.NET.Sdk.Worker`)  
 **Target:** `net9.0-windows10.0.19041.0`, `win-x64`  
-**Status:** Scaffolded — polling loop placeholder in place. Sync logic not yet implemented.
+**Status:** Implemented — full sync cycle operational in Share mode.
 
-#### Current State
+#### Configuration Resolution
 
-`Worker.cs` runs a configurable polling loop (default 60s from `appsettings.json`, intended to be 300s in production via registry). Each cycle calls `RunPollCycleAsync`, which currently only logs a heartbeat message. The five sync steps are stubbed as TODO comments.
+`RegistryConfiguration` reads from `HKLM\Software\{Company}\{ApplicationName}\`. Registry values override `appsettings.json`:
 
-#### Planned Poll Cycle (not yet implemented)
+| Registry value | Type | Effect |
+|---|---|---|
+| `teams` | `REG_SZ` | Semicolon-separated team folder names (e.g. `MY_TEAM;EXP_JP`) |
+| `StorageMode` | `REG_SZ` | `Share` (default) or `Azure` |
+| `PollIntervalSeconds` | `DWORD` | Overrides `Service:PollIntervalSeconds` |
+| `AzureUploadEnabled` | `DWORD` | `1` to enable telemetry upload to Azure Blob |
 
-1. Check `index.json` in repository for each configured team
-2. Retrieve updated content to local cache if changes detected
-3. Apply wallpaper and/or lockscreen if indicated by presentation flags
-4. Write `status.json` to cache root
-5. Process and upload session telemetry files from `uploads\`
+`Company` and `ApplicationName` keys are read from `appsettings.json` and are not registry-overridable.
 
-#### Storage Abstraction (planned)
+#### Poll Cycle — `SyncService.RunCycleAsync`
 
-- `IStorageBackend` interface with two concrete implementations:
-  - `LocalShareStorageBackend` — file share paths; fully functional without Azure
-  - `AzureBlobStorageBackend` — Azure Blob Storage
-- Storage mode selected at runtime by registry `StorageMode` value
+Executed by `Worker` on every interval tick:
 
-#### Azure Authentication (planned)
+**Step 1 — Index sync (per team)**
+- Reads `{teamFolder}/index.json` from the repository
+- Compares `IndexHash` with the cached copy
+- If unchanged: skips the team entirely (O(1) check, no I/O)
+- If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images
+- Writes the new `index.json` to cache only after all images are safely written
+
+**Step 2 — Wallpaper / lock screen**
+- Filters each team's cached index to *active* assignments: `ScheduleStart ≤ now ≤ ScheduleEnd` and today's day number (1=Mon … 7=Sun) is in `DaysOfWeek`
+- Selects the most recently modified active assignment with `IsWallpaper = true` / `IsLogonScreen = true`
+- Skips if `PresentationId` matches the last-applied ID in `servicestate.json`
+
+**Step 3 — status.json**
+- Writes `LastSyncTime`, `IsOnline`, `SyncSource` (`Share` / `Azure` / `None`) to cache root
+
+**Step 4 — Telemetry upload**
+- Copies `uploads\session-*.json` from local cache to `{SharePath}\uploads\`
+- Deletes the local copy after a successful copy
+
+#### Storage Abstraction
+
+`IRepositoryReader` has two implementations, selected at DI registration time based on effective storage mode:
+
+| Implementation | Mode | Notes |
+|---|---|---|
+| `LocalShareRepositoryReader` | `Share` | Reads from UNC/local path; `IsAvailable` checks `Directory.Exists` |
+| `AzureBlobRepositoryReader` | `Azure` | Stub — logs warning; cert auth is Phase 2 |
+
+#### CacheManager — Hash Sidecar Pattern
+
+When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{imagePath}.hash` containing `sha256:{hex}`. On the next cycle, `ReadStoredHash` reads this file instead of re-hashing the image, making per-image change detection O(1).
+
+#### Wallpaper — `WallpaperService`
+
+| Target | API | Session constraint |
+|---|---|---|
+| Desktop wallpaper | `IDesktopWallpaper` COM (`C2CF3110…`) — `SetWallpaper(null, path)` applies to all monitors | Requires desktop access; logs a warning and skips in session 0. Configure the service to run as the interactive user or trigger via Task Scheduler in the user session. |
+| Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. Enterprise/MDM-grade mechanism used by Intune. |
+
+#### Azure Authentication (Phase 2 — not yet implemented)
 
 - Machine certificate from local machine certificate store
 - Proactive token refresh; exponential backoff on transient failures; cert-expiry logging
 - Handles weeks-long uptime without restart
-
-#### Wallpaper and Lockscreen Management (planned)
-
-- `IDesktopWallpaper` COM interface for wallpaper (Microsoft API only)
-- `LockScreen` WinRT API for lockscreen
-- Tracks last-applied IDs in `servicestate.json`
 
 ---
 
@@ -746,7 +801,7 @@ No direct inter-process communication between any components. All coordination i
 | Item | Notes |
 |---|---|
 | NewsViewer | WinForms .NET 9 app — next component to implement |
-| NewsService sync logic | Polling loop scaffolded; full sync implementation pending |
+| NewsService Azure mode | `AzureBlobRepositoryReader` is a stub; requires machine certificate auth (Phase 2) |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |
