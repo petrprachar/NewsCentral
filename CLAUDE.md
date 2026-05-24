@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.3  
+**Version:** 1.4  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -92,7 +92,7 @@ The solution provides a structured communication channel between content author 
 | NewsCentral | C# / .NET 9 MAUI Blazor Hybrid | Active development |
 | NewsCentral.Shared | C# / .NET 9 class library | Implemented |
 | NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Implemented |
-| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Not yet started |
+| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Phase 1 implemented |
 | NewsTester | C# — to be decided at design time | Future |
 | Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `CamelCase`, `PropertyNameCaseInsensitive`, `JsonStringEnumConverter`) | — |
 | Images | Base64-encoded and embedded in presentation JSON | — |
@@ -110,7 +110,7 @@ NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented)
-└── (NewsViewer — not yet added)
+└── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 1 implemented)
 ```
 
 ### NewsCentral.Shared — Model Layout
@@ -158,6 +158,27 @@ NewsService\
 └── appsettings.json
 ```
 
+### NewsViewer — Layout
+
+```
+NewsViewer\
+├── Configuration\
+│   ├── ViewerConfiguration.cs     typed POCOs bound from appsettings.json
+│   └── RegistryConfiguration.cs   reads HKLM 'teams'; same pattern as NewsService
+├── Models\
+│   ├── ViewerState.cs             viewerstate.json structure
+│   └── SessionTelemetry.cs        uploads\session-*.json structure
+├── Services\
+│   ├── PresentationSelector.cs    reads index.json per team, filters active, picks most recent
+│   ├── ViewerStateService.cs      reads/writes viewerstate.json for ShowOnce tracking
+│   └── TelemetryWriter.cs         writes session-{guid}.json to uploads\ on close
+├── Forms\
+│   └── ViewerForm.cs              1600×900 borderless WinForms window
+├── JsonDefaults.cs                shared JsonSerializerOptions (same standard as NewsService)
+├── Program.cs                     entry point; startup checks; Application.Run
+└── appsettings.json
+```
+
 ### Project References
 
 ```
@@ -165,7 +186,7 @@ NewsCentral.Shared   (no project references)
        ↑
        ├── NewsCentral
        ├── NewsService
-       └── (NewsViewer — future)
+       └── NewsViewer
 ```
 
 NewsCentral and NewsService both reference **only** `NewsCentral.Shared`. NewsService does **not** reference NewsCentral (a MAUI project cannot be referenced from a non-MAUI project without MAUI build tasks propagating into the referencing project).
@@ -439,6 +460,9 @@ public class PublishedAssignmentIndex
     public DisplayTypeInfo DisplayTypes { get; set; }
     public ContentInfo Content { get; set; }
     public string SourceTeamFolderName { get; set; }
+
+    public string? PosterText { get; set; }             // From Presentation.PosterText
+    public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
 }
 
 public class ContentInfo
@@ -673,7 +697,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 ### 8.4 NewsViewer
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Not yet started. NativeAOT migration path to be preserved; Win32 P/Invoke usage to be kept compatible.
+**Status:** Phase 1 implemented and tested. Phase 2 (hover-triggered side panel, virtual desktop, ShowNew watcher) not yet started. NativeAOT migration path preserved; Win32 P/Invoke usage kept compatible.
 
 #### Launch Conditions
 
@@ -802,7 +826,7 @@ No direct inter-process communication between any components. All coordination i
 
 | Item | Notes |
 |---|---|
-| NewsViewer | WinForms .NET 9 app — next component to implement |
+| NewsViewer Phase 2 | Hover-triggered side panel reveal; virtual desktop (`CreateDesktop`/`SwitchDesktop`); ShowNew `FileSystemWatcher`; RDP/Citrix/VMware suppression |
 | NewsService Azure mode | `AzureBlobRepositoryReader` is a stub; requires machine certificate auth (Phase 2) |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
