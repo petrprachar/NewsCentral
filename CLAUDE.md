@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.2  
+**Version:** 1.3  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -94,7 +94,7 @@ The solution provides a structured communication channel between content author 
 | NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Implemented |
 | NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Not yet started |
 | NewsTester | C# — to be decided at design time | Future |
-| Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `JsonStringEnumConverter`) | — |
+| Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `CamelCase`, `PropertyNameCaseInsensitive`, `JsonStringEnumConverter`) | — |
 | Images | Base64-encoded and embedded in presentation JSON | — |
 | Azure auth | MSAL (NewsCentral interactive); Machine certificate from local store (NewsService) | — |
 | Network auth | MS Azure Storage via certificate (NewsService) | — |
@@ -152,7 +152,7 @@ NewsService\
 │   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
 │   ├── TelemetryUploader.cs       copies uploads\session-*.json to repository
 │   └── SyncService.cs             orchestrates the five-step poll cycle
-├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + enum converter)
+├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
 ├── Worker.cs                      BackgroundService host; reads interval from registry
 ├── Program.cs                     DI wiring; storage mode resolved from registry at startup
 └── appsettings.json
@@ -178,6 +178,8 @@ All projects use the same options:
 private static readonly JsonSerializerOptions JsonOptions = new()
 {
     WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    PropertyNameCaseInsensitive = true,
     Converters = { new JsonStringEnumConverter() }
 };
 ```
