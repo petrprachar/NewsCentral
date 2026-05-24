@@ -166,7 +166,7 @@ public sealed class SyncService(
         if (wallpaperEntry is not null &&
             wallpaperEntry.PresentationId != state.LastWallpaperPresentationId)
         {
-            var path = cache.Resolve($"{wallpaperTeam}/{wallpaperEntry.Content.ImagePath}");
+            var path = cache.Resolve(wallpaperEntry.Content.ImagePath);
             wallpaper.SetWallpaper(path);
             state.LastWallpaperPresentationId = wallpaperEntry.PresentationId;
         }
@@ -174,7 +174,7 @@ public sealed class SyncService(
         if (lockscreenEntry is not null &&
             lockscreenEntry.PresentationId != state.LastLockscreenPresentationId)
         {
-            var path = cache.Resolve($"{lockscreenTeam}/{lockscreenEntry.Content.ImagePath}");
+            var path = cache.Resolve(lockscreenEntry.Content.ImagePath);
             wallpaper.SetLockScreen(path);
             state.LastLockscreenPresentationId = lockscreenEntry.PresentationId;
         }
