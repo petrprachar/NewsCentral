@@ -13,6 +13,8 @@ public class Schedule : IEntity
     public bool IsActive { get; set; } = true;
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
+    public enum DisplayMode { ShowOnce, ShowNew }
+    public DisplayMode ShowMode { get; set; } = DisplayMode.ShowOnce;
 
     public string GetId() => ScheduleID;
     public void SetId(string id) => ScheduleID = id;

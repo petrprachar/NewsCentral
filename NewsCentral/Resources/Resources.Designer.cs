@@ -124,6 +124,33 @@ namespace NewsCentral.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Create your first assignment to get started.
+        /// </summary>
+        public static string Assignments_CreateYourFirstAssignment {
+            get {
+                return ResourceManager.GetString("Assignments.CreateYourFirstAssignment", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to View and manage all assignments for your team.
+        /// </summary>
+        public static string Assignments_ViewAndManageAssignments {
+            get {
+                return ResourceManager.GetString("Assignments.ViewAndManageAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to View and manage all team assignments.
+        /// </summary>
+        public static string Assignments_ViewAndManageTeamAssignments {
+            get {
+                return ResourceManager.GetString("Assignments.ViewAndManageTeamAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Back to Dashboard.
         /// </summary>
         public static string BackToDashboard {
@@ -403,6 +430,231 @@ namespace NewsCentral.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Access Denied.
+        /// </summary>
+        public static string IndexManagement_AccessDenied {
+            get {
+                return ResourceManager.GetString("IndexManagement.AccessDenied", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Only system administrators can access this page..
+        /// </summary>
+        public static string IndexManagement_AccessDeniedMessage {
+            get {
+                return ResourceManager.GetString("IndexManagement.AccessDeniedMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Active.
+        /// </summary>
+        public static string IndexManagement_ActiveAssignments {
+            get {
+                return ResourceManager.GetString("IndexManagement.ActiveAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Regenerate index files for all teams. This is useful after bulk data changes or troubleshooting..
+        /// </summary>
+        public static string IndexManagement_AllTeamsDescription {
+            get {
+                return ResourceManager.GetString("IndexManagement.AllTeamsDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to All Teams Indexes.
+        /// </summary>
+        public static string IndexManagement_AllTeamsSection {
+            get {
+                return ResourceManager.GetString("IndexManagement.AllTeamsSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Current Team.
+        /// </summary>
+        public static string IndexManagement_CurrentTeam {
+            get {
+                return ResourceManager.GetString("IndexManagement.CurrentTeam", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Current Team Index.
+        /// </summary>
+        public static string IndexManagement_CurrentTeamSection {
+            get {
+                return ResourceManager.GetString("IndexManagement.CurrentTeamSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Expired.
+        /// </summary>
+        public static string IndexManagement_ExpiredAssignments {
+            get {
+                return ResourceManager.GetString("IndexManagement.ExpiredAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Index Exists.
+        /// </summary>
+        public static string IndexManagement_IndexExists {
+            get {
+                return ResourceManager.GetString("IndexManagement.IndexExists", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Last Generated.
+        /// </summary>
+        public static string IndexManagement_LastGenerated {
+            get {
+                return ResourceManager.GetString("IndexManagement.LastGenerated", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to No.
+        /// </summary>
+        public static string IndexManagement_No {
+            get {
+                return ResourceManager.GetString("IndexManagement.No", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to No team selected. Please select a team from the home page..
+        /// </summary>
+        public static string IndexManagement_NoTeamSelected {
+            get {
+                return ResourceManager.GetString("IndexManagement.NoTeamSelected", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage and regenerate index.json files for teams.
+        /// </summary>
+        public static string IndexManagement_PageDescription {
+            get {
+                return ResourceManager.GetString("IndexManagement.PageDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Index Management.
+        /// </summary>
+        public static string IndexManagement_PageTitle {
+            get {
+                return ResourceManager.GetString("IndexManagement.PageTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Regenerate All Team Indexes.
+        /// </summary>
+        public static string IndexManagement_RegenerateAllTeams {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegenerateAllTeams", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Regenerate Current Team Index.
+        /// </summary>
+        public static string IndexManagement_RegenerateCurrentTeam {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegenerateCurrentTeam", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Regenerating....
+        /// </summary>
+        public static string IndexManagement_Regenerating {
+            get {
+                return ResourceManager.GetString("IndexManagement.Regenerating", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Regenerating All....
+        /// </summary>
+        public static string IndexManagement_RegeneratingAll {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegeneratingAll", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Successfully regenerated {0} of {1} team indexes!.
+        /// </summary>
+        public static string IndexManagement_RegenerationAllSuccess {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegenerationAllSuccess", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Error: {0}.
+        /// </summary>
+        public static string IndexManagement_RegenerationError {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegenerationError", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Index regenerated successfully for {0}!.
+        /// </summary>
+        public static string IndexManagement_RegenerationSuccess {
+            get {
+                return ResourceManager.GetString("IndexManagement.RegenerationSuccess", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Team.
+        /// </summary>
+        public static string IndexManagement_Team {
+            get {
+                return ResourceManager.GetString("IndexManagement.Team", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Total Assignments.
+        /// </summary>
+        public static string IndexManagement_TotalAssignments {
+            get {
+                return ResourceManager.GetString("IndexManagement.TotalAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Upcoming.
+        /// </summary>
+        public static string IndexManagement_UpcomingAssignments {
+            get {
+                return ResourceManager.GetString("IndexManagement.UpcomingAssignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Yes.
+        /// </summary>
+        public static string IndexManagement_Yes {
+            get {
+                return ResourceManager.GetString("IndexManagement.Yes", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Invalid username or password.
         /// </summary>
         public static string InvalidCredentials {
@@ -471,6 +723,87 @@ namespace NewsCentral.Resources {
         public static string Name {
             get {
                 return ResourceManager.GetString("Name", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to ADMINISTRATION.
+        /// </summary>
+        public static string NavMenu_AdminSection {
+            get {
+                return ResourceManager.GetString("NavMenu.AdminSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Approvals.
+        /// </summary>
+        public static string NavMenu_Approvals {
+            get {
+                return ResourceManager.GetString("NavMenu.Approvals", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Assignments.
+        /// </summary>
+        public static string NavMenu_Assignments {
+            get {
+                return ResourceManager.GetString("NavMenu.Assignments", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Home.
+        /// </summary>
+        public static string NavMenu_Home {
+            get {
+                return ResourceManager.GetString("NavMenu.Home", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Index Management.
+        /// </summary>
+        public static string NavMenu_IndexManagement {
+            get {
+                return ResourceManager.GetString("NavMenu.IndexManagement", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Schedules.
+        /// </summary>
+        public static string NavMenu_Schedules {
+            get {
+                return ResourceManager.GetString("NavMenu.Schedules", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Settings.
+        /// </summary>
+        public static string NavMenu_Settings {
+            get {
+                return ResourceManager.GetString("NavMenu.Settings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Team Management.
+        /// </summary>
+        public static string NavMenu_TeamManagement {
+            get {
+                return ResourceManager.GetString("NavMenu.TeamManagement", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User Management.
+        /// </summary>
+        public static string NavMenu_UserManagement {
+            get {
+                return ResourceManager.GetString("NavMenu.UserManagement", resourceCulture);
             }
         }
         
@@ -714,6 +1047,114 @@ namespace NewsCentral.Resources {
         public static string SelectImage {
             get {
                 return ResourceManager.GetString("SelectImage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Administrator Settings.
+        /// </summary>
+        public static string Settings_AdminSettings {
+            get {
+                return ResourceManager.GetString("Settings.AdminSettings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Current password is required.
+        /// </summary>
+        public static string Settings_CurrentPasswordRequired {
+            get {
+                return ResourceManager.GetString("Settings.CurrentPasswordRequired", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Display Name.
+        /// </summary>
+        public static string Settings_DisplayName {
+            get {
+                return ResourceManager.GetString("Settings.DisplayName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Language.
+        /// </summary>
+        public static string Settings_Language {
+            get {
+                return ResourceManager.GetString("Settings.Language", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Changing language will reload the page.
+        /// </summary>
+        public static string Settings_LanguageChangeRequiresReload {
+            get {
+                return ResourceManager.GetString("Settings.LanguageChangeRequiresReload", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Last Login.
+        /// </summary>
+        public static string Settings_LastLogin {
+            get {
+                return ResourceManager.GetString("Settings.LastLogin", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage Teams.
+        /// </summary>
+        public static string Settings_ManageTeams {
+            get {
+                return ResourceManager.GetString("Settings.ManageTeams", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage Users.
+        /// </summary>
+        public static string Settings_ManageUsers {
+            get {
+                return ResourceManager.GetString("Settings.ManageUsers", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Manage your account and preferences.
+        /// </summary>
+        public static string Settings_ManageYourSettings {
+            get {
+                return ResourceManager.GetString("Settings.ManageYourSettings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Settings.
+        /// </summary>
+        public static string Settings_Settings {
+            get {
+                return ResourceManager.GetString("Settings.Settings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User ID.
+        /// </summary>
+        public static string Settings_UserID {
+            get {
+                return ResourceManager.GetString("Settings.UserID", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to User Profile.
+        /// </summary>
+        public static string Settings_UserProfile {
+            get {
+                return ResourceManager.GetString("Settings.UserProfile", resourceCulture);
             }
         }
         

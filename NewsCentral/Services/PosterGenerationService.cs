@@ -1,30 +1,27 @@
-﻿using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.Fonts;
-using NewsCentral.Configuration;
-using SixLaborsImage = SixLabors.ImageSharp.Image;
-using SixLaborsSize = SixLabors.ImageSharp.Size;
-using SixLaborsColor = SixLabors.ImageSharp.Color;
-using SixLaborsPoint = SixLabors.ImageSharp.Point;
-using SixLaborsPointF = SixLabors.ImageSharp.PointF;
-using SixLaborsRectangle = SixLabors.ImageSharp.Rectangle;
-using SixLaborsHorizontalAlignment = SixLabors.Fonts.HorizontalAlignment;
-using SixLaborsVerticalAlignment = SixLabors.Fonts.VerticalAlignment;
-using SixLaborsResizeMode = SixLabors.ImageSharp.Processing.ResizeMode;
-
 namespace NewsCentral.Services;
 
+/// <summary>
+/// Handles poster image storage for the authoring tier.
+/// Image processing (SixLabors) was removed — the original image is stored
+/// as-is under the "generated" folder, acting as the poster.
+///
+/// No blob distribution here — pushing to Azure Blob is handled by
+/// PublishingService after the assignment is approved and published.
+/// </summary>
 public class PosterGenerationService
 {
-    private readonly string _basePath;
+    private readonly IStorageService _storage;
 
-    public PosterGenerationService(AppConfiguration config)
+    public PosterGenerationService(IStorageService storage)
     {
-        _basePath = config.DataPath;
+        _storage = storage;
     }
 
+    /// <summary>
+    /// Saves the image data as a poster file in the team's generated-images folder.
+    /// Returns the relative path for storage in the Presentation record.
+    /// e.g. "team-alpha/images/generated/poster_{id}_v1.jpg"
+    /// </summary>
     public async Task<string> GeneratePosterAsync(
         string teamFolderName,
         string presentationId,
@@ -35,121 +32,28 @@ public class PosterGenerationService
         string ctaText = "Learn More",
         PosterLayout layout = PosterLayout.Standard)
     {
-        using var image = SixLaborsImage.Load<Rgba32>(originalImageData);
-
-        // Resize to standard poster size (1920x1080)
-        image.Mutate(x => x.Resize(new ResizeOptions
-        {
-            Size = new SixLaborsSize(1920, 1080),
-            Mode = SixLaborsResizeMode.Crop
-        }));
-
-        // Apply dark overlay for text readability
-        image.Mutate(x => x.Fill(
-            new SixLaborsColor(new Rgba32(0, 0, 0, 180)), // Semi-transparent black
-            new Rectangle(0, 800, 1920, 280)
-        ));
-
-        // Try preferred fonts first
-        var fontFamilyEnumerable = SystemFonts.Families.Where(f =>
-            f.Name.Contains("Arial", StringComparison.OrdinalIgnoreCase) ||
-            f.Name.Contains("Segoe", StringComparison.OrdinalIgnoreCase) ||
-            f.Name.Contains("Helvetica", StringComparison.OrdinalIgnoreCase));
-
-        FontFamily fontFamily;
-        if (fontFamilyEnumerable.Any())
-        {
-            fontFamily = fontFamilyEnumerable.First();
-        }
-        else if (SystemFonts.Families.Any())
-        {
-            fontFamily = SystemFonts.Families.First();
-        }
-        else
-        {
-            // Last resort - try to get Arial explicitly
-            try
-            {
-                fontFamily = SystemFonts.Get("Arial");
-            }
-            catch
-            {
-                throw new InvalidOperationException("No system fonts available for poster generation");
-            }
-        }
-
-        var headlineFont = fontFamily.CreateFont(72, FontStyle.Bold);
-        var bodyFont = fontFamily.CreateFont(36, FontStyle.Regular);
-        var ctaFont = fontFamily.CreateFont(32, FontStyle.Bold);
-
-        // Draw headline
-        var headlineOptions = new RichTextOptions(headlineFont)
-        {
-            Origin = new SixLaborsPointF(60, 820),
-            WrappingLength = 1800,
-            HorizontalAlignment = SixLaborsHorizontalAlignment.Left,
-            VerticalAlignment = SixLaborsVerticalAlignment.Top
-        };
-
-        image.Mutate(x => x.DrawText(
-            headlineOptions,
-            headlineText,
-            SixLaborsColor.White
-        ));
-
-        // Draw body text
-        var bodyOptions = new RichTextOptions(bodyFont)
-        {
-            Origin = new SixLaborsPointF(60, 920),
-            WrappingLength = 1800,
-            HorizontalAlignment = SixLaborsHorizontalAlignment.Left,
-            VerticalAlignment = SixLaborsVerticalAlignment.Top
-        };
-
-        image.Mutate(x => x.DrawText(
-            bodyOptions,
-            bodyText,
-            SixLaborsColor.White
-        ));
-
-        // Draw CTA if provided
-        if (!string.IsNullOrWhiteSpace(ctaText))
-        {
-            var ctaOptions = new RichTextOptions(ctaFont)
-            {
-                Origin = new SixLaborsPointF(60, 1010),
-                HorizontalAlignment = SixLaborsHorizontalAlignment.Left,
-                VerticalAlignment = SixLaborsVerticalAlignment.Top
-            };
-
-            image.Mutate(x => x.DrawText(
-                ctaOptions,
-                $"→ {ctaText}",
-                new SixLaborsColor(new Rgba32(102, 126, 234)) // Brand color
-            ));
-        }
-
-        // Save generated poster
         var posterFileName = $"poster_{presentationId}_v{version}.jpg";
-        var posterPath = Path.Combine(_basePath, teamFolderName, "images", "generated", posterFileName);
+        var relativePath   = $"{teamFolderName}/images/generated/{posterFileName}";
 
-        Directory.CreateDirectory(Path.GetDirectoryName(posterPath)!);
+        // WriteBytesAsync creates the folder if it does not exist
+        await _storage.WriteBytesAsync(relativePath, originalImageData);
 
-        await image.SaveAsJpegAsync(posterPath);
-
-        return $"{teamFolderName}/images/generated/{posterFileName}";
+        return relativePath;
     }
 
+    /// <summary>
+    /// Reads poster image bytes from the authoring tier.
+    /// posterPath is the relative path stored in Presentation.GeneratedImagePath,
+    /// e.g. "team-alpha/images/generated/poster_{id}_v1.jpg"
+    /// </summary>
     public async Task<byte[]> GetPosterImageDataAsync(string teamFolderName, string posterPath)
     {
-        var fullPath = Path.Combine(_basePath, posterPath);
+        var data = await _storage.ReadBytesAsync(posterPath);
 
-        if (!File.Exists(fullPath))
-        {
+        if (data == null)
             throw new FileNotFoundException($"Poster not found: {posterPath}");
-        }
 
-        return await File.ReadAllBytesAsync(fullPath);
+        return data;
     }
 }
 

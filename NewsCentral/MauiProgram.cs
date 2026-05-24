@@ -90,7 +90,11 @@ public static class MauiProgram
                 {"AI:OpenAIApiKey", ""},
                 {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
                 {"Storage:AzureBlobConnectionString", ""},
-                {"Storage:DefaultStorageType", "NetworkShare"}
+                {"Storage:DefaultStorageType", "NetworkShare"},
+                {"Storage:EnableBlobDistribution",   "false"},
+                {"Storage:DistributionMode",          "Local"},
+                {"Storage:LocalDistributionPath",     "C:\\Download\\NewsCentralDist"},
+                {"Storage:AzureBlobContainerName",    "newscentral"}
             };
 
             config = new ConfigurationBuilder()
@@ -131,9 +135,35 @@ public static class MauiProgram
             System.Diagnostics.Debug.WriteLine($"✓ AppConfig.DataPath set to: '{appConfig.DataPath}'");
         }
 
-        System.Diagnostics.Debug.WriteLine($"AppConfig.DataPath set to: '{appConfig.DataPath}'");
-
         builder.Services.AddSingleton(appConfig);
+
+        // ── Authoring tier storage (always local / Azure Files SMB) ─────────
+        // LocalStorageService resolves all paths against AppConfig.DataPath.
+        // When Azure Files is mounted as a drive, no code changes are needed.
+        builder.Services.AddSingleton<IStorageService, LocalStorageService>();
+
+        // ── Distribution tier storage (config-driven) ────────────────────────
+        // EnableBlobDistribution = false  → NullBlobDistributionService  (dev)
+        // EnableBlobDistribution = true
+        //   DistributionMode = "Local"    → LocalBlobDistributionService  (test)
+        //   DistributionMode = "AzureBlob"→ AzureBlobDistributionService  (prod)
+        builder.Services.AddSingleton<IBlobDistributionService>(sp =>
+        {
+            var cfg = sp.GetRequiredService<AppConfiguration>();
+
+            if (!cfg.EnableBlobDistribution)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "IBlobDistributionService: NULL (EnableBlobDistribution=false)");
+                return new NullBlobDistributionService();
+            }
+
+            return cfg.DistributionMode switch
+            {
+                "AzureBlob" => (IBlobDistributionService)new AzureBlobDistributionService(cfg),
+                _ => new LocalBlobDistributionService(cfg)
+            };
+        });
 
         // Register WindowsIdentityService (needs to be before AuthenticationService)
         builder.Services.AddSingleton<WindowsIdentityService>();
@@ -153,11 +183,31 @@ public static class MauiProgram
         builder.Services.AddSingleton<TeamService>();
         builder.Services.AddSingleton<UserService>();
         builder.Services.AddSingleton<PosterGenerationService>();
+        builder.Services.AddSingleton<IndexGenerationService>();
         builder.Services.AddSingleton<PresentationService>();
         builder.Services.AddSingleton<TeamContextService>();
         builder.Services.AddSingleton<ScheduleService>();
         builder.Services.AddSingleton<AssignmentService>();
         builder.Services.AddSingleton<PublishingService>();
+
+        // Register DataSeederService with IConfiguration dependency
+
+        /*
+         Environment-Specific:
+        -----------------------
+            You can have different settings for different environments:
+            appsettings.json - Default
+            appsettings.Development.json - Dev environment
+            appsettings.Production.json - Production
+        */
+
+        builder.Services.AddSingleton<DataSeederService>(sp =>
+        {
+            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var storageService = sp.GetRequiredService<IStorageService>();
+            return new DataSeederService(storageService, appConfiguration, configuration);
+        });
 
         // Add localization
         builder.Services.AddLocalization();
@@ -174,8 +224,32 @@ public static class MauiProgram
         CultureInfo.CurrentCulture = culture;
         CultureInfo.CurrentUICulture = culture;
 
-        return builder.Build();
+        // BUILD THE APP (this creates the 'app' variable)
+        var app = builder.Build();
+
+        // Initialize data on first run (AFTER app is built)
+        // InitializeDataAsync(app.Services).GetAwaiter().GetResult();
+
+        // Return the app
+        return app;
     }
+
+    // Initialize data method
+    /*
+    private static async Task InitializeDataAsync(IServiceProvider services)
+    {
+        try
+        {
+            var seeder = services.GetRequiredService<DataSeederService>();
+            await seeder.InitializeIfNeededAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ERROR during initialization: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+    */
 }
 
 #pragma warning restore CA1416

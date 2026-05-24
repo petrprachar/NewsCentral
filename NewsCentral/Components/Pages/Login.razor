@@ -1,9 +1,13 @@
 ﻿@page "/login"
-@inject AuthenticationService AuthService
-@inject NavigationManager Navigation
-@inject IStringLocalizer Localizer
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using Microsoft.Extensions.Localization
+
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject TeamService TeamService
+@inject TeamContextService TeamContext
+@inject IStringLocalizer<Login> Localizer
 @inject WindowsIdentityService WindowsIdentityService
 
 <PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>
@@ -213,17 +217,42 @@
         System.Diagnostics.Debug.WriteLine("=== Login Page: OnInitializedAsync END ===");
     }
 
-    // EXISTING: Manual login handler (unchanged)
     private async Task HandleLogin()
     {
         errorMessage = string.Empty;
-        isLoggingIn = true;
+
         try
         {
-            var user = await AuthService.LoginAsync(username, password);
-            if (user != null)
+            var result = await AuthService.LoginAsync(username, password);
+
+            if (result != null)
             {
-                Navigation.NavigateTo("/dashboard");
+                System.Diagnostics.Debug.WriteLine($"Login successful: {result.Username}");
+
+                // NEW: Auto-select the first available team
+                try
+                {
+                    var teams = await TeamService.GetAllTeamsAsync();
+                    System.Diagnostics.Debug.WriteLine($"Found {teams.Count} teams");
+
+                    if (teams.Count > 0)
+                    {
+                        var firstTeam = teams[0];
+                        TeamContext.SetCurrentTeam(firstTeam.TeamID, firstTeam.FolderName);
+                        System.Diagnostics.Debug.WriteLine($"Auto-selected team: {firstTeam.Name} ({firstTeam.FolderName})");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine("No teams available - user will need to select one");
+                    }
+                }
+                catch (Exception teamEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error loading teams: {teamEx.Message}");
+                    // Don't fail login if team selection fails
+                }
+
+                Navigation.NavigateTo("/");
             }
             else
             {
@@ -232,11 +261,8 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Login error: {ex.Message}";
-        }
-        finally
-        {
-            isLoggingIn = false;
+            errorMessage = ex.Message;
+            System.Diagnostics.Debug.WriteLine($"Login error: {ex.Message}");
         }
     }
 }

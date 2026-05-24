@@ -1,0 +1,863 @@
+﻿@page "/assignments"
+@using NewsCentral.Services
+@using NewsCentral.Models
+@using Microsoft.Extensions.Localization
+@inject AssignmentService AssignmentService
+@inject PresentationService PresentationService
+@inject ScheduleService ScheduleService
+@inject PublishingService PublishingService
+@inject AuthenticationService AuthService
+@inject TeamContextService TeamContext
+@inject NavigationManager Navigation
+@inject IStringLocalizer<Assignments> Localizer
+
+<PageTitle>@Localizer["Assignments"]</PageTitle>
+
+<div class="my-assignments-container">
+    <div class="page-header">
+        <h2>@Localizer["Assignments"]</h2>
+        <p class="subtitle">@Localizer["ViewAndManageTeamAssignments"]</p>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Loading assignments...</p>
+        </div>
+    }
+    else if (!assignments.Any())
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+            <h3>No assignments yet</h3>
+            <p>Create your first assignment to get started</p>
+        </div>
+    }
+    else
+    {
+        @* Pending Approval Section *@
+        @if (pendingAssignments.Any())
+        {
+            <div class="section-header">
+                <h4>⏳ Pending Approval (@pendingAssignments.Count)</h4>
+            </div>
+
+            @foreach (var assignment in pendingAssignments)
+            {
+                var presentation = presentations.FirstOrDefault(p => p.PresentationID == assignment.PresentationID);
+                var schedule = schedules.FirstOrDefault(s => s.ScheduleID == assignment.ScheduleID);
+
+                <div class="assignment-card pending-card">
+                    <div class="card-content">
+                        <div class="card-header-section">
+                            <div class="presentation-info">
+                                <h3>@presentation?.Name</h3>
+                                <p class="target-team">To: <strong>@assignment.TargetTeam</strong></p>
+
+                                @* Display Type Badges *@
+                                <div class="display-badges">
+                                    @if (assignment.IsNewsOfWeek)
+                                    {
+                                        <span class="display-badge news-badge">
+                                            <i class="bi bi-newspaper"></i> News of the Week
+                                        </span>
+                                    }
+                                    @if (assignment.IsWallpaper)
+                                    {
+                                        <span class="display-badge wallpaper-badge">
+                                            <i class="bi bi-image-fill"></i> Wallpaper
+                                        </span>
+                                    }
+                                    @if (assignment.IsLogonScreen)
+                                    {
+                                        <span class="display-badge logon-badge">
+                                            <i class="bi bi-lock-fill"></i> Logon Screen
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="status-badge pending">Pending</span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(presentation?.Description))
+                        {
+                            <p class="description">@presentation.Description</p>
+                        }
+
+                        @if (schedule != null)
+                        {
+                            <div class="schedule-box">
+                                <p class="schedule-label">Schedule:</p>
+                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                            </div>
+                        }
+
+                        @if (CanEdit(assignment) || CanDelete(assignment))
+                        {
+                            <div class="action-buttons">
+                                @if (CanEdit(assignment))
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAssignment(assignment)">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                }
+                                @if (CanDelete(assignment))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
+                                        @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-trash"></i>
+                                        }
+                                        Delete
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+
+        @* Approved - Ready to Publish Section *@
+        @if (approvedAssignments.Any())
+        {
+            <div class="section-header">
+                <h4>✓ Approved - Ready to Publish (@approvedAssignments.Count)</h4>
+            </div>
+
+            @foreach (var assignment in approvedAssignments)
+            {
+                var presentation = presentations.FirstOrDefault(p => p.PresentationID == assignment.PresentationID);
+                var schedule = schedules.FirstOrDefault(s => s.ScheduleID == assignment.ScheduleID);
+
+                <div class="assignment-card approved-card">
+                    <div class="card-content">
+                        <div class="card-header-section">
+                            <div class="presentation-info">
+                                <h3>@presentation?.Name</h3>
+                                <p class="target-team">
+                                    To: <strong>@assignment.TargetTeam</strong>
+                                    @if (assignment.ApprovedDate.HasValue)
+                                    {
+                                        <span class="approval-date">| Approved: @assignment.ApprovedDate.Value.ToString("MMM dd, yyyy")</span>
+                                    }
+                                </p>
+
+                                @* Display Type Badges *@
+                                <div class="display-badges">
+                                    @if (assignment.IsNewsOfWeek)
+                                    {
+                                        <span class="display-badge news-badge">
+                                            <i class="bi bi-star-fill"></i> News of Week
+                                        </span>
+                                    }
+                                    @if (assignment.IsWallpaper)
+                                    {
+                                        <span class="display-badge wallpaper-badge">
+                                            <i class="bi bi-image"></i> Wallpaper
+                                        </span>
+                                    }
+                                    @if (assignment.IsLogonScreen)
+                                    {
+                                        <span class="display-badge logon-badge">
+                                            <i class="bi bi-lock"></i> Logon Screen
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="status-badge approved">Approved</span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(presentation?.Description))
+                        {
+                            <p class="description">@presentation.Description</p>
+                        }
+
+                        @if (schedule != null)
+                        {
+                            <div class="schedule-box">
+                                <p class="schedule-label">Schedule:</p>
+                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                            </div>
+                        }
+
+                        @if (CanPublish(assignment))
+                        {
+                            <button class="btn btn-success publish-btn" @onclick="() => PublishAssignment(assignment)" disabled="@isPublishing">
+                                @if (isPublishing && publishingAssignmentId == assignment.AssignmentID)
+                                {
+                                    <span class="spinner-border spinner-border-sm"></span>
+                                    <span>Publishing...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-send"></i>
+                                    <span>Publish</span>
+                                }
+                            </button>
+                        }
+
+                        @if (CanEdit(assignment) || CanDelete(assignment))
+                        {
+                            <div class="action-buttons">
+                                @if (CanEdit(assignment))
+                                {
+                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAssignment(assignment)">
+                                        <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                }
+                                @if (CanDelete(assignment))
+                                {
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
+                                        @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
+                                        {
+                                            <span class="spinner-border spinner-border-sm"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-trash"></i>
+                                        }
+                                        Delete
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+
+        @* Published Section *@
+        @if (publishedAssignments.Any())
+        {
+            <div class="section-header">
+                <h4>☑ Published (@publishedAssignments.Count)</h4>
+            </div>
+
+            @foreach (var assignment in publishedAssignments)
+            {
+                var presentation = presentations.FirstOrDefault(p => p.PresentationID == assignment.PresentationID);
+                var schedule = schedules.FirstOrDefault(s => s.ScheduleID == assignment.ScheduleID);
+
+                <div class="assignment-card published-card">
+                    <div class="card-content">
+                        <div class="card-header-section">
+                            <div class="presentation-info">
+                                <h3>@presentation?.Name</h3>
+                                <p class="target-team">
+                                    To: <strong>@assignment.TargetTeam</strong>
+                                    @if (assignment.PublishedDate.HasValue)
+                                    {
+                                        <span class="approval-date">| Published: @assignment.PublishedDate.Value.ToString("MMM dd, yyyy")</span>
+                                    }
+                                </p>
+
+                                @* Display Type Badges *@
+                                <div class="display-badges">
+                                    @if (assignment.IsNewsOfWeek)
+                                    {
+                                        <span class="display-badge news-badge">
+                                            <i class="bi bi-star-fill"></i> News of Week
+                                        </span>
+                                    }
+                                    @if (assignment.IsWallpaper)
+                                    {
+                                        <span class="display-badge wallpaper-badge">
+                                            <i class="bi bi-image"></i> Wallpaper
+                                        </span>
+                                    }
+                                    @if (assignment.IsLogonScreen)
+                                    {
+                                        <span class="display-badge logon-badge">
+                                            <i class="bi bi-lock"></i> Logon Screen
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                            <span class="status-badge published">Published</span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(presentation?.Description))
+                        {
+                            <p class="description">@presentation.Description</p>
+                        }
+
+                        @if (schedule != null)
+                        {
+                            <div class="schedule-box">
+                                <p class="schedule-label">Schedule:</p>
+                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                            </div>
+                        }
+
+                        @if (assignment.PublishedPaths != null && assignment.PublishedPaths.Any())
+                        {
+                            <div class="published-files">
+                                <p class="files-label">Published files:</p>
+                                <ul class="file-list">
+                                    @foreach (var path in assignment.PublishedPaths)
+                                    {
+                                        <li>@path</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                        @* ADD THIS SECTION - Delete button for Published *@
+                        @if (CanDeletePublished(assignment))
+                        {
+                            <div class="action-buttons">
+                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
+                                    @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
+                                    {
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-trash"></i>
+                                    }
+                                    Delete
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show mt-3">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show mt-3">
+            <i class="bi bi-check-circle me-2"></i>
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+</div>
+
+<style>
+.my-assignments-container {
+    padding: 30px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-header {
+    margin-bottom: 30px;
+}
+
+.page-header h2 {
+    margin: 0;
+    font-size: 2rem;
+    color: #333;
+}
+
+.subtitle {
+    margin: 5px 0 0 0;
+    color: #666;
+    font-size: 1rem;
+}
+
+.section-header {
+    margin: 40px 0 20px 0;
+}
+
+.section-header h4 {
+    font-size: 1.3rem;
+    color: #444;
+    font-weight: 600;
+}
+
+.assignment-card {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    border-left: 5px solid #ccc;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.assignment-card:hover {
+    transform: translateX(2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}
+
+.pending-card {
+    border-left-color: #ffc107;
+}
+
+.approved-card {
+    border-left-color: #28a745;
+}
+
+.published-card {
+    border-left-color: #007bff;
+}
+
+.card-content {
+    padding: 25px;
+}
+
+.card-header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 15px;
+}
+
+.presentation-info {
+    flex: 1;
+}
+
+.presentation-info h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.4rem;
+    color: #222;
+    font-weight: 600;
+}
+
+.target-team {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.approval-date {
+    color: #888;
+    font-size: 0.9rem;
+}
+
+.display-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.display-badge {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: white;
+}
+
+.news-badge {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.wallpaper-badge {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.logon-badge {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.status-badge {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.status-badge.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.approved {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.published {
+    background: #cfe2ff;
+    color: #084298;
+}
+
+.description {
+    color: #666;
+    font-size: 0.95rem;
+    margin: 15px 0;
+    line-height: 1.5;
+}
+
+.schedule-box {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 15px 0;
+}
+
+.schedule-label {
+    margin: 0 0 5px 0;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #444;
+}
+
+.schedule-dates {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #555;
+}
+
+.published-files {
+    background: #e7f3ff;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 15px 0;
+}
+
+.files-label {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #0056b3;
+}
+
+.file-list {
+    margin: 0;
+    padding-left: 20px;
+    list-style: none;
+}
+
+.file-list li {
+    font-size: 0.85rem;
+    color: #555;
+    margin: 4px 0;
+    font-family: 'Courier New', monospace;
+}
+
+.file-list li::before {
+    content: "📄 ";
+    margin-right: 5px;
+}
+
+.publish-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 15px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 80px 20px;
+    color: #999;
+}
+
+.empty-state h3 {
+    margin: 20px 0 10px 0;
+    color: #666;
+}
+
+.empty-state p {
+    color: #999;
+}
+</style>
+
+@code {
+    private List<Assignment> assignments = new();
+    private List<Presentation> presentations = new();
+    private List<Schedule> schedules = new();
+
+    private List<Assignment> pendingAssignments => assignments
+        .Where(a => a.Status == AssignmentStatus.PendingApproval)
+        .OrderByDescending(a => a.DateCreated)
+        .ToList();
+
+    private List<Assignment> approvedAssignments => assignments
+        .Where(a => a.Status == AssignmentStatus.Approved)
+        .OrderByDescending(a => a.ApprovedDate ?? a.DateCreated)
+        .ToList();
+
+    private List<Assignment> publishedAssignments => assignments
+        .Where(a => a.Status == AssignmentStatus.Published)
+        .OrderByDescending(a => a.PublishedDate ?? a.DateCreated)
+        .ToList();
+
+    private bool isLoading = true;
+    private bool isPublishing = false;
+    private bool isDeleting = false;
+    private string? publishingAssignmentId;
+    private string? deletingAssignmentId;
+    private string? errorMessage;
+    private string? successMessage;
+    private User? currentUser;
+    private string? currentTeamFolder;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUser = AuthService.GetCurrentUser();
+        currentTeamFolder = TeamContext.CurrentTeamFolderName;
+
+        if (currentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(currentTeamFolder))
+        {
+            errorMessage = "No team selected. Please select a team from the home page.";
+            isLoading = false;
+            return;
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            // Load ALL assignments for the current team (not just user's own)
+            assignments = await AssignmentService.GetAssignmentsForTeamAsync(currentTeamFolder!);
+
+            // Load presentations and schedules
+            presentations = await PresentationService.GetPresentationsForTeamAsync(currentTeamFolder!);
+            schedules = await ScheduleService.GetSchedulesForTeamAsync(currentTeamFolder!);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading data: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"Error loading assignments: {ex}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private bool CanEdit(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // SystemAdmin can edit anything
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Creator can edit their own (if not published)
+        if (assignment.CreatedBy == currentUser.UserID &&
+            assignment.Status != AssignmentStatus.Published)
+            return true;
+
+        return false;
+    }
+
+    private bool CanDelete(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // For Pending/Approved: Any ContentAuthor from current team OR SystemAdmin
+        if (assignment.Status != AssignmentStatus.Published)
+        {
+            // SystemAdmin can delete anything
+            if (currentUser.IsSystemAdmin) return true;
+
+            // Any ContentAuthor from current team can delete
+            var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+                tr.TeamFolderName == currentTeamFolder &&
+                tr.Roles.Contains("ContentAuthor"));
+
+            if (hasContentAuthorRole) return true;
+        }
+
+        return false;
+    }
+    
+    /*
+    private bool CanDelete(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // SystemAdmin can delete anything
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Any ContentAuthor from current team can delete (Pending/Approved/Published)
+        var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+            tr.TeamFolderName == currentTeamFolder &&
+            tr.Roles.Contains("ContentAuthor"));
+
+        return hasContentAuthorRole;
+    }
+    */
+
+    private bool CanDeletePublished(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // SystemAdmin can delete any published assignment
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Any ContentAuthor from current team can delete published assignments
+        var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+            tr.TeamFolderName == currentTeamFolder &&
+            tr.Roles.Contains("ContentAuthor"));
+
+        return hasContentAuthorRole;
+    }
+
+    /*
+    private bool CanPublish(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // Only approved assignments can be published
+        if (assignment.Status != AssignmentStatus.Approved) return false;
+
+        // SystemAdmin can publish
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Creator can publish their own
+        if (assignment.CreatedBy == currentUser.UserID) return true;
+
+        return false;
+    }
+    */
+
+    private bool CanPublish(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // Only approved assignments can be published
+        if (assignment.Status != AssignmentStatus.Approved) return false;
+
+        // SystemAdmin can publish anything
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Creator can publish their own
+        if (assignment.CreatedBy == currentUser.UserID) return true;
+
+        // Any ContentAuthor of the current team can publish
+        // regardless of who created the assignment
+        var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+        return currentUser.TeamRoles.Any(tr =>
+            tr.TeamFolderName == teamFolderName &&
+            tr.Roles.Contains("ContentAuthor"));
+    }
+
+    private void EditAssignment(Assignment assignment)
+    {
+        Navigation.NavigateTo($"/edit-assignment/{assignment.SourceTeam}/{assignment.AssignmentID}");
+    }
+
+    private async Task DeleteAssignment(Assignment assignment)
+    {
+        try
+        {
+            isDeleting = true;
+            deletingAssignmentId = assignment.AssignmentID;
+            errorMessage = null;
+            successMessage = null;
+
+            await AssignmentService.DeleteAssignmentAsync(assignment.SourceTeam, assignment.AssignmentID);
+
+            successMessage = "Assignment moved to deleted folder";
+            await LoadDataAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "You don't have permission to delete this assignment";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting assignment: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"Delete error: {ex}");
+        }
+        finally
+        {
+            isDeleting = false;
+            deletingAssignmentId = null;
+        }
+    }
+
+    private async Task PublishAssignment(Assignment assignment)
+    {
+        try
+        {
+            isPublishing = true;
+            publishingAssignmentId = assignment.AssignmentID;
+            errorMessage = null;
+            successMessage = null;
+
+            var result = await PublishingService.PublishAssignmentAsync(
+                assignment.SourceTeam,
+                assignment.AssignmentID);
+
+            if (result.Success)
+            {
+                successMessage = result.Message;
+                await LoadDataAsync();
+            }
+            else
+            {
+                errorMessage = result.ErrorMessage;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error publishing: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"Publish error: {ex}");
+        }
+        finally
+        {
+            isPublishing = false;
+            publishingAssignmentId = null;
+        }
+    }
+
+    private string GetDaysOfWeekString(string daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek)) return "All days";
+
+        var dayMap = new Dictionary<string, string>
+        {
+            {"1", "Mon"}, {"2", "Tue"}, {"3", "Wed"},
+            {"4", "Thu"}, {"5", "Fri"}, {"6", "Sat"}, {"7", "Sun"}
+        };
+
+        var days = daysOfWeek.Split(',')
+            .Select(d => dayMap.ContainsKey(d.Trim()) ? dayMap[d.Trim()] : d.Trim());
+
+        return string.Join(", ", days);
+    }
+}

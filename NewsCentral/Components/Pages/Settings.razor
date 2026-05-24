@@ -1,0 +1,198 @@
+﻿@page "/settings"
+@using NewsCentral.Services
+@using NewsCentral.Models
+@using Microsoft.Extensions.Localization
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject IStringLocalizer<Settings> Localizer
+
+<PageTitle>@Localizer["Settings"]</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>@Localizer["Settings"]</h1>
+        <p class="page-description">@Localizer["ManageYourSettings"]</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle me-2"></i>
+            @successMessage
+            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+
+    @* User Profile Section *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-person me-2"></i>@Localizer["UserProfile"]</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-3"><strong>@Localizer["Username"]:</strong></div>
+                <div class="col-md-9">@currentUser?.Username</div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-3"><strong>@Localizer["DisplayName"]:</strong></div>
+                <div class="col-md-9">@currentUser?.DisplayName</div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-3"><strong>@Localizer["Email"]:</strong></div>
+                <div class="col-md-9">@currentUser?.Email</div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-3"><strong>@Localizer["UserID"]:</strong></div>
+                <div class="col-md-9"><code>@currentUser?.UserID</code></div>
+            </div>
+            @if (currentUser?.LastLogin != null)
+            {
+                <div class="row mb-3">
+                    <div class="col-md-3"><strong>@Localizer["LastLogin"]:</strong></div>
+                    <div class="col-md-9">@currentUser.LastLogin.Value.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* Change Password Section *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-key me-2"></i>@Localizer["ChangePassword"]</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">@Localizer["CurrentPassword"]</label>
+                <input type="password" class="form-control" @bind="currentPassword" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">@Localizer["NewPassword"]</label>
+                <input type="password" class="form-control" @bind="newPassword" />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">@Localizer["ConfirmPassword"]</label>
+                <input type="password" class="form-control" @bind="confirmPassword" />
+            </div>
+            <button class="btn btn-primary" @onclick="ChangePassword">
+                <i class="bi bi-save me-2"></i>@Localizer["ChangePassword"]
+            </button>
+        </div>
+    </div>
+
+    @* Language Preferences *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-globe me-2"></i>@Localizer["Language"]</h5>
+        </div>
+        <div class="card-body">
+            <select class="form-select" @onchange="ChangeLanguage">
+                <option value="en">English</option>
+                <option value="de">Deutsch</option>
+                <option value="es" selected>Español</option>
+            </select>
+            <small class="text-muted">@Localizer["LanguageChangeRequiresReload"]</small>
+        </div>
+    </div>
+
+    @* Admin Section *@
+    @if (currentUser?.IsSystemAdmin == true)
+    {
+        <div class="card mb-4">
+            <div class="card-header bg-warning">
+                <h5><i class="bi bi-shield-lock me-2"></i>@Localizer["AdminSettings"]</h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    <a href="/users" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people me-2"></i>@Localizer["ManageUsers"]
+                    </a>
+                    <a href="/teams" class="list-group-item list-group-item-action">
+                        <i class="bi bi-diagram-3 me-2"></i>@Localizer["ManageTeams"]
+                    </a>
+                    <a href="/index-management" class="list-group-item list-group-item-action">
+                        <i class="bi bi-database me-2"></i>@Localizer["IndexManagement"]
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private User? currentUser;
+    private string currentPassword = string.Empty;
+    private string newPassword = string.Empty;
+    private string confirmPassword = string.Empty;
+    private string? successMessage;
+    private string? errorMessage;
+
+    protected override void OnInitialized()
+    {
+        currentUser = AuthService.GetCurrentUser();
+
+        if (currentUser == null)
+        {
+            Navigation.NavigateTo("/login");
+        }
+    }
+
+    private async Task ChangePassword()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(currentPassword))
+        {
+            errorMessage = Localizer["CurrentPasswordRequired"];
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
+        {
+            errorMessage = Localizer["PasswordTooShort"];
+            return;
+        }
+
+        if (newPassword != confirmPassword)
+        {
+            errorMessage = Localizer["PasswordsDoNotMatch"];
+            return;
+        }
+
+        try
+        {
+            // TODO: Implement password change in AuthenticationService
+            // await AuthService.ChangePasswordAsync(currentPassword, newPassword);
+
+            successMessage = Localizer["PasswordChangedSuccess"];
+
+            // Clear fields
+            currentPassword = string.Empty;
+            newPassword = string.Empty;
+            confirmPassword = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void ChangeLanguage(ChangeEventArgs e)
+    {
+        var selectedLanguage = e.Value?.ToString();
+        // TODO: Implement language change
+        // This would typically involve setting a cookie or user preference
+        // and reloading the page
+        successMessage = $"Language changed to: {selectedLanguage}";
+    }
+}

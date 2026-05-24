@@ -1,46 +1,128 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using NewsCentral.Models;
+using NewsCentral.Services;
 
 namespace NewsCentral.Repositories;
 
+/// <summary>
+/// General-purpose JSON file repository for non-team-scoped data.
+/// Used for: config/users.json, config/teams.json, and similar global files.
+///
+/// Path model:
+///   relativeBasePath = "config"   (relative to IStorageService root = DataPath)
+///   entityFolder     = ""         (appended to relativeBasePath; empty = files sit directly in base)
+///   file             = "{id}.json"
+///
+///   → resolved path: "config/users.json"
+///
+/// Unlike TeamAwareRepository, files here have no prefix — the id IS the filename.
+/// e.g. GetById("users") → "config/users.json"
+/// </summary>
 public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
 {
-    private readonly string _basePath;
+    private readonly IStorageService _storage;
+    private readonly string _relativeBasePath;
     private readonly string _entityFolder;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
-    public JsonFileRepository(string basePath, string entityFolder)
+    // ── Constructors ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Primary constructor — inject IStorageService from DI or pass directly.
+    /// Use this in all new and migrated code.
+    ///
+    /// Example (UserService after migration):
+    ///   new JsonFileRepository&lt;UsersCollection&gt;(_storage, "config", "")
+    ///   → reads/writes  DataPath/config/users.json
+    /// </summary>
+    public JsonFileRepository(
+        IStorageService storage,
+        string relativeBasePath,
+        string entityFolder)
     {
-        _basePath = basePath;
+        _storage = storage;
+        _relativeBasePath = relativeBasePath;
         _entityFolder = entityFolder;
 
-        // Ensure base directory exists
-        Directory.CreateDirectory(_basePath);
-        Directory.CreateDirectory(Path.Combine(_basePath, _entityFolder));
+        // Directory.CreateDirectory is synchronous inside LocalStorageService,
+        // so blocking here is safe.
+        _storage.EnsureFolderExistsAsync(RelativeFolderPath).GetAwaiter().GetResult();
     }
+
+    /// <summary>
+    /// Bridge constructor — preserves the existing (basePath, entityFolder)
+    /// call signature so UserService and TeamService keep compiling unchanged.
+    ///
+    /// basePath is treated as the storage root for a LocalStorageService,
+    /// so the resolved file path stays identical to before:
+    ///   basePath = "C:\NC\config", entityFolder = ""
+    ///   → GetFilePath("users") = "C:\NC\config\users.json"  ✓
+    ///
+    /// To migrate a caller:
+    ///   Before: new JsonFileRepository&lt;T&gt;(Path.Combine(config.DataPath, "config"), "")
+    ///   After:  new JsonFileRepository&lt;T&gt;(_storage, "config", "")
+    /// </summary>
+    [Obsolete(
+        "Pass IStorageService instead of a raw basePath string. " +
+        "Inject IStorageService into the owning service, use relativeBasePath " +
+        "relative to DataPath, and switch to the primary constructor. " +
+        "Remove this bridge once all callers are migrated.")]
+    public JsonFileRepository(string basePath, string entityFolder)
+        : this(new LocalStorageService(basePath), "", entityFolder) { }
+
+    // ── Path helpers ─────────────────────────────────────────────────────────
+
+    // e.g. "config" when relativeBasePath="config", entityFolder=""
+    // e.g. "config/teams" when relativeBasePath="config", entityFolder="teams"
+    private string RelativeFolderPath
+    {
+        get
+        {
+            var parts = new[] { _relativeBasePath, _entityFolder }
+                .Where(p => !string.IsNullOrEmpty(p));
+            return string.Join("/", parts); // "" when both are empty
+        }
+    }
+
+    // e.g. "config/users.json"  (id = "users")
+    private string RelativeFilePath(string id)
+    {
+        var folder = RelativeFolderPath;
+        var file   = $"{id}.json";
+        return string.IsNullOrEmpty(folder) ? file : $"{folder}/{file}";
+    }
+
+    // ── Shared serializer options ─────────────────────────────────────────────
+
+    // JsonStringEnumConverter added to all methods for consistency —
+    // previously CreateAsync/UpdateAsync included it but GetAllAsync/GetByIdAsync did not.
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+    };
+
+    // ── IRepository<T> ───────────────────────────────────────────────────────
 
     public async Task<List<T>> GetAllAsync()
     {
-        var folderPath = Path.Combine(_basePath, _entityFolder);
-
-        if (!Directory.Exists(folderPath))
-            return new List<T>();
-
-        var files = Directory.GetFiles(folderPath, "*.json");
+        var files = await _storage.ListFilesAsync(RelativeFolderPath, "*.json");
         var entities = new List<T>();
 
-        foreach (var file in files)
+        foreach (var relativePath in files)
         {
             try
             {
-                var json = await File.ReadAllTextAsync(file);
-                var entity = JsonSerializer.Deserialize<T>(json);
+                var json = await _storage.ReadTextAsync(relativePath);
+                if (json == null) continue;
+
+                var entity = JsonSerializer.Deserialize<T>(json, JsonOptions);
                 if (entity != null)
                     entities.Add(entity);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading {file}: {ex.Message}");
+                Console.WriteLine($"Error reading {relativePath}: {ex.Message}");
             }
         }
 
@@ -49,19 +131,16 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
 
     public async Task<T?> GetByIdAsync(string id)
     {
-        var filePath = GetFilePath(id);
-
-        if (!File.Exists(filePath))
-            return null;
+        var json = await _storage.ReadTextAsync(RelativeFilePath(id));
+        if (json == null) return null;
 
         try
         {
-            var json = await File.ReadAllTextAsync(filePath);
-            return JsonSerializer.Deserialize<T>(json);
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error reading {filePath}: {ex.Message}");
+            Console.WriteLine($"Error deserializing {id}: {ex.Message}");
             return null;
         }
     }
@@ -71,25 +150,19 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
         await _lock.WaitAsync();
         try
         {
-            var filePath = GetFilePath(entity.GetId());
+            var path = RelativeFilePath(entity.GetId());
 
-            if (File.Exists(filePath))
-                throw new InvalidOperationException($"Entity {entity.GetId()} already exists");
+            if (await _storage.FileExistsAsync(path))
+                throw new InvalidOperationException(
+                    $"Entity {entity.GetId()} already exists at {path}");
 
-            var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-            });
-
-            await File.WriteAllTextAsync(filePath, json);
+            await _storage.WriteTextAsync(
+                path,
+                JsonSerializer.Serialize(entity, JsonOptions));
 
             return entity;
         }
-        finally
-        {
-            _lock.Release();
-        }
+        finally { _lock.Release(); }
     }
 
     public async Task<T> UpdateAsync(T entity)
@@ -97,25 +170,19 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
         await _lock.WaitAsync();
         try
         {
-            var filePath = GetFilePath(entity.GetId());
+            var path = RelativeFilePath(entity.GetId());
 
-            if (!File.Exists(filePath))
-                throw new InvalidOperationException($"Entity {entity.GetId()} does not exist");
+            if (!await _storage.FileExistsAsync(path))
+                throw new InvalidOperationException(
+                    $"Entity {entity.GetId()} does not exist at {path}");
 
-            var json = JsonSerializer.Serialize(entity, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-            });
-
-            await File.WriteAllTextAsync(filePath, json);
+            await _storage.WriteTextAsync(
+                path,
+                JsonSerializer.Serialize(entity, JsonOptions));
 
             return entity;
         }
-        finally
-        {
-            _lock.Release();
-        }
+        finally { _lock.Release(); }
     }
 
     public async Task<bool> DeleteAsync(string id)
@@ -123,29 +190,17 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
         await _lock.WaitAsync();
         try
         {
-            var filePath = GetFilePath(id);
+            var path = RelativeFilePath(id);
 
-            if (!File.Exists(filePath))
+            if (!await _storage.FileExistsAsync(path))
                 return false;
 
-            File.Delete(filePath);
+            await _storage.DeleteFileAsync(path);
             return true;
         }
-        finally
-        {
-            _lock.Release();
-        }
+        finally { _lock.Release(); }
     }
 
-    public async Task<bool> ExistsAsync(string id)
-    {
-        var filePath = GetFilePath(id);
-        return await Task.FromResult(File.Exists(filePath));
-    }
-
-    private string GetFilePath(string id)
-    {
-        var fileName = $"{id}.json";
-        return Path.Combine(_basePath, _entityFolder, fileName);
-    }
+    public Task<bool> ExistsAsync(string id) =>
+        _storage.FileExistsAsync(RelativeFilePath(id));
 }

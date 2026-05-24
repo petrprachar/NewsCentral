@@ -26,6 +26,17 @@ namespace NewsCentral.Models
         public bool IsWallpaper { get; set; } = false;
         public bool IsLogonScreen { get; set; } = false;
 
+        // Countdown timer — replaces the removed registry default
+        public int DisplayDurationSeconds { get; set; }
+
+        // Virtual desktop switch
+        public bool UseVirtualDesktop { get; set; }
+
+        // Background color of the virtual desktop (e.g. "#1A1A2E" or "Black")
+        // Applied to the new desktop wallpaper/background if the OS allows
+        public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
+        public string? Signature { get; set; } // HMAC — reserved, not yet implemented
+
         // Base64 content
         public string ContentImageBase64 { get; set; } = string.Empty;
 

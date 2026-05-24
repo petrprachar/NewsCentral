@@ -1,101 +1,53 @@
-﻿using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
-using System.Text.Json;
 
 namespace NewsCentral.Services;
 
 public class PresentationService
 {
-    private readonly string _basePath;
+    private readonly IStorageService _storage;
+    private readonly IBlobDistributionService _blobDistribution;
     private readonly AuthenticationService _authService;
-
     private readonly PosterGenerationService _posterService;
+    private readonly IndexGenerationService _indexGenerationService;
 
     public PresentationService(
-        AppConfiguration config,
+        IStorageService storage,
+        IBlobDistributionService blobDistribution,
         AuthenticationService authService,
-        PosterGenerationService posterService)
+        PosterGenerationService posterService,
+        IndexGenerationService indexGenerationService)
     {
-        _basePath = config.DataPath;
-        _authService = authService;
-        _posterService = posterService;
+        _storage                = storage;
+        _blobDistribution       = blobDistribution;
+        _authService            = authService;
+        _posterService          = posterService;
+        _indexGenerationService = indexGenerationService;
     }
 
-    public async Task<Presentation> UpdatePresentationWithPosterAsync(
-    string teamFolderName,
-    string presentationId,
-    string headlineText,
-    string bodyText,
-    string ctaText,
-    bool isNewsOfWeek,
-    bool isWallpaper,
-    bool isLogonScreen
-    )
-    {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
-
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
-        var presentation = await repo.GetByIdAsync(presentationId);
-
-        if (presentation == null)
-        {
-            throw new InvalidOperationException($"Presentation {presentationId} not found");
-        }
-
-        // Only creator or SystemAdmin can edit
-        if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-        {
-            throw new UnauthorizedAccessException("You can only edit your own presentations");
-        }
-
-        // Load original image
-        var originalImagePath = Path.Combine(_basePath, presentation.OriginalImagePath);
-        var originalImageData = await File.ReadAllBytesAsync(originalImagePath);
-
-        // Generate poster
-        var posterPath = await _posterService.GeneratePosterAsync(
-            teamFolderName,
-            presentationId,
-            presentation.Version.ToString(),
-            originalImageData,
-            headlineText,
-            bodyText,
-            ctaText
-        );
-
-        // Get poster as base64 for JSON storage
-        var posterImageData = await _posterService.GetPosterImageDataAsync(teamFolderName, posterPath);
-        var posterBase64 = Convert.ToBase64String(posterImageData);
-
-        // Update presentation
-        presentation.GeneratedImagePath = posterPath;
-        presentation.ContentImageBase64 = posterBase64;
-        presentation.LastModified = DateTime.UtcNow;
-        presentation.ModifiedBy = currentUser.UserID;
-
-        presentation.IsNewsOfWeek = isNewsOfWeek;
-        presentation.IsWallpaper = isWallpaper;
-        presentation.IsLogonScreen = isLogonScreen;
-
-        return await repo.UpdateAsync(presentation);
-    }
+    // ── Queries ──────────────────────────────────────────────────────────────
 
     public async Task<List<Presentation>> GetPresentationsForTeamAsync(string teamFolderName)
     {
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
+        var repo = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
         return await repo.GetAllAsync();
     }
 
     public async Task<Presentation?> GetPresentationAsync(string teamFolderName, string presentationId)
     {
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
+        var repo = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
         return await repo.GetByIdAsync(presentationId);
     }
+
+    public async Task<byte[]> GetImageDataAsync(string teamFolderName, string imagePath)
+    {
+        var data = await _storage.ReadBytesAsync(imagePath);
+        if (data == null)
+            throw new FileNotFoundException($"Image not found: {imagePath}");
+        return data;
+    }
+
+    // ── Create ───────────────────────────────────────────────────────────────
 
     public async Task<Presentation> CreatePresentationAsync(
         string teamId,
@@ -106,51 +58,56 @@ public class PresentationService
         byte[] imageData,
         string originalImageName)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        // Check if user has ContentAuthor role for this team
         if (!_authService.HasRole(teamId, "ContentAuthor") && !currentUser.IsSystemAdmin)
-        {
-            throw new UnauthorizedAccessException("You don't have permission to create content for this team");
-        }
+            throw new UnauthorizedAccessException(
+                "You don't have permission to create content for this team");
 
-        // Save original image
-        var imageId = Guid.NewGuid().ToString();
+        // ── Original image → original/ ────────────────────────────────────────
+        var imageId        = Guid.NewGuid().ToString();
         var imageExtension = Path.GetExtension(originalImageName);
         var savedImageName = $"img_{imageId}{imageExtension}";
-        var imagePath = Path.Combine(_basePath, teamFolderName, "images", "original", savedImageName);
+        var imageRelPath   = $"{teamFolderName}/images/original/{savedImageName}";
 
-        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
-        await File.WriteAllBytesAsync(imagePath, imageData);
+        await _storage.WriteBytesAsync(imageRelPath, imageData);
 
-        // Create presentation
+        // ── Copy to generated/ so GeneratedImagePath is always populated ──────
+        // Satellite components can read from generated/ regardless of whether
+        // posterization was run. The original/ copy is preserved as the untouched
+        // source for future poster regeneration.
+        var presentationId    = Guid.NewGuid().ToString();
+        var generatedFileName = $"poster_{presentationId}_v1.jpg";
+        var generatedRelPath  = $"{teamFolderName}/images/generated/{generatedFileName}";
+
+        await _storage.WriteBytesAsync(generatedRelPath, imageData);
+
         var presentation = new Presentation
         {
-            PresentationID = Guid.NewGuid().ToString(),
-            Version = 1,
-            TeamID = teamId,
-            TeamFolderName = teamFolderName,
-            Name = name,
-            Description = description,
-            MoreUrl = moreUrl,
-            DateCreated = DateTime.UtcNow,
-            OriginalImagePath = $"{teamFolderName}/images/original/{savedImageName}",
-            ImageOriginalName = originalImageName,
-            ImageName = savedImageName,
-            CreatedBy = currentUser.UserID,
-            LastModified = DateTime.UtcNow,
-            ModifiedBy = currentUser.UserID,
-
+            PresentationID     = presentationId,
+            Version            = 1,
+            TeamID             = teamId,
+            TeamFolderName     = teamFolderName,
+            Name               = name,
+            Description        = description,
+            MoreUrl            = moreUrl,
+            DateCreated        = DateTime.UtcNow,
+            OriginalImagePath  = imageRelPath,
+            GeneratedImagePath = generatedRelPath,   // always set at creation
+            ImageOriginalName  = originalImageName,
+            ImageName          = savedImageName,
+            CreatedBy          = currentUser.UserID,
+            LastModified       = DateTime.UtcNow,
+            ModifiedBy         = currentUser.UserID,
             ContentImageBase64 = Convert.ToBase64String(imageData)
         };
 
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
+        var repo = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
         return await repo.CreateAsync(presentation);
     }
+
+    // ── Update ───────────────────────────────────────────────────────────────
 
     public async Task<Presentation> UpdatePresentationAsync(
         string teamFolderName,
@@ -159,37 +116,79 @@ public class PresentationService
         string description,
         string moreUrl)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
-        var presentation = await repo.GetByIdAsync(presentationId);
+        var repo         = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId)
+            ?? throw new InvalidOperationException($"Presentation {presentationId} not found");
 
-        if (presentation == null)
-        {
-            throw new InvalidOperationException($"Presentation {presentationId} not found");
-        }
-
-        // Only creator or SystemAdmin can edit
         if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-        {
             throw new UnauthorizedAccessException("You can only edit your own presentations");
-        }
 
-        presentation.Name = name;
-        presentation.Description = description;
-        presentation.MoreUrl = moreUrl;
+        presentation.Name         = name;
+        presentation.Description  = description;
+        presentation.MoreUrl      = moreUrl;
         presentation.LastModified = DateTime.UtcNow;
-        presentation.ModifiedBy = currentUser.UserID;
+        presentation.ModifiedBy   = currentUser.UserID;
 
-        return await repo.UpdateAsync(presentation);
+        var result = await repo.UpdateAsync(presentation);
+        await RegenerateIndexesForPresentationAsync(teamFolderName, presentationId);
+        return result;
+    }
+
+    public async Task<Presentation> UpdatePresentationWithPosterAsync(
+        string teamFolderName,
+        string presentationId,
+        string headlineText,
+        string bodyText,
+        string ctaText,
+        bool isNewsOfWeek,
+        bool isWallpaper,
+        bool isLogonScreen)
+    {
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
+
+        var repo         = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId)
+            ?? throw new InvalidOperationException($"Presentation {presentationId} not found");
+
+        if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
+            throw new UnauthorizedAccessException("You can only edit your own presentations");
+
+        var originalImageData = await _storage.ReadBytesAsync(presentation.OriginalImagePath)
+            ?? throw new FileNotFoundException(
+                $"Original image not found: {presentation.OriginalImagePath}");
+
+        var posterPath = await _posterService.GeneratePosterAsync(
+            teamFolderName,
+            presentationId,
+            presentation.Version.ToString(),
+            originalImageData,
+            headlineText,
+            bodyText,
+            ctaText);
+
+        var posterImageData = await _posterService.GetPosterImageDataAsync(teamFolderName, posterPath);
+
+        presentation.GeneratedImagePath = posterPath;
+        presentation.ContentImageBase64 = Convert.ToBase64String(posterImageData);
+        presentation.LastModified       = DateTime.UtcNow;
+        presentation.ModifiedBy         = currentUser.UserID;
+        presentation.IsNewsOfWeek       = isNewsOfWeek;
+        presentation.IsWallpaper        = isWallpaper;
+        presentation.IsLogonScreen      = isLogonScreen;
+
+        var result = await repo.UpdateAsync(presentation);
+        await RegenerateIndexesForPresentationAsync(teamFolderName, presentationId);
+        return result;
     }
 
     /// <summary>
-    /// Updates presentation with all fields including display flags
+    /// Update all metadata fields without regenerating the poster.
+    /// Promotes original to generated/ for any presentation that still has
+    /// GeneratedImagePath empty (created before the always-populate fix).
     /// </summary>
     public async Task<Presentation> UpdatePresentationFullAsync(
         string teamFolderName,
@@ -201,154 +200,255 @@ public class PresentationService
         bool isWallpaper,
         bool isLogonScreen)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
-        var presentation = await repo.GetByIdAsync(presentationId);
+        var repo         = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId)
+            ?? throw new InvalidOperationException($"Presentation {presentationId} not found");
 
-        if (presentation == null)
-        {
-            throw new InvalidOperationException($"Presentation {presentationId} not found");
-        }
-
-        // Only creator or SystemAdmin can edit
         if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-        {
             throw new UnauthorizedAccessException("You can only edit your own presentations");
-        }
 
-        // Update basic fields
-        presentation.Name = name;
-        presentation.Description = description;
-        presentation.MoreUrl = moreUrl;
-
-        // Update display flags
-        presentation.IsNewsOfWeek = isNewsOfWeek;
-        presentation.IsWallpaper = isWallpaper;
+        presentation.Name          = name;
+        presentation.Description   = description;
+        presentation.MoreUrl       = moreUrl;
+        presentation.IsNewsOfWeek  = isNewsOfWeek;
+        presentation.IsWallpaper   = isWallpaper;
         presentation.IsLogonScreen = isLogonScreen;
+        presentation.LastModified  = DateTime.UtcNow;
+        presentation.ModifiedBy    = currentUser.UserID;
 
-        // Update audit fields
-        presentation.LastModified = DateTime.UtcNow;
-        presentation.ModifiedBy = currentUser.UserID;
-
-        // If no poster exists, copy original image to ContentImageBase64
-        if (string.IsNullOrEmpty(presentation.ContentImageBase64) &&
+        // Safety net for presentations created before the always-populate fix.
+        // Condition checks GeneratedImagePath (not ContentImageBase64, which is
+        // set at create time and would never trigger this block).
+        if (string.IsNullOrEmpty(presentation.GeneratedImagePath) &&
             !string.IsNullOrEmpty(presentation.OriginalImagePath))
         {
-            var originalImagePath = Path.Combine(_basePath, presentation.OriginalImagePath);
-            if (File.Exists(originalImagePath))
+            var imageData = await _storage.ReadBytesAsync(presentation.OriginalImagePath);
+
+            if (imageData != null)
             {
-                var imageData = await File.ReadAllBytesAsync(originalImagePath);
                 presentation.ContentImageBase64 = Convert.ToBase64String(imageData);
 
-                // Also save to generated folder
-                var generatedFolderPath = Path.Combine(_basePath, teamFolderName, "images", "generated");
-                Directory.CreateDirectory(generatedFolderPath);
-
                 var contentImageFileName = $"content_{presentation.PresentationID}.jpg";
-                var contentImagePath = Path.Combine(generatedFolderPath, contentImageFileName);
-                await File.WriteAllBytesAsync(contentImagePath, imageData);
+                var contentImageRelPath  = $"{teamFolderName}/images/generated/{contentImageFileName}";
 
-                presentation.GeneratedImagePath = $"{teamFolderName}/images/generated/{contentImageFileName}";
+                await _storage.WriteBytesAsync(contentImageRelPath, imageData);
+                presentation.GeneratedImagePath = contentImageRelPath;
             }
         }
 
-        return await repo.UpdateAsync(presentation);
+        var result = await repo.UpdateAsync(presentation);
+        await RegenerateIndexesForPresentationAsync(teamFolderName, presentationId);
+        return result;
     }
 
-    /// <summary>
-    /// Moves a presentation and all its related assignments and schedules to the deleted folder
-    /// </summary>
+    // ── Delete ───────────────────────────────────────────────────────────────
+
     public async Task<bool> DeletePresentationAsync(string teamFolderName, string presentationId)
     {
-        var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null)
-        {
-            throw new UnauthorizedAccessException("Not authenticated");
-        }
+        var currentUser = _authService.GetCurrentUser()
+            ?? throw new UnauthorizedAccessException("Not authenticated");
 
-        var repo = new TeamAwareRepository<Presentation>(_basePath, teamFolderName, "presentations");
-        var presentation = await repo.GetByIdAsync(presentationId);
+        var repo         = new TeamAwareRepository<Presentation>(_storage, teamFolderName, "presentations");
+        var presentation = await repo.GetByIdAsync(presentationId)
+            ?? throw new InvalidOperationException($"Presentation {presentationId} not found");
 
-        if (presentation == null)
-        {
-            throw new InvalidOperationException($"Presentation {presentationId} not found");
-        }
-
-        // Check permissions
         if (!_authService.IsSystemAdmin() && presentation.CreatedBy != currentUser.UserID)
         {
-            throw new UnauthorizedAccessException("You don't have permission to delete this presentation");
+            var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+                tr.TeamFolderName == teamFolderName &&
+                tr.Roles.Contains("ContentAuthor"));
+
+            if (!hasContentAuthorRole)
+                throw new UnauthorizedAccessException(
+                    "Only the presentation creator, a ContentAuthor of this team, " +
+                    "or a SystemAdmin can delete this presentation");
         }
 
-        // Create deleted folder at team root level (NOT under content)
-        var teamRootPath = Path.Combine(_basePath, teamFolderName);
-        var deletedPath = Path.Combine(teamRootPath, "deleted");
-        Directory.CreateDirectory(deletedPath);
+        System.Diagnostics.Debug.WriteLine($"=== DeletePresentation: {presentationId} ===");
 
-        var teamContentPath = Path.Combine(teamRootPath, "content");
+        var targetTeamsWithPublished =
+            await GetTargetTeamsForPresentationAsync(teamFolderName, presentationId);
 
-        // Move presentation file to deleted folder
-        var presentationSourcePath = Path.Combine(teamContentPath, "presentations", $"pres_{presentationId}.json");
-        var presentationDestPath = Path.Combine(deletedPath, $"pres_{presentationId}.json");
+        // ── 1. Soft-delete presentation JSON ─────────────────────────────────
+        await _storage.MoveFileAsync(
+            $"{teamFolderName}/content/presentations/pres_{presentationId}.json",
+            $"{teamFolderName}/deleted/pres_{presentationId}.json");
 
-        if (File.Exists(presentationSourcePath))
-        {
-            File.Move(presentationSourcePath, presentationDestPath, overwrite: true);
-            System.Diagnostics.Debug.WriteLine($"✓ Moved presentation pres_{presentationId} to deleted folder");
-        }
+        System.Diagnostics.Debug.WriteLine($"✓ Moved pres_{presentationId} to deleted/");
 
-        // Find and move all related assignments
-        var assignmentRepo = new TeamAwareRepository<Assignment>(_basePath, teamFolderName, "assignments");
-        var allAssignments = await assignmentRepo.GetAllAsync();
-        var relatedAssignments = allAssignments.Where(a => a.PresentationID == presentationId).ToList();
+        // ── 2. Soft-delete all related assignments ────────────────────────────
+        var assignmentRepo     = new TeamAwareRepository<Assignment>(_storage, teamFolderName, "assignments");
+        var allAssignments     = await assignmentRepo.GetAllAsync();
+        var relatedAssignments = allAssignments
+            .Where(a => a.PresentationID == presentationId)
+            .ToList();
 
         foreach (var assignment in relatedAssignments)
         {
-            var assignmentSourcePath = Path.Combine(teamContentPath, "assignments", $"assign_{assignment.AssignmentID}.json");
-            var assignmentDestPath = Path.Combine(deletedPath, $"assign_{assignment.AssignmentID}.json");
+            var src = $"{teamFolderName}/content/assignments/assign_{assignment.AssignmentID}.json";
+            var dst = $"{teamFolderName}/deleted/assign_{assignment.AssignmentID}.json";
 
-            if (File.Exists(assignmentSourcePath))
+            if (await _storage.FileExistsAsync(src))
             {
-                File.Move(assignmentSourcePath, assignmentDestPath, overwrite: true);
-                System.Diagnostics.Debug.WriteLine($"✓ Moved assignment assign_{assignment.AssignmentID} to deleted folder");
+                await _storage.MoveFileAsync(src, dst);
+                System.Diagnostics.Debug.WriteLine(
+                    $"✓ Moved assign_{assignment.AssignmentID} to deleted/");
             }
         }
 
-        // Find and move all related schedules
-        var scheduleRepo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
-        var allSchedules = await scheduleRepo.GetAllAsync();
-        var relatedSchedules = allSchedules.Where(s => s.PresentationID == presentationId).ToList();
+        // ── 3. Soft-delete all related schedules ──────────────────────────────
+        var scheduleRepo     = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
+        var allSchedules     = await scheduleRepo.GetAllAsync();
+        var relatedSchedules = allSchedules
+            .Where(s => s.PresentationID == presentationId)
+            .ToList();
 
         foreach (var schedule in relatedSchedules)
         {
-            var scheduleSourcePath = Path.Combine(teamContentPath, "schedules", $"sched_{schedule.ScheduleID}.json");
-            var scheduleDestPath = Path.Combine(deletedPath, $"sched_{schedule.ScheduleID}.json");
+            var src = $"{teamFolderName}/content/schedules/sched_{schedule.ScheduleID}.json";
+            var dst = $"{teamFolderName}/deleted/sched_{schedule.ScheduleID}.json";
 
-            if (File.Exists(scheduleSourcePath))
+            if (await _storage.FileExistsAsync(src))
             {
-                File.Move(scheduleSourcePath, scheduleDestPath, overwrite: true);
-                System.Diagnostics.Debug.WriteLine($"✓ Moved schedule sched_{schedule.ScheduleID} to deleted folder");
+                await _storage.MoveFileAsync(src, dst);
+                System.Diagnostics.Debug.WriteLine(
+                    $"✓ Moved sched_{schedule.ScheduleID} to deleted/");
             }
         }
 
-        System.Diagnostics.Debug.WriteLine($"✓ Presentation {presentationId} and {relatedAssignments.Count} assignments, {relatedSchedules.Count} schedules moved to deleted folder");
+        System.Diagnostics.Debug.WriteLine(
+            $"✓ Moved {relatedAssignments.Count} assignments, " +
+            $"{relatedSchedules.Count} schedules to deleted/");
+
+        // ── 4. Blob distribution cleanup ──────────────────────────────────────
+        var publishedAssignments = relatedAssignments
+            .Where(a => a.Status == AssignmentStatus.Published)
+            .ToList();
+
+        foreach (var assignment in publishedAssignments)
+        {
+            try
+            {
+                await _blobDistribution.DeleteAsync(
+                    $"{assignment.TargetTeam}/content/presentations/pres_{presentationId}.json");
+
+                await _blobDistribution.DeleteAsync(
+                    $"{assignment.TargetTeam}/content/schedules/sched_{assignment.ScheduleID}.json");
+
+                if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
+                {
+                    var genFile = Path.GetFileName(presentation.GeneratedImagePath);
+                    await _blobDistribution.DeleteAsync(
+                        $"{assignment.TargetTeam}/images/generated/{genFile}");
+                }
+
+                if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
+                {
+                    var origFile = Path.GetFileName(presentation.OriginalImagePath);
+                    await _blobDistribution.DeleteAsync(
+                        $"{assignment.TargetTeam}/images/original/{origFile}");
+                }
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"✓ Blob cleanup done for assignment {assignment.AssignmentID} " +
+                    $"→ target {assignment.TargetTeam}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"⚠ WARNING: Blob cleanup failed for assignment " +
+                    $"{assignment.AssignmentID}: {ex.Message}");
+            }
+        }
+
+        // ── 5. Regenerate indexes for affected target teams ───────────────────
+        foreach (var targetTeam in targetTeamsWithPublished)
+        {
+            try
+            {
+                await _indexGenerationService.GenerateAndSaveIndexAsync(targetTeam);
+                System.Diagnostics.Debug.WriteLine($"✓ Index regenerated for {targetTeam}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"⚠ WARNING: Index regeneration failed for {targetTeam}: {ex.Message}");
+            }
+        }
+
+        System.Diagnostics.Debug.WriteLine($"=== DeletePresentation complete ===");
         return true;
     }
 
-    public async Task<byte[]> GetImageDataAsync(string teamFolderName, string imagePath)
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private async Task RegenerateIndexesForPresentationAsync(
+        string sourceTeamFolderName,
+        string presentationId)
     {
-        var fullPath = Path.Combine(_basePath, imagePath);
-
-        if (!File.Exists(fullPath))
+        try
         {
-            throw new FileNotFoundException($"Image not found: {imagePath}");
-        }
+            var targetTeams = await GetTargetTeamsForPresentationAsync(
+                sourceTeamFolderName, presentationId);
 
-        return await File.ReadAllBytesAsync(fullPath);
+            if (targetTeams.Count == 0)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"  No published assignments for {presentationId} — skipping index regen");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"→ Regenerating indexes for {targetTeams.Count} target team(s)");
+
+            foreach (var targetTeam in targetTeams)
+            {
+                try
+                {
+                    await _indexGenerationService.GenerateAndSaveIndexAsync(targetTeam);
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ✓ Index regenerated for {targetTeam}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ⚠ WARNING: Index regen failed for {targetTeam}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"  ⚠ WARNING: Index regeneration check failed: {ex.Message}");
+        }
+    }
+
+    private async Task<List<string>> GetTargetTeamsForPresentationAsync(
+        string sourceTeamFolderName,
+        string presentationId)
+    {
+        try
+        {
+            var repo = new TeamAwareRepository<Assignment>(
+                _storage, sourceTeamFolderName, "assignments");
+
+            var all = await repo.GetAllAsync();
+
+            return all
+                .Where(a => a.PresentationID == presentationId &&
+                            a.Status == AssignmentStatus.Published)
+                .Select(a => a.TargetTeam)
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Error getting target teams for {presentationId}: {ex.Message}");
+            return new List<string>();
+        }
     }
 }

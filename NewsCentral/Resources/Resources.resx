@@ -319,4 +319,154 @@
 	<data name="InvalidImageType" xml:space="preserve">
     <value>Please select a valid image file</value>
   </data>
+	<data name="IndexManagement.PageTitle" xml:space="preserve">
+    <value>Index Management</value>
+	</data>
+		<data name="IndexManagement.PageDescription" xml:space="preserve">
+		<value>Manage and regenerate index.json files for teams</value>
+	</data>
+		<data name="IndexManagement.AccessDenied" xml:space="preserve">
+		<value>Access Denied</value>
+	</data>
+		<data name="IndexManagement.AccessDeniedMessage" xml:space="preserve">
+		<value>Only system administrators can access this page.</value>
+	</data>
+		<data name="IndexManagement.CurrentTeamSection" xml:space="preserve">
+		<value>Current Team Index</value>
+	</data>
+		<data name="IndexManagement.AllTeamsSection" xml:space="preserve">
+		<value>All Teams Indexes</value>
+	</data>
+		<data name="IndexManagement.CurrentTeam" xml:space="preserve">
+		<value>Current Team</value>
+	</data>
+		<data name="IndexManagement.IndexExists" xml:space="preserve">
+		<value>Index Exists</value>
+	</data>
+		<data name="IndexManagement.LastGenerated" xml:space="preserve">
+		<value>Last Generated</value>
+	</data>
+		<data name="IndexManagement.TotalAssignments" xml:space="preserve">
+		<value>Total Assignments</value>
+	</data>
+		<data name="IndexManagement.ActiveAssignments" xml:space="preserve">
+		<value>Active</value>
+	</data>
+		<data name="IndexManagement.UpcomingAssignments" xml:space="preserve">
+		<value>Upcoming</value>
+	</data>
+		<data name="IndexManagement.ExpiredAssignments" xml:space="preserve">
+		<value>Expired</value>
+	</data>
+		<data name="IndexManagement.Yes" xml:space="preserve">
+		<value>Yes</value>
+	</data>
+		<data name="IndexManagement.No" xml:space="preserve">
+		<value>No</value>
+	</data>
+		<data name="IndexManagement.NoTeamSelected" xml:space="preserve">
+		<value>No team selected. Please select a team from the home page.</value>
+	</data>
+		<data name="IndexManagement.AllTeamsDescription" xml:space="preserve">
+		<value>Regenerate index files for all teams. This is useful after bulk data changes or troubleshooting.</value>
+	</data>
+		<data name="IndexManagement.Team" xml:space="preserve">
+		<value>Team</value>
+	</data>
+		<data name="IndexManagement.Regenerating" xml:space="preserve">
+		<value>Regenerating...</value>
+	</data>
+		<data name="IndexManagement.RegenerateCurrentTeam" xml:space="preserve">
+		<value>Regenerate Current Team Index</value>
+	</data>
+		<data name="IndexManagement.RegeneratingAll" xml:space="preserve">
+		<value>Regenerating All...</value>
+	</data>
+		<data name="IndexManagement.RegenerateAllTeams" xml:space="preserve">
+		<value>Regenerate All Team Indexes</value>
+	</data>
+		<data name="IndexManagement.RegenerationSuccess" xml:space="preserve">
+		<value>Index regenerated successfully for {0}!</value>
+	</data>
+		<data name="IndexManagement.RegenerationAllSuccess" xml:space="preserve">
+		<value>Successfully regenerated {0} of {1} team indexes!</value>
+	</data>
+		<data name="IndexManagement.RegenerationError" xml:space="preserve">
+		<value>Error: {0}</value>
+	</data>
+	<data name="NavMenu.IndexManagement" xml:space="preserve">
+		<value>Index Management</value>
+	</data>
+	<data name="NavMenu.Home" xml:space="preserve">
+    <value>Home</value>
+	</data>
+	<data name="NavMenu.Schedules" xml:space="preserve">
+		<value>Schedules</value>
+	</data>
+		<data name="NavMenu.Assignments" xml:space="preserve">
+		<value>Assignments</value>
+	</data>
+		<data name="NavMenu.Approvals" xml:space="preserve">
+		<value>Approvals</value>
+	</data>
+		<data name="NavMenu.AdminSection" xml:space="preserve">
+		<value>ADMINISTRATION</value>
+	</data>
+		<data name="NavMenu.UserManagement" xml:space="preserve">
+		<value>User Management</value>
+	</data>
+		<data name="NavMenu.TeamManagement" xml:space="preserve">
+		<value>Team Management</value>
+	</data>
+		<data name="NavMenu.Settings" xml:space="preserve">
+		<value>Settings</value>
+	</data>
+	<!-- Assignments Page -->
+	<data name="Assignments.ViewAndManageAssignments" xml:space="preserve">
+    <value>View and manage all assignments for your team</value>
+</data>
+	<data name="Assignments.CreateYourFirstAssignment" xml:space="preserve">
+    <value>Create your first assignment to get started</value>
+</data>
+
+	<!-- Settings Page -->
+	<data name="Settings.Settings" xml:space="preserve">
+    <value>Settings</value>
+</data>
+	<data name="Settings.ManageYourSettings" xml:space="preserve">
+    <value>Manage your account and preferences</value>
+</data>
+	<data name="Settings.UserProfile" xml:space="preserve">
+    <value>User Profile</value>
+</data>
+	<data name="Settings.DisplayName" xml:space="preserve">
+    <value>Display Name</value>
+</data>
+	<data name="Settings.UserID" xml:space="preserve">
+    <value>User ID</value>
+</data>
+	<data name="Settings.LastLogin" xml:space="preserve">
+    <value>Last Login</value>
+</data>
+	<data name="Settings.Language" xml:space="preserve">
+    <value>Language</value>
+</data>
+	<data name="Settings.LanguageChangeRequiresReload" xml:space="preserve">
+    <value>Changing language will reload the page</value>
+</data>
+	<data name="Settings.AdminSettings" xml:space="preserve">
+    <value>Administrator Settings</value>
+</data>
+	<data name="Settings.ManageUsers" xml:space="preserve">
+    <value>Manage Users</value>
+</data>
+	<data name="Settings.ManageTeams" xml:space="preserve">
+    <value>Manage Teams</value>
+</data>
+	<data name="Settings.CurrentPasswordRequired" xml:space="preserve">
+    <value>Current password is required</value>
+</data>
+	<data name="Assignments.ViewAndManageTeamAssignments" xml:space="preserve">
+    <value>View and manage all team assignments</value>
+</data>	
 </root>
