@@ -155,8 +155,11 @@ public class IndexGenerationService
 
             Content = contentInfo,
 
-            SourceTeamFolderName = assignment.SourceTeam,
-            SourceTeamName       = sourceTeam?.Name ?? assignment.SourceTeam
+            SourceTeamFolderName   = assignment.SourceTeam,
+            SourceTeamName         = sourceTeam?.Name ?? assignment.SourceTeam,
+
+            PosterText             = presentation.PosterText,
+            DisplayDurationSeconds = presentation.DisplayDurationSeconds
         };
     }
 

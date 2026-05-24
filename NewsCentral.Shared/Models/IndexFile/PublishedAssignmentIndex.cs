@@ -23,5 +23,8 @@ namespace NewsCentral.Models.IndexFile
 
         public string SourceTeamFolderName { get; set; } = string.Empty;
         public string SourceTeamName { get; set; } = string.Empty;
+
+        public string? PosterText { get; set; }
+        public int DisplayDurationSeconds { get; set; }
     }
 }
