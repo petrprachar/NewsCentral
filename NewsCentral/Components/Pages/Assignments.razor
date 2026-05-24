@@ -736,6 +736,7 @@
         return hasContentAuthorRole;
     }
 
+    /*
     private bool CanPublish(Assignment assignment)
     {
         if (currentUser == null) return false;
@@ -750,6 +751,28 @@
         if (assignment.CreatedBy == currentUser.UserID) return true;
 
         return false;
+    }
+    */
+
+    private bool CanPublish(Assignment assignment)
+    {
+        if (currentUser == null) return false;
+
+        // Only approved assignments can be published
+        if (assignment.Status != AssignmentStatus.Approved) return false;
+
+        // SystemAdmin can publish anything
+        if (currentUser.IsSystemAdmin) return true;
+
+        // Creator can publish their own
+        if (assignment.CreatedBy == currentUser.UserID) return true;
+
+        // Any ContentAuthor of the current team can publish
+        // regardless of who created the assignment
+        var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+        return currentUser.TeamRoles.Any(tr =>
+            tr.TeamFolderName == teamFolderName &&
+            tr.Roles.Contains("ContentAuthor"));
     }
 
     private void EditAssignment(Assignment assignment)

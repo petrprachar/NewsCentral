@@ -15,7 +15,6 @@ public class PublishingService
     private readonly AuthenticationService _authService;
     private readonly IndexGenerationService _indexGenerationService;
 
-    // Shared serializer options — one definition used by all copy methods
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -31,12 +30,12 @@ public class PublishingService
         ScheduleService scheduleService,
         IndexGenerationService indexGenerationService)
     {
-        _storage              = storage;
-        _blobDistribution     = blobDistribution;
-        _authService          = authService;
-        _assignmentService    = assignmentService;
-        _presentationService  = presentationService;
-        _scheduleService      = scheduleService;
+        _storage                = storage;
+        _blobDistribution       = blobDistribution;
+        _authService            = authService;
+        _assignmentService      = assignmentService;
+        _presentationService    = presentationService;
+        _scheduleService        = scheduleService;
         _indexGenerationService = indexGenerationService;
     }
 
@@ -70,8 +69,17 @@ public class PublishingService
                     $"Assignment must be approved before publishing " +
                     $"(current status: {assignment.Status})");
 
-            if (assignment.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
-                return Fail(result, "Only the creator or SystemAdmin can publish");
+            if (!currentUser.IsSystemAdmin && assignment.CreatedBy != currentUser.UserID)
+            {
+                var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
+                    tr.TeamFolderName == sourceTeamFolderName &&
+                    tr.Roles.Contains("ContentAuthor"));
+
+                if (!hasContentAuthorRole)
+                    return Fail(result,
+                        "Only the assignment creator, a ContentAuthor of this team, " +
+                        "or a SystemAdmin can publish");
+            }
 
             var presentation = await _presentationService.GetPresentationAsync(
                 sourceTeamFolderName, assignment.PresentationID);
@@ -101,7 +109,7 @@ public class PublishingService
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying presentation: {ex.Message}");
-                throw; // Critical
+                throw;
             }
 
             // ── 2. Schedule JSON → authoring tier + blob ─────────────────────
@@ -116,11 +124,10 @@ public class PublishingService
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying schedule: {ex.Message}");
-                throw; // Critical
+                throw;
             }
 
-            // ── 3. Assignment JSON → authoring tier only (tracking metadata) ─
-            // Assignment files are not pushed to blob — agents consume index.json
+            // ── 3. Assignment JSON → authoring tier only ──────────────────────
             try
             {
                 System.Diagnostics.Debug.WriteLine("→ Copying assignment JSON...");
@@ -131,19 +138,19 @@ public class PublishingService
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying assignment: {ex.Message}");
-                throw; // Critical
+                throw;
             }
 
-            // ── 4. Update assignment status in source team ────────────────────
+            // ── 4. Update assignment status ───────────────────────────────────
             try
             {
                 System.Diagnostics.Debug.WriteLine("→ Updating assignment status...");
                 var repo = new TeamAwareRepository<Assignment>(
                     _storage, sourceTeamFolderName, "assignments");
 
-                assignment.Status        = AssignmentStatus.Published;
-                assignment.PublishedBy   = currentUser.UserID;
-                assignment.PublishedDate = DateTime.UtcNow;
+                assignment.Status         = AssignmentStatus.Published;
+                assignment.PublishedBy    = currentUser.UserID;
+                assignment.PublishedDate  = DateTime.UtcNow;
                 assignment.PublishedPaths = publishedPaths;
 
                 await repo.UpdateAsync(assignment);
@@ -155,28 +162,62 @@ public class PublishingService
                 throw;
             }
 
-            // ── 5. Image files → authoring tier copy + blob upload ────────────
-            // Non-critical: poster is already embedded in ContentImageBase64
+            // ── 5a. Generated image → authoring tier + blob ───────────────────
+            // GeneratedImagePath is always set at create time (new presentations)
+            // or promoted during UpdatePresentationFullAsync (legacy presentations).
             if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
             {
                 try
                 {
-                    System.Diagnostics.Debug.WriteLine("→ Copying poster image file...");
+                    System.Diagnostics.Debug.WriteLine("→ Copying generated image file...");
                     var path = await CopyImageToTargetAsync(
                         presentation.GeneratedImagePath,
                         sourceTeamFolderName,
                         assignment.TargetTeam,
                         "generated");
                     publishedPaths.Add(path);
-                    System.Diagnostics.Debug.WriteLine($"  ✓ Poster file: {path}");
+                    System.Diagnostics.Debug.WriteLine($"  ✓ Generated image: {path}");
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine(
-                        $"  ⚠ WARNING: Could not copy poster file - {ex.Message}");
+                        $"  ⚠ WARNING: Could not copy generated image - {ex.Message}");
+                }
+            }
+            // ── 5b. Safety net: no GeneratedImagePath — promote original ──────
+            // Handles presentations created before the always-populate fix.
+            else if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
+            {
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        "→ No generated image — promoting original to generated/...");
+
+                    var fileName       = Path.GetFileName(presentation.OriginalImagePath);
+                    var sourceRelative = $"{sourceTeamFolderName}/images/original/{fileName}";
+                    var destRelative   = $"{assignment.TargetTeam}/images/generated/{fileName}";
+
+                    await _storage.CopyFileAsync(sourceRelative, destRelative);
+
+                    var stream = await _storage.OpenReadAsync(sourceRelative);
+                    if (stream != null)
+                    {
+                        using (stream)
+                            await _blobDistribution.UploadStreamAsync(destRelative, stream);
+                    }
+
+                    publishedPaths.Add(destRelative);
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ✓ Promoted original to generated: {destRelative}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ⚠ WARNING: Could not promote original to generated: {ex.Message}");
                 }
             }
 
+            // ── 5c. Original image → authoring tier + blob ────────────────────
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
                 try
@@ -198,8 +239,6 @@ public class PublishingService
             }
 
             // ── 6. Regenerate index → authoring tier + blob ───────────────────
-            // IndexGenerationService.GenerateAndSaveIndexAsync pushes index.json
-            // to blob distribution automatically in one call.
             try
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -210,14 +249,13 @@ public class PublishingService
             }
             catch (Exception ex)
             {
-                // Non-fatal: content is published; index can be manually regenerated
                 System.Diagnostics.Debug.WriteLine(
                     $"  ⚠ WARNING: Index generation failed: {ex.Message}");
             }
 
-            result.Success       = true;
+            result.Success        = true;
             result.PublishedPaths = publishedPaths;
-            result.Message       = $"Successfully published to {assignment.TargetTeam}";
+            result.Message        = $"Successfully published to {assignment.TargetTeam}";
 
             System.Diagnostics.Debug.WriteLine(
                 $"=== SUCCESS: Published {publishedPaths.Count} files ===");
@@ -234,10 +272,6 @@ public class PublishingService
 
     // ── Private copy methods ─────────────────────────────────────────────────
 
-    /// <summary>
-    /// Writes the presentation JSON to the authoring tier and pushes it
-    /// to blob distribution. Both operations use the same relative path.
-    /// </summary>
     private async Task<string> CopyPresentationToTargetAsync(
         Presentation presentation,
         string targetTeamFolderName)
@@ -246,10 +280,8 @@ public class PublishingService
         var relativePath = $"{targetTeamFolderName}/content/presentations/{fileName}";
         var json         = JsonSerializer.Serialize(presentation, JsonOptions);
 
-        // Authoring tier (Azure Files / local disk)
         await _storage.WriteTextAsync(relativePath, json);
 
-        // Blob distribution — non-fatal if it fails
         try
         {
             await _blobDistribution.UploadTextAsync(relativePath, json);
@@ -263,9 +295,6 @@ public class PublishingService
         return relativePath;
     }
 
-    /// <summary>
-    /// Writes the schedule JSON to the authoring tier and pushes it to blob.
-    /// </summary>
     private async Task<string> CopyScheduleToTargetAsync(
         Schedule schedule,
         string targetTeamFolderName,
@@ -289,10 +318,8 @@ public class PublishingService
         var relativePath = $"{targetTeamFolderName}/content/schedules/{fileName}";
         var json         = JsonSerializer.Serialize(scheduleCopy, JsonOptions);
 
-        // Authoring tier
         await _storage.WriteTextAsync(relativePath, json);
 
-        // Blob distribution — non-fatal if it fails
         try
         {
             await _blobDistribution.UploadTextAsync(relativePath, json);
@@ -307,7 +334,7 @@ public class PublishingService
     }
 
     /// <summary>
-    /// Copies an image file on the authoring tier (skipped if source == dest),
+    /// Copies an image on the authoring tier (source == dest is silently skipped),
     /// then streams it to blob distribution.
     /// imageType: "generated" or "original"
     /// </summary>
@@ -324,36 +351,26 @@ public class PublishingService
         if (!await _storage.FileExistsAsync(sourceRelative))
             throw new IOException($"Source image not found: {sourceRelative}");
 
-        // Authoring tier copy — CopyFileAsync skips silently when source == dest
         await _storage.CopyFileAsync(sourceRelative, destRelative);
 
-        // Blob distribution — read from source, upload to dest blob path
-        // (source is always readable regardless of self-copy skip)
         try
         {
             var stream = await _storage.OpenReadAsync(sourceRelative);
             if (stream != null)
             {
                 using (stream)
-                {
                     await _blobDistribution.UploadStreamAsync(destRelative, stream);
-                }
             }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine(
                 $"  ⚠ WARNING: Blob upload failed for {destRelative}: {ex.Message}");
-            // Non-fatal: poster is embedded in presentation JSON
         }
 
         return destRelative;
     }
 
-    /// <summary>
-    /// Writes the assignment JSON to the TARGET team's authoring-tier folder.
-    /// Assignment files are NOT pushed to blob — agents consume index.json instead.
-    /// </summary>
     private async Task<string> CopyAssignmentToTargetAsync(
         Assignment assignment,
         string targetTeamFolder)

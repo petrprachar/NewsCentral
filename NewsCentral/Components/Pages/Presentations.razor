@@ -474,13 +474,16 @@
     private bool CanDelete(Presentation presentation)
     {
         var currentUser = AuthService.GetCurrentUser();
+        if (currentUser == null) return false;
+        if (AuthService.IsSystemAdmin()) return true;
+        if (presentation.CreatedBy == currentUser.UserID) return true;
 
-        // System admins can delete anything
-        if (AuthService.IsSystemAdmin())
-            return true;
-
-        // Users can only delete their own presentations
-        return presentation.CreatedBy == currentUser?.UserID;
+        // Any ContentAuthor of the current team can delete
+        // regardless of who created the presentation
+        var teamFolderName = TeamContext.GetCurrentTeamFolderName();
+        return currentUser.TeamRoles.Any(tr =>
+            tr.TeamFolderName == teamFolderName &&
+            tr.Roles.Contains("ContentAuthor"));
     }
 
     private string GetCreatorName(string userId)

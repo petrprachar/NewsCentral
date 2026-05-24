@@ -121,9 +121,10 @@ public class DataSeederService
             $"{teamFolderName}/content/presentations",
             $"{teamFolderName}/content/schedules",
             $"{teamFolderName}/content/assignments",
+            $"{teamFolderName}/content/drafts",      // ← add (was missing)
             $"{teamFolderName}/images/original",
             $"{teamFolderName}/images/generated",
-            $"{teamFolderName}/published",
+            // published/ removed — distribution goes to blob, not a local folder
             $"{teamFolderName}/deleted"
         };
 
