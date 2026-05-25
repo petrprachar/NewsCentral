@@ -6,8 +6,13 @@ namespace NewsViewer.Forms;
 
 public sealed class ViewerForm : Form
 {
-    private const int SidePanelWidth = 200;
+    private const int SidePanelWidth   = 200;
+    private const int TriggerWidth     = 8;
+    private const int FormWidth        = 1600;
+    private const int FormHeight       = 900;
     private const int DefaultDurationSeconds = 60;
+    private const int SlideSpeed       = 30;  // px per tick
+    private const int SlideIntervalMs  = 12;  // ~83 fps
 
     private readonly PublishedAssignmentIndex _assignment;
     private readonly string _imagePath;
@@ -19,10 +24,13 @@ public sealed class ViewerForm : Form
     private readonly Label _lblPosterText;
     private readonly Label _lblOnlineStatus;
     private readonly Panel _pnlSide;
+    private readonly Panel _pnlTrigger;
     private readonly Label _lblCountdown;
 
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Windows.Forms.Timer _slideTimer;
     private int _secondsRemaining;
+    private int _targetX;
     private readonly DateTime _sessionStart = DateTime.UtcNow;
     private string _closeReason = "UserClose";
 
@@ -41,7 +49,7 @@ public sealed class ViewerForm : Form
 
         // ── Form ────────────────────────────────────────────────────────────
         FormBorderStyle = FormBorderStyle.None;
-        ClientSize      = new Size(1600, 900);
+        ClientSize      = new Size(FormWidth, FormHeight);
         StartPosition   = FormStartPosition.CenterScreen;
         BackColor       = Color.Black;
         TopMost         = true;
@@ -51,17 +59,19 @@ public sealed class ViewerForm : Form
         _pictureBox = new PictureBox
         {
             Location = new Point(0, 0),
-            Size     = new Size(1600, 900),
+            Size     = new Size(FormWidth, FormHeight),
             SizeMode = PictureBoxSizeMode.Zoom,
             BackColor = Color.Black
         };
         Controls.Add(_pictureBox);
 
-        // ── Side panel ───────────────────────────────────────────────────────
+        // ── Side panel — initially off-screen to the right ───────────────────
+        _targetX = FormWidth; // hidden position
+
         _pnlSide = new Panel
         {
-            Location  = new Point(1600 - SidePanelWidth, 0),
-            Size      = new Size(SidePanelWidth, 900),
+            Location  = new Point(FormWidth, 0),
+            Size      = new Size(SidePanelWidth, FormHeight),
             BackColor = Color.FromArgb(45, 45, 48)
         };
         Controls.Add(_pnlSide);
@@ -109,6 +119,23 @@ public sealed class ViewerForm : Form
         };
         _pnlSide.Controls.Add(_lblCountdown);
 
+        // ── Trigger strip — right edge, captures hover to reveal side panel ──
+        _pnlTrigger = new Panel
+        {
+            Location  = new Point(FormWidth - TriggerWidth, 0),
+            Size      = new Size(TriggerWidth, FormHeight),
+            BackColor = Color.Transparent,
+            Cursor    = Cursors.Hand
+        };
+        _pnlTrigger.MouseEnter += (_, _) => SlideIn();
+        Controls.Add(_pnlTrigger);
+
+        // Side panel mouse leave — slide out when cursor leaves the panel area
+        _pnlSide.MouseLeave    += OnSidePanelMouseLeave;
+        btnClose.MouseLeave    += OnSidePanelMouseLeave;
+        btnMoreInfo.MouseLeave += OnSidePanelMouseLeave;
+        _lblCountdown.MouseLeave += OnSidePanelMouseLeave;
+
         // ── PosterText overlay (bottom-left of image) ────────────────────────
         var posterText = !string.IsNullOrWhiteSpace(_assignment.PosterText)
             ? _assignment.PosterText
@@ -141,9 +168,10 @@ public sealed class ViewerForm : Form
         };
         Controls.Add(_lblOnlineStatus);
 
-        // z-order: PictureBox at back, overlays in front
+        // z-order: PictureBox at back; trigger strip and overlays in front
         _pictureBox.SendToBack();
         _pnlSide.BringToFront();
+        _pnlTrigger.BringToFront();
         _lblPosterText.BringToFront();
         _lblOnlineStatus.BringToFront();
 
@@ -158,23 +186,65 @@ public sealed class ViewerForm : Form
         _timer.Tick += OnTimerTick;
         _timer.Start();
 
+        // ── Slide animation timer ────────────────────────────────────────────
+        _slideTimer = new System.Windows.Forms.Timer { Interval = SlideIntervalMs };
+        _slideTimer.Tick += OnSlideTick;
+
         FormClosed += OnFormClosed;
 
         LoadImage();
     }
+
+    // ── Slide helpers ────────────────────────────────────────────────────────
+
+    private void SlideIn()
+    {
+        _targetX = FormWidth - SidePanelWidth;
+        _slideTimer.Start();
+    }
+
+    private void SlideOut()
+    {
+        _targetX = FormWidth;
+        _slideTimer.Start();
+    }
+
+    private void OnSlideTick(object? sender, EventArgs e)
+    {
+        var current = _pnlSide.Left;
+        if (current == _targetX) { _slideTimer.Stop(); return; }
+
+        var delta = _targetX - current;
+        var step  = Math.Sign(delta) * Math.Min(SlideSpeed, Math.Abs(delta));
+        _pnlSide.Left = current + step;
+
+        if (_pnlSide.Left == _targetX)
+            _slideTimer.Stop();
+    }
+
+    private void OnSidePanelMouseLeave(object? sender, EventArgs e)
+    {
+        // MouseLeave fires when moving between child controls; check real position.
+        var pos = _pnlSide.PointToClient(Cursor.Position);
+        if (!_pnlSide.ClientRectangle.Contains(pos))
+            SlideOut();
+    }
+
+    // ── Image ────────────────────────────────────────────────────────────────
 
     private void LoadImage()
     {
         if (!File.Exists(_imagePath)) return;
         try
         {
-            // Load via byte array to avoid locking the cache file.
             var bytes = File.ReadAllBytes(_imagePath);
             using var ms = new MemoryStream(bytes);
             _pictureBox.Image = new Bitmap(ms);
         }
         catch { }
     }
+
+    // ── Countdown ────────────────────────────────────────────────────────────
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
@@ -190,6 +260,8 @@ public sealed class ViewerForm : Form
     private void UpdateCountdownLabel() =>
         _lblCountdown.Text = $"{_secondsRemaining} seconds";
 
+    // ── More info ────────────────────────────────────────────────────────────
+
     private void OnMoreInfoClicked(object? sender, EventArgs e)
     {
         var url = _assignment.Content.MoreInfoUrl;
@@ -202,10 +274,14 @@ public sealed class ViewerForm : Form
         Close();
     }
 
+    // ── Cleanup ──────────────────────────────────────────────────────────────
+
     private void OnFormClosed(object? sender, FormClosedEventArgs e)
     {
         _timer.Stop();
         _timer.Dispose();
+        _slideTimer.Stop();
+        _slideTimer.Dispose();
         _pictureBox.Image?.Dispose();
 
         _viewerState.RecordShown(_assignment.PresentationId);

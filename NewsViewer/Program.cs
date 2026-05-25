@@ -27,7 +27,7 @@ static class Program
         if (assignment is null || imagePath is null) return;
 
         var viewerState = new ViewerStateService(config.CacheRootPath);
-        if (viewerState.AlreadyShownToday(assignment.PresentationId)) return;
+        if (!registry.GetBypassShowOnceCheck() && viewerState.AlreadyShownToday(assignment.PresentationId)) return;
 
         var isOnline = ReadOnlineStatus(config.CacheRootPath);
         var telemetry = new TelemetryWriter(config.CacheRootPath);

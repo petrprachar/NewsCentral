@@ -19,12 +19,24 @@ public sealed class RegistryConfiguration
             : raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
+    public bool GetBypassShowOnceCheck() => ReadDword("BypassShowOnceCheck") == 1;
+
     private string? ReadString(string name)
     {
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(_keyPath);
             return key?.GetValue(name) as string;
+        }
+        catch { return null; }
+    }
+
+    private int? ReadDword(string name)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(_keyPath);
+            return key?.GetValue(name) is int v ? v : null;
         }
         catch { return null; }
     }
