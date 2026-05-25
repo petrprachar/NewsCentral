@@ -159,7 +159,10 @@ public class IndexGenerationService
             SourceTeamName         = sourceTeam?.Name ?? assignment.SourceTeam,
 
             PosterText             = presentation.PosterText,
-            DisplayDurationSeconds = presentation.DisplayDurationSeconds
+            DisplayDurationSeconds = presentation.DisplayDurationSeconds,
+            ShowMode               = schedule.ShowMode,
+            UseVirtualDesktop      = presentation.UseVirtualDesktop,
+            VirtualDesktopBackgroundColor = presentation.VirtualDesktopBackgroundColor
         };
     }
 
