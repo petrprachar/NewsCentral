@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.9  
+**Version:** 2.0  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -259,8 +259,16 @@ Registry values override `appsettings.json` values. If a registry value is absen
     "EnableBlobDistribution": true,
     "DistributionMode": "Local",
     "LocalDistributionPath": "C:\\Download\\NewsCentralDist",
-    "AzureBlobConnectionString": "",
     "AzureBlobContainerName": "newscentral"
+  },
+  "AzureBlob": {
+    "AuthMode": "Certificate",
+    "TenantId": "",
+    "ClientId": "",
+    "CertificateThumbprint": "",
+    "ClientSecret": "",
+    "AccountName": "",
+    "ContainerName": "newscentral"
   }
 }
 ```
@@ -277,12 +285,30 @@ Registry values override `appsettings.json` values. If a registry value is absen
     "StorageMode": "Share",
     "SharePath": ""
   },
-  "AzureStorage": {
+  "AzureBlob": {
+    "AuthMode": "Certificate",
+    "TenantId": "",
+    "ClientId": "",
+    "CertificateThumbprint": "",
+    "ClientSecret": "",
     "AccountName": "",
-    "ContainerName": ""
+    "ContainerName": "newscentral"
   }
 }
 ```
+
+### 5.6 Azure Authentication Modes
+
+Both NewsCentral and NewsService use the same `AzureBlob` config section and support two authentication modes selected by `AzureBlob:AuthMode`:
+
+| Mode | Credential type | Required keys |
+|---|---|---|
+| `Certificate` | `ClientCertificateCredential(tenantId, clientId, cert)` | `TenantId`, `ClientId`, `CertificateThumbprint` |
+| `ClientSecret` | `ClientSecretCredential(tenantId, clientId, secret)` | `TenantId`, `ClientId`, `ClientSecret` |
+
+**Certificate mode** — the certificate is loaded from `Cert:\LocalMachine\My` by thumbprint (`X509Store(StoreName.My, StoreLocation.LocalMachine)`). Local System has access to `LocalMachine\My` by default; no additional key permission grants are required when the service runs as Local System.
+
+**ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing; certificate mode is preferred for production.
 
 ---
 
@@ -843,13 +869,13 @@ No direct inter-process communication between any components. All coordination i
 ### NewsCentral
 
 - Detects UPN accounts and supports local accounts
-- Interactive MSAL authentication to Azure with token cache for subsequent non-interactive use
+- Azure Blob access uses `ClientCertificateCredential` or `ClientSecretCredential` (see Section 5.6); mode selected by `AzureBlob:AuthMode`
 
 ### NewsService
 
-- Authenticates to MS Azure Storage using a certificate enrolled in the local machine certificate store
-- Proactive token refresh; exponential backoff on failures; cert-expiry logging
-- Handles long-uptime scenarios without requiring machine restart
+- Azure Blob access uses `ClientCertificateCredential` or `ClientSecretCredential` (see Section 5.6); mode selected by `AzureBlob:AuthMode`
+- Certificate loaded from `Cert:\LocalMachine\My` by thumbprint — Local System has access by default, no extra grants required
+- Proactive token refresh via `Azure.Identity`; handles weeks-long uptime without restart
 
 ### NewsViewer
 
@@ -888,7 +914,8 @@ No direct inter-process communication between any components. All coordination i
 
 | Item | Notes |
 |---|---|
-| NewsService Azure mode | `AzureBlobRepositoryReader` is a stub; requires machine certificate auth (Phase 2) |
+| **NewsService Azure mode** | `AzureBlobRepositoryReader` is a stub. Implement with `Certificate` / `ClientSecret` auth per Section 5.6. Next planned work item. |
+| **NewsCentral Azure distribution** | `AzureBlobDistributionService` uses connection string today. Replace with `Certificate` / `ClientSecret` auth per Section 5.6. Next planned work item. |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |
@@ -896,4 +923,3 @@ No direct inter-process communication between any components. All coordination i
 | HMAC anti-tamper | `Signature` fields and verification stubs in place; full implementation deferred |
 | Extended presentation selection logic | Current selection (most recent by timestamp) designed as an extensible function |
 | NewsViewer authentication | Architecture prepared; not implemented in this version |
-| Microsoft Entra ID (Azure AD) hybrid authentication | Architectural plan established for NewsCentral; phased migration path defined |
