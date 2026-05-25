@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.1  
+**Version:** 2.2  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -259,13 +259,17 @@ Registry values override `appsettings.json` values. If a registry value is absen
     "EnableBlobDistribution": true,
     "DistributionMode": "Local",
     "LocalDistributionPath": "C:\\Download\\NewsCentralDist",
-    "AzureBlobContainerName": "newscentral",
-    "AzureBlobAccountName": ""
+    "AzureBlobContainerName": "newscentral"
+  },
+  "AzureBlob": {
+    "TenantId": "",
+    "ClientId": "",
+    "AccountName": ""
   }
 }
 ```
 
-NewsCentral authenticates to Azure using an **interactive MSAL user session** — no service credentials are stored in config. See Section 10 (Security).
+NewsCentral authenticates to Azure using an **interactive MSAL user session** (`InteractiveBrowserCredential`) — no service credentials are stored in config. Token is persisted in a named cache (`"NewsCentral"`) so subsequent calls are non-interactive. See Section 10 (Security).
 
 ### 5.5 appsettings.json — NewsService
 
@@ -865,7 +869,7 @@ No direct inter-process communication between any components. All coordination i
 ### NewsCentral
 
 - Detects UPN accounts and supports local accounts
-- Azure Blob access uses `ClientCertificateCredential` or `ClientSecretCredential` (see Section 5.6); mode selected by `AzureBlob:AuthMode`
+- Azure Blob distribution uses `InteractiveBrowserCredential` (MSAL interactive user session); token persisted in named cache `"NewsCentral"` for non-interactive re-authentication. Config: `AzureBlob:{TenantId, ClientId, AccountName}` in appsettings.json.
 
 ### NewsService
 
@@ -911,7 +915,7 @@ No direct inter-process communication between any components. All coordination i
 | Item | Notes |
 |---|---|
 | ~~NewsService Azure mode~~ | Implemented — `AzureBlobRepositoryReader` with Certificate / ClientSecret auth (Section 5.6). |
-| **NewsCentral Azure distribution** | `AzureBlobDistributionService` uses a connection string today. Replace with MSAL interactive auth (user session) — separate from the NewsService cert/secret flow. |
+| ~~NewsCentral Azure distribution~~ | Implemented — `AzureBlobDistributionService` uses `InteractiveBrowserCredential` (MSAL interactive, token cached as `"NewsCentral"`). Config: `AzureBlob:{TenantId,ClientId,AccountName}`. |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |

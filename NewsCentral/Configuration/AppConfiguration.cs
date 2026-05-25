@@ -52,13 +52,11 @@ public class AppConfiguration
     public string LocalDistributionPath   =>
         _configuration["Storage:LocalDistributionPath"] ?? string.Empty;
 
-    public string AzureBlobConnectionString =>
-        _configuration["Storage:AzureBlobConnectionString"] ?? string.Empty;
-
     public string AzureBlobContainerName =>
         _configuration["Storage:AzureBlobContainerName"] ?? "newscentral";
 
-    // Uncomment for Phase 2 (Entra ID / Managed Identity):
-    // public string AzureBlobAccountName =>
-    //     _configuration["Storage:AzureBlobAccountName"] ?? string.Empty;
+    // ── Azure Blob MSAL identity (interactive user session) ──────────────────
+    public string AzureBlobTenantId    => _configuration["AzureBlob:TenantId"]    ?? string.Empty;
+    public string AzureBlobClientId    => _configuration["AzureBlob:ClientId"]    ?? string.Empty;
+    public string AzureBlobAccountName => _configuration["AzureBlob:AccountName"] ?? string.Empty;
 }

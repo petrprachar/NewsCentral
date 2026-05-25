@@ -89,12 +89,14 @@ public static class MauiProgram
                 {"AI:ClaudeApiUrl", "https://api.anthropic.com/v1/messages"},
                 {"AI:OpenAIApiKey", ""},
                 {"AI:OpenAIApiUrl", "https://api.openai.com/v1/chat/completions"},
-                {"Storage:AzureBlobConnectionString", ""},
                 {"Storage:DefaultStorageType", "NetworkShare"},
                 {"Storage:EnableBlobDistribution",   "false"},
                 {"Storage:DistributionMode",          "Local"},
                 {"Storage:LocalDistributionPath",     "C:\\Download\\NewsCentralDist"},
-                {"Storage:AzureBlobContainerName",    "newscentral"}
+                {"Storage:AzureBlobContainerName",    "newscentral"},
+                {"AzureBlob:TenantId",               ""},
+                {"AzureBlob:ClientId",               ""},
+                {"AzureBlob:AccountName",            ""}
             };
 
             config = new ConfigurationBuilder()
