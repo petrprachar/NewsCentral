@@ -41,10 +41,12 @@ internal sealed class ShowNewApplicationContext : ApplicationContext
             var watcher = new FileSystemWatcher(teamPath)
             {
                 Filter            = "index.json",
-                NotifyFilter      = NotifyFilters.LastWrite | NotifyFilters.Size,
+                NotifyFilter      = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
                 EnableRaisingEvents = true
             };
             watcher.Changed += (_, _) => _indexChanged = true;
+            watcher.Created  += (_, _) => _indexChanged = true;
+            watcher.Renamed  += (_, _) => _indexChanged = true;
             _watchers.Add(watcher);
         }
 
@@ -77,8 +79,8 @@ internal sealed class ShowNewApplicationContext : ApplicationContext
             return;
         }
 
-        // New day — ShowOnce part of ShowNew
-        if (_bypass || !_viewerState.AlreadyShownToday(assignment.PresentationId))
+        // New day — ShowOnce part of ShowNew; bypass does not apply here
+        if (!_viewerState.AlreadyShownToday(assignment.PresentationId))
             ShowForm(assignment, imagePath);
     }
 

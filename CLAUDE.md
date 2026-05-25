@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.4  
+**Version:** 1.5  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -92,7 +92,7 @@ The solution provides a structured communication channel between content author 
 | NewsCentral | C# / .NET 9 MAUI Blazor Hybrid | Active development |
 | NewsCentral.Shared | C# / .NET 9 class library | Implemented |
 | NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Implemented |
-| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Phase 1 implemented |
+| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Phase 2 partially implemented |
 | NewsTester | C# — to be decided at design time | Future |
 | Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `CamelCase`, `PropertyNameCaseInsensitive`, `JsonStringEnumConverter`) | — |
 | Images | Base64-encoded and embedded in presentation JSON | — |
@@ -163,19 +163,20 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   ├── ViewerConfiguration.cs     typed POCOs bound from appsettings.json
-│   └── RegistryConfiguration.cs   reads HKLM 'teams'; same pattern as NewsService
+│   ├── ViewerConfiguration.cs        typed POCOs bound from appsettings.json
+│   └── RegistryConfiguration.cs      reads HKLM 'teams' and 'BypassShowOnceCheck'; same pattern as NewsService
 ├── Models\
-│   ├── ViewerState.cs             viewerstate.json structure
-│   └── SessionTelemetry.cs        uploads\session-*.json structure
+│   ├── ViewerState.cs                viewerstate.json structure
+│   └── SessionTelemetry.cs           uploads\session-*.json structure
 ├── Services\
-│   ├── PresentationSelector.cs    reads index.json per team, filters active, picks most recent
-│   ├── ViewerStateService.cs      reads/writes viewerstate.json for ShowOnce tracking
-│   └── TelemetryWriter.cs         writes session-{guid}.json to uploads\ on close
+│   ├── PresentationSelector.cs       reads index.json per team, filters active, picks most recent
+│   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
+│   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
+│   └── TelemetryWriter.cs            writes session-{guid}.json to uploads\ on close
 ├── Forms\
-│   └── ViewerForm.cs              1600×900 borderless WinForms window
-├── JsonDefaults.cs                shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                     entry point; startup checks; Application.Run
+│   └── ViewerForm.cs                 1600×900 borderless WinForms window; hover-triggered side panel
+├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
+├── Program.cs                        entry point; startup checks; branches on ShowMode
 └── appsettings.json
 ```
 
@@ -231,6 +232,7 @@ Registry values override `appsettings.json` values. If a registry value is absen
 | `StorageMode` | `REG_SZ` | Storage backend: `Share` or `Azure` | `Share` |
 | `AzureUploadEnabled` | `DWORD` | Whether NewsService uploads telemetry to Azure Blob | `0` |
 | `PollIntervalSeconds` | `DWORD` | NewsService polling interval in seconds | `300` |
+| `BypassShowOnceCheck` | `DWORD` | NewsViewer only. Set to `1` to skip the once-per-day guard at startup — allows repeated test runs without waiting for a new day. Does **not** affect the ShowNew watcher's day-boundary logic. | `0` |
 
 ### 5.4 appsettings.json — NewsCentral
 
@@ -463,6 +465,7 @@ public class PublishedAssignmentIndex
 
     public string? PosterText { get; set; }             // From Presentation.PosterText
     public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
+    public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
 }
 
 public class ContentInfo
@@ -697,7 +700,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 ### 8.4 NewsViewer
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 1 implemented and tested. Phase 2 (hover-triggered side panel, virtual desktop, ShowNew watcher) not yet started. NativeAOT migration path preserved; Win32 P/Invoke usage kept compatible.
+**Status:** Phase 2 partially implemented. Hover-triggered side panel and ShowNew FileSystemWatcher complete and tested. Virtual desktop and RDP/Citrix/VMware suppression not yet started. NativeAOT migration path preserved; Win32 P/Invoke usage kept compatible.
 
 #### Launch Conditions
 
@@ -743,6 +746,21 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 #### Virtual Desktop
 
 When `Presentation.UseVirtualDesktop = true`: creates a new Windows desktop via `CreateDesktop` / `SwitchDesktop` / `SetThreadDesktop`. Taskbar not visible. Background set to `VirtualDesktopBackgroundColor`. Auto-detected and suppressed in RDP / Citrix / VMware Horizon sessions.
+
+#### Side Panel — Hover Trigger (Phase 2)
+
+An 8px transparent `_pnlTrigger` strip is pinned to the right edge of the form. When the mouse enters it, `SlideIn()` sets `_targetX = FormWidth - SidePanelWidth` and starts `_slideTimer` (12 ms interval, 30 px per tick). The panel slides in from off-screen. `OnSidePanelMouseLeave` uses a `PointToClient` + `ClientRectangle.Contains` bounds check — moving between child controls does not falsely trigger slide-out. Mouse leaving the panel area calls `SlideOut()`.
+
+#### ShowNew Mode — `ShowNewApplicationContext` (Phase 2)
+
+When `assignment.ShowMode == Schedule.DisplayMode.ShowNew`, `Program.Main` creates a `ShowNewApplicationContext` and calls `Application.Run(context)` with no `MainForm`, keeping the message pump alive indefinitely. The context:
+
+- Creates one `FileSystemWatcher` per team folder, watching `index.json` for `Changed`, `Created`, and `Renamed` events (covering both in-place saves and editor temp-file-rename patterns). The handler sets `volatile bool _indexChanged = true`.
+- A `System.Windows.Forms.Timer` (3-second interval, fires on UI thread) polls the flag:
+  1. **New-content check** — if `_indexChanged` was set and the selected `PresentationId` differs from `ViewerStateService.GetLastShownPresentationId()`: show the viewer.
+  2. **Day-boundary check** — if `AlreadyShownToday` returns false (new calendar day or new presentation): show the viewer. `BypassShowOnceCheck` does **not** apply here — only applies to the startup gate in `Program.Main`.
+- `_activeForm != null` guards against opening a second instance while one is already displayed.
+- To terminate a resident ShowNew process: `taskkill /IM NewsViewer.exe /F` or Task Manager → Details → End Task.
 
 #### Session Telemetry
 
@@ -826,7 +844,7 @@ No direct inter-process communication between any components. All coordination i
 
 | Item | Notes |
 |---|---|
-| NewsViewer Phase 2 | Hover-triggered side panel reveal; virtual desktop (`CreateDesktop`/`SwitchDesktop`); ShowNew `FileSystemWatcher`; RDP/Citrix/VMware suppression |
+| NewsViewer Phase 2 — remaining | Virtual desktop (`CreateDesktop`/`SwitchDesktop`/`SetThreadDesktop`); RDP/Citrix/VMware Horizon session suppression. Side panel hover and ShowNew watcher are complete. |
 | NewsService Azure mode | `AzureBlobRepositoryReader` is a stub; requires machine certificate auth (Phase 2) |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
