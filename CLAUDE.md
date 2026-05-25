@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.0  
+**Version:** 2.1  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -147,7 +147,7 @@ NewsService\
 ├── Services\
 │   ├── IRepositoryReader.cs       abstraction over Share / Azure repository
 │   ├── LocalShareRepositoryReader.cs  file share implementation (primary)
-│   ├── AzureBlobRepositoryReader.cs   Azure stub — Phase 2
+│   ├── AzureBlobRepositoryReader.cs   Azure implementation — Certificate / ClientSecret auth
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
 │   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
 │   ├── TelemetryUploader.cs       copies uploads\session-*.json to repository
@@ -671,7 +671,7 @@ See [Section 4 — Solution Structure](#4-solution-structure) for the full file 
 
 **Type:** .NET 9 Windows Service (`Microsoft.NET.Sdk.Worker`)  
 **Target:** `net9.0-windows10.0.19041.0`, `win-x64`  
-**Status:** Implemented — full sync cycle operational in Share mode.
+**Status:** Implemented — full sync cycle operational in Share mode; Azure Blob mode implemented with Certificate / ClientSecret auth.
 
 #### Configuration Resolution
 
@@ -716,7 +716,7 @@ Executed by `Worker` on every interval tick:
 | Implementation | Mode | Notes |
 |---|---|---|
 | `LocalShareRepositoryReader` | `Share` | Reads from UNC/local path; `IsAvailable` checks `Directory.Exists` |
-| `AzureBlobRepositoryReader` | `Azure` | Stub — logs warning; cert auth is Phase 2 |
+| `AzureBlobRepositoryReader` | `Azure` | Certificate or ClientSecret auth (Section 5.6); reads index.json and images from blob container |
 
 #### CacheManager — Hash Sidecar Pattern
 
@@ -729,7 +729,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 | Desktop wallpaper | `IDesktopWallpaper` COM (`C2CF3110…`) — `SetWallpaper(null, path)` applies to all monitors | Requires desktop access; logs a warning and skips in session 0. Configure the service to run as the interactive user or trigger via Task Scheduler in the user session. |
 | Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. Enterprise/MDM-grade mechanism used by Intune. |
 
-#### Azure Authentication (Phase 2 — not yet implemented)
+#### Azure Authentication
 
 - Machine certificate from local machine certificate store
 - Proactive token refresh; exponential backoff on transient failures; cert-expiry logging
@@ -910,7 +910,7 @@ No direct inter-process communication between any components. All coordination i
 
 | Item | Notes |
 |---|---|
-| **NewsService Azure mode** | `AzureBlobRepositoryReader` is a stub. Implement with `Certificate` / `ClientSecret` auth per Section 5.6. Next planned work item. |
+| ~~NewsService Azure mode~~ | Implemented — `AzureBlobRepositoryReader` with Certificate / ClientSecret auth (Section 5.6). |
 | **NewsCentral Azure distribution** | `AzureBlobDistributionService` uses a connection string today. Replace with MSAL interactive auth (user session) — separate from the NewsService cert/secret flow. |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
