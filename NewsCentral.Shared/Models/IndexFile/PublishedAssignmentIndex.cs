@@ -26,5 +26,6 @@ namespace NewsCentral.Models.IndexFile
 
         public string? PosterText { get; set; }
         public int DisplayDurationSeconds { get; set; }
+        public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
     }
 }

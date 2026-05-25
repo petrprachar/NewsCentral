@@ -1,4 +1,5 @@
 using System.Text.Json;
+using NewsCentral.Models;
 using NewsViewer.Configuration;
 using NewsViewer.Forms;
 using NewsViewer.Services;
@@ -22,16 +23,31 @@ static class Program
 
         if (!HasQualifyingMonitor()) return;
 
-        var selector             = new PresentationSelector(config.CacheRootPath);
+        var selector = new PresentationSelector(config.CacheRootPath);
         var (assignment, imagePath) = selector.SelectActive(teams);
         if (assignment is null || imagePath is null) return;
 
         var viewerState = new ViewerStateService(config.CacheRootPath);
-        if (!registry.GetBypassShowOnceCheck() && viewerState.AlreadyShownToday(assignment.PresentationId)) return;
+        var telemetry   = new TelemetryWriter(config.CacheRootPath);
+        bool bypass     = registry.GetBypassShowOnceCheck();
+        bool alreadyShown = !bypass && viewerState.AlreadyShownToday(assignment.PresentationId);
+
+        if (assignment.ShowMode == Schedule.DisplayMode.ShowNew)
+        {
+            var context = new ShowNewApplicationContext(
+                teams, selector, viewerState, telemetry, config.CacheRootPath, bypass);
+
+            if (!alreadyShown)
+                context.TryShowViewer();
+
+            Application.Run(context);
+            return;
+        }
+
+        // ShowOnce: show once per day then exit
+        if (alreadyShown) return;
 
         var isOnline = ReadOnlineStatus(config.CacheRootPath);
-        var telemetry = new TelemetryWriter(config.CacheRootPath);
-
         Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline));
     }
 
