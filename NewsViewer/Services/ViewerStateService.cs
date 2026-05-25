@@ -7,9 +7,9 @@ public sealed class ViewerStateService
 {
     private readonly string _statePath;
 
-    public ViewerStateService(string cacheRootPath)
+    public ViewerStateService(string userStatePath)
     {
-        _statePath = Path.Combine(cacheRootPath, "viewerstate.json");
+        _statePath = Path.Combine(userStatePath, "viewerstate.json");
     }
 
     public bool AlreadyShownToday(string presentationId)

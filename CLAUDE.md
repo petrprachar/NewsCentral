@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.5  
+**Version:** 1.6  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -509,6 +509,8 @@ Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 
 ### 6.8 viewerstate.json (NewsViewer internal)
 
+Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-level).
+
 ```json
 {
   "LastShownDate": "2025-05-23",
@@ -546,7 +548,7 @@ Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 ## 7. Cache Folder Structure
 
 ```
-%programdata%\NewsCentral\
+%programdata%\NewsCentral\              ← machine-level; shared across all users
 ├── team_xy\
 │   ├── index.json                     TeamIndexFile
 │   └── images\generated\              downloaded presentation images
@@ -555,11 +557,15 @@ Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 ├── uploads\
 │   └── session-{guid}.json            written by NewsViewer, uploaded by NewsService
 ├── status.json                        sync state — written by NewsService
-├── viewerstate.json                   display tracking — written by NewsViewer
 └── servicestate.json                  wallpaper/lockscreen tracking — written by NewsService
+
+%localappdata%\NewsCentral\             ← per-user; one copy per Windows user account
+└── viewerstate.json                   display tracking — written by NewsViewer
 ```
 
-Repository / network share mirrors the same team folder structure as the cache.
+`viewerstate.json` is intentionally per-user so that in multi-session environments (Citrix RDSH, Windows Server RDS) each user's shown-today state is independent. All other cache files remain machine-level.
+
+Repository / network share mirrors the same team folder structure as the `%programdata%` cache.
 
 ---
 

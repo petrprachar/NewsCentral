@@ -27,7 +27,12 @@ static class Program
         var (assignment, imagePath) = selector.SelectActive(teams);
         if (assignment is null || imagePath is null) return;
 
-        var viewerState = new ViewerStateService(config.CacheRootPath);
+        var userStatePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NewsCentral");
+        Directory.CreateDirectory(userStatePath);
+
+        var viewerState = new ViewerStateService(userStatePath);
         var telemetry   = new TelemetryWriter(config.CacheRootPath);
         bool bypass     = registry.GetBypassShowOnceCheck();
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday(assignment.PresentationId);
