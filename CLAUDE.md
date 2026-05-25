@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.8  
+**Version:** 1.9  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -793,12 +793,14 @@ If either condition is true the process exits immediately, no window is shown, a
 
 When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
 
-1. `VirtualDesktopManager` is constructed — saves the original desktop handle (`GetThreadDesktop`) and creates a new named desktop (`CreateDesktop("NewsViewer", ...)`).
-2. `SwitchToNew()` is called — `SwitchDesktop` makes the new desktop visible; `SetThreadDesktop` binds the UI thread to it. **This must happen before any window handle is created on the thread** — once a thread owns a window, `SetThreadDesktop` fails. The ordering in `Program.Main` guarantees this.
-3. `BackgroundForm` (borderless, maximised, `VirtualDesktopBackgroundColor`) is shown, filling the new desktop.
-4. `ViewerForm` is shown on top.
-5. On `ViewerForm.FormClosed`: `BackgroundForm` is closed first (still on new desktop context), then `SwitchToOriginal()` returns the user to the default desktop.
-6. `VirtualDesktopManager.Dispose()` calls `CloseDesktop` to release the handle.
+1. `Program.Main` spawns a **fresh STA thread** (`uiThread`) for all virtual-desktop UI. This is required because `Application.EnableVisualStyles()` and other WinForms startup calls on the main thread create hidden internal windows (the WinForms parking window, etc.). `SetThreadDesktop` silently returns `false` once a thread owns any window handle; using a fresh thread that has never touched WinForms guarantees the call succeeds.
+2. On the new thread: `VirtualDesktopManager` is constructed — saves the original desktop handle (`GetThreadDesktop`) and creates a new named desktop (`CreateDesktop("NewsViewer", ...)`).
+3. `SwitchToNew()` is called — `SwitchDesktop` makes the new desktop visible; `SetThreadDesktop` binds the new thread to it. **This must happen before any window handle is created on the thread.**
+4. `BackgroundForm` (borderless, maximised, `VirtualDesktopBackgroundColor`) is shown, filling the new desktop.
+5. `ViewerForm` is shown on top (`TopMost = true`).
+6. On `ViewerForm.FormClosed`: `BackgroundForm` is closed first (still on new desktop context), then `SwitchToOriginal()` returns the user to the default desktop.
+7. `VirtualDesktopManager.Dispose()` calls `CloseDesktop` to release the handle.
+8. The main thread blocks on `uiThread.Join()` until the viewer closes, then the process exits.
 
 **ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`.
 
