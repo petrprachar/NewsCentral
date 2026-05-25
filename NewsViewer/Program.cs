@@ -60,16 +60,33 @@ static class Program
 
         if (assignment.UseVirtualDesktop)
         {
-            // SetThreadDesktop must be called before any window handle is created on this thread.
-            using var desktop = new VirtualDesktopManager();
-            desktop.SwitchToNew();
+            // Application.EnableVisualStyles() and other WinForms startup calls on the main
+            // thread create hidden internal windows (the WinForms parking window, etc.).
+            // SetThreadDesktop silently returns false once a thread owns any window handle,
+            // so the forms end up on the original desktop instead of the new one.
+            // Using a fresh STA thread guarantees no prior window handles exist when
+            // SetThreadDesktop is called.
+            var a  = assignment;
+            var ip = imagePath;
+            var t  = telemetry;
+            var vs = viewerState;
+            var io = isOnline;
 
-            var bgForm    = new BackgroundForm(assignment.VirtualDesktopBackgroundColor);
-            bgForm.Show();
+            var uiThread = new Thread(() =>
+            {
+                using var desktop = new VirtualDesktopManager();
+                desktop.SwitchToNew();
 
-            var viewerForm = new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline);
-            viewerForm.FormClosed += (_, _) => { bgForm.Close(); desktop.SwitchToOriginal(); };
-            Application.Run(viewerForm);
+                var bgForm     = new BackgroundForm(a.VirtualDesktopBackgroundColor);
+                bgForm.Show();
+
+                var viewerForm = new ViewerForm(a, ip, t, vs, io);
+                viewerForm.FormClosed += (_, _) => { bgForm.Close(); desktop.SwitchToOriginal(); };
+                Application.Run(viewerForm);
+            });
+            uiThread.SetApartmentState(ApartmentState.STA);
+            uiThread.Start();
+            uiThread.Join();
         }
         else
         {
