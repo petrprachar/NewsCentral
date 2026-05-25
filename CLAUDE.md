@@ -259,19 +259,13 @@ Registry values override `appsettings.json` values. If a registry value is absen
     "EnableBlobDistribution": true,
     "DistributionMode": "Local",
     "LocalDistributionPath": "C:\\Download\\NewsCentralDist",
-    "AzureBlobContainerName": "newscentral"
-  },
-  "AzureBlob": {
-    "AuthMode": "Certificate",
-    "TenantId": "",
-    "ClientId": "",
-    "CertificateThumbprint": "",
-    "ClientSecret": "",
-    "AccountName": "",
-    "ContainerName": "newscentral"
+    "AzureBlobContainerName": "newscentral",
+    "AzureBlobAccountName": ""
   }
 }
 ```
+
+NewsCentral authenticates to Azure using an **interactive MSAL user session** — no service credentials are stored in config. See Section 10 (Security).
 
 ### 5.5 appsettings.json — NewsService
 
@@ -297,18 +291,20 @@ Registry values override `appsettings.json` values. If a registry value is absen
 }
 ```
 
-### 5.6 Azure Authentication Modes
+### 5.6 Azure Authentication Modes — NewsService only
 
-Both NewsCentral and NewsService use the same `AzureBlob` config section and support two authentication modes selected by `AzureBlob:AuthMode`:
+NewsService runs as an unattended Windows Service with no interactive user. It authenticates to Azure Blob using one of two modes selected by `AzureBlob:AuthMode`:
 
 | Mode | Credential type | Required keys |
 |---|---|---|
 | `Certificate` | `ClientCertificateCredential(tenantId, clientId, cert)` | `TenantId`, `ClientId`, `CertificateThumbprint` |
 | `ClientSecret` | `ClientSecretCredential(tenantId, clientId, secret)` | `TenantId`, `ClientId`, `ClientSecret` |
 
-**Certificate mode** — the certificate is loaded from `Cert:\LocalMachine\My` by thumbprint (`X509Store(StoreName.My, StoreLocation.LocalMachine)`). Local System has access to `LocalMachine\My` by default; no additional key permission grants are required when the service runs as Local System.
+**Certificate mode** — the certificate is loaded from `Cert:\LocalMachine\My` by thumbprint (`X509Store(StoreName.My, StoreLocation.LocalMachine)`). Local System has access to `LocalMachine\My` by default; no additional key permission grants are required when the service runs as Local System. Preferred for production.
 
-**ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing; certificate mode is preferred for production.
+**ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing.
+
+NewsCentral does **not** use these modes. It authenticates via an interactive MSAL user session (see Section 10).
 
 ---
 
@@ -915,7 +911,7 @@ No direct inter-process communication between any components. All coordination i
 | Item | Notes |
 |---|---|
 | **NewsService Azure mode** | `AzureBlobRepositoryReader` is a stub. Implement with `Certificate` / `ClientSecret` auth per Section 5.6. Next planned work item. |
-| **NewsCentral Azure distribution** | `AzureBlobDistributionService` uses connection string today. Replace with `Certificate` / `ClientSecret` auth per Section 5.6. Next planned work item. |
+| **NewsCentral Azure distribution** | `AzureBlobDistributionService` uses a connection string today. Replace with MSAL interactive auth (user session) — separate from the NewsService cert/secret flow. |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |

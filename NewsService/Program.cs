@@ -17,6 +17,7 @@ var effectiveMode    = earlyRegistry.GetStorageMode() ?? config.Repository.Stora
 
 if (effectiveMode.Equals("Azure", StringComparison.OrdinalIgnoreCase))
 {
+    builder.Services.AddSingleton(config.AzureBlob);
     builder.Services.AddSingleton<IRepositoryReader, AzureBlobRepositoryReader>();
 }
 else
