@@ -22,6 +22,7 @@ static class Program
         if (teams.Length == 0) return;
 
         if (!HasQualifyingMonitor()) return;
+        if (IsRemoteOrVirtualSession()) return;
 
         var selector = new PresentationSelector(config.CacheRootPath);
         var (assignment, imagePath) = selector.SelectActive(teams);
@@ -39,6 +40,9 @@ static class Program
 
         if (assignment.ShowMode == Schedule.DisplayMode.ShowNew)
         {
+            // Virtual desktop is incompatible with ShowNew: ShowNewApplicationContext creates
+            // a hidden timer window before any SwitchToNew() call, causing SetThreadDesktop to fail.
+            // ShowNew presentations always show on the current desktop.
             var context = new ShowNewApplicationContext(
                 teams, selector, viewerState, telemetry, config.CacheRootPath, bypass);
 
@@ -53,7 +57,24 @@ static class Program
         if (alreadyShown) return;
 
         var isOnline = ReadOnlineStatus(config.CacheRootPath);
-        Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline));
+
+        if (assignment.UseVirtualDesktop)
+        {
+            // SetThreadDesktop must be called before any window handle is created on this thread.
+            using var desktop = new VirtualDesktopManager();
+            desktop.SwitchToNew();
+
+            var bgForm    = new BackgroundForm(assignment.VirtualDesktopBackgroundColor);
+            bgForm.Show();
+
+            var viewerForm = new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline);
+            viewerForm.FormClosed += (_, _) => { bgForm.Close(); desktop.SwitchToOriginal(); };
+            Application.Run(viewerForm);
+        }
+        else
+        {
+            Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline));
+        }
     }
 
     private static ViewerConfiguration LoadConfiguration()
@@ -74,6 +95,12 @@ static class Program
 
     private static bool HasQualifyingMonitor() =>
         Screen.AllScreens.Any(s => s.Bounds.Width >= 1920 && s.Bounds.Height >= 1080);
+
+    // RDP and Citrix ICA both set SM_REMOTESESSION (TerminalServerSession).
+    // VMware Horizon sets the ViewClient_Machine_Name environment variable.
+    private static bool IsRemoteOrVirtualSession() =>
+        SystemInformation.TerminalServerSession ||
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ViewClient_Machine_Name"));
 
     private static bool ReadOnlineStatus(string cacheRootPath)
     {

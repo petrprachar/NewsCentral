@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.6  
+**Version:** 1.7  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -92,7 +92,7 @@ The solution provides a structured communication channel between content author 
 | NewsCentral | C# / .NET 9 MAUI Blazor Hybrid | Active development |
 | NewsCentral.Shared | C# / .NET 9 class library | Implemented |
 | NewsService | C# / .NET 9 — Windows Service (`Microsoft.NET.Sdk.Worker`) | Implemented |
-| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Phase 2 partially implemented |
+| NewsViewer | C# / .NET 9 — WinForms; NativeAOT migration path preserved | Phase 2 complete |
 | NewsTester | C# — to be decided at design time | Future |
 | Data files | JSON throughout (`System.Text.Json`, `WriteIndented = true`, `CamelCase`, `PropertyNameCaseInsensitive`, `JsonStringEnumConverter`) | — |
 | Images | Base64-encoded and embedded in presentation JSON | — |
@@ -172,11 +172,14 @@ NewsViewer\
 │   ├── PresentationSelector.cs       reads index.json per team, filters active, picks most recent
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
 │   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
+│   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
 │   └── TelemetryWriter.cs            writes session-{guid}.json to uploads\ on close
 ├── Forms\
-│   └── ViewerForm.cs                 1600×900 borderless WinForms window; hover-triggered side panel
+│   ├── ViewerForm.cs                 1600×900 borderless WinForms window; hover-triggered side panel
+│   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
+├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; startup checks; branches on ShowMode
+├── Program.cs                        entry point; startup checks; remote session guard; branches on ShowMode
 └── appsettings.json
 ```
 
@@ -466,6 +469,8 @@ public class PublishedAssignmentIndex
     public string? PosterText { get; set; }             // From Presentation.PosterText
     public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
     public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
+    public bool UseVirtualDesktop { get; set; }
+    public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
 }
 
 public class ContentInfo
@@ -706,7 +711,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 ### 8.4 NewsViewer
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 2 partially implemented. Hover-triggered side panel and ShowNew FileSystemWatcher complete and tested. Virtual desktop and RDP/Citrix/VMware suppression not yet started. NativeAOT migration path preserved; Win32 P/Invoke usage kept compatible.
+**Status:** Phase 2 complete. All four Phase 2 features implemented and tested. NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
 #### Launch Conditions
 
@@ -767,6 +772,30 @@ When `assignment.ShowMode == Schedule.DisplayMode.ShowNew`, `Program.Main` creat
   2. **Day-boundary check** — if `AlreadyShownToday` returns false (new calendar day or new presentation): show the viewer. `BypassShowOnceCheck` does **not** apply here — only applies to the startup gate in `Program.Main`.
 - `_activeForm != null` guards against opening a second instance while one is already displayed.
 - To terminate a resident ShowNew process: `taskkill /IM NewsViewer.exe /F` or Task Manager → Details → End Task.
+
+#### Remote / Virtual Session Suppression (Phase 2)
+
+Checked in `Program.Main` immediately after `HasQualifyingMonitor`, before any file I/O or window creation:
+
+- **RDP and Citrix ICA** — detected via `SystemInformation.TerminalServerSession` (`GetSystemMetrics(SM_REMOTESESSION)`). Both RDP and Citrix ICA sessions set this flag.
+- **VMware Horizon** — detected via the `ViewClient_Machine_Name` environment variable, which Horizon sets in every user session.
+
+If either condition is true the process exits immediately, no window is shown, and no watcher is started.
+
+#### Virtual Desktop (Phase 2 — ShowOnce only)
+
+When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
+
+1. `VirtualDesktopManager` is constructed — saves the original desktop handle (`GetThreadDesktop`) and creates a new named desktop (`CreateDesktop("NewsViewer", ...)`).
+2. `SwitchToNew()` is called — `SwitchDesktop` makes the new desktop visible; `SetThreadDesktop` binds the UI thread to it. **This must happen before any window handle is created on the thread** — once a thread owns a window, `SetThreadDesktop` fails. The ordering in `Program.Main` guarantees this.
+3. `BackgroundForm` (borderless, maximised, `VirtualDesktopBackgroundColor`) is shown, filling the new desktop.
+4. `ViewerForm` is shown on top.
+5. On `ViewerForm.FormClosed`: `BackgroundForm` is closed first (still on new desktop context), then `SwitchToOriginal()` returns the user to the default desktop.
+6. `VirtualDesktopManager.Dispose()` calls `CloseDesktop` to release the handle.
+
+**ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`.
+
+Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Unicode`, no unsafe blocks).
 
 #### Session Telemetry
 
@@ -850,7 +879,6 @@ No direct inter-process communication between any components. All coordination i
 
 | Item | Notes |
 |---|---|
-| NewsViewer Phase 2 — remaining | Virtual desktop (`CreateDesktop`/`SwitchDesktop`/`SetThreadDesktop`); RDP/Citrix/VMware Horizon session suppression. Side panel hover and ShowNew watcher are complete. |
 | NewsService Azure mode | `AzureBlobRepositoryReader` is a stub; requires machine certificate auth (Phase 2) |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
