@@ -33,7 +33,8 @@ public class ScheduleService
         string version,
         DateTime scheduleStart,
         DateTime scheduleEnd,
-        List<int> daysOfWeek)
+        List<int> daysOfWeek,
+        Schedule.DisplayMode showMode = Schedule.DisplayMode.ShowOnce)
     {
         var currentUser = _authService.GetCurrentUser();
         if (currentUser == null)
@@ -52,6 +53,7 @@ public class ScheduleService
             ScheduleEnd = scheduleEnd,
             DaysOfWeek = string.Join(",", daysOfWeek.OrderBy(d => d)),
             IsActive = true,
+            ShowMode = showMode,
             CreatedBy = currentUser.UserID,
             LastModified = DateTime.UtcNow
         };

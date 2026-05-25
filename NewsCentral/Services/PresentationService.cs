@@ -198,7 +198,9 @@ public class PresentationService
         string moreUrl,
         bool isNewsOfWeek,
         bool isWallpaper,
-        bool isLogonScreen)
+        bool isLogonScreen,
+        bool useVirtualDesktop = false,
+        string virtualDesktopBackgroundColor = "#000000")
     {
         var currentUser = _authService.GetCurrentUser()
             ?? throw new UnauthorizedAccessException("Not authenticated");
@@ -210,14 +212,16 @@ public class PresentationService
         if (presentation.CreatedBy != currentUser.UserID && !currentUser.IsSystemAdmin)
             throw new UnauthorizedAccessException("You can only edit your own presentations");
 
-        presentation.Name          = name;
-        presentation.Description   = description;
-        presentation.MoreUrl       = moreUrl;
-        presentation.IsNewsOfWeek  = isNewsOfWeek;
-        presentation.IsWallpaper   = isWallpaper;
-        presentation.IsLogonScreen = isLogonScreen;
-        presentation.LastModified  = DateTime.UtcNow;
-        presentation.ModifiedBy    = currentUser.UserID;
+        presentation.Name                         = name;
+        presentation.Description                  = description;
+        presentation.MoreUrl                      = moreUrl;
+        presentation.IsNewsOfWeek                 = isNewsOfWeek;
+        presentation.IsWallpaper                  = isWallpaper;
+        presentation.IsLogonScreen                = isLogonScreen;
+        presentation.UseVirtualDesktop            = useVirtualDesktop;
+        presentation.VirtualDesktopBackgroundColor = virtualDesktopBackgroundColor;
+        presentation.LastModified                 = DateTime.UtcNow;
+        presentation.ModifiedBy                   = currentUser.UserID;
 
         // Safety net for presentations created before the always-populate fix.
         // Condition checks GeneratedImagePath (not ContentImageBase64, which is

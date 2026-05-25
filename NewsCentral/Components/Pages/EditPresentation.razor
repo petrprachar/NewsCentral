@@ -79,6 +79,25 @@
                     </label>
                 </div>
             </div>
+
+            <!-- Virtual Desktop -->
+            <div class="form-group">
+                <label class="section-label">Virtual Desktop:</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="useVirtualDesktop" />
+                        <span>Show on virtual desktop (ShowOnce mode only)</span>
+                    </label>
+                    @if (useVirtualDesktop)
+                    {
+                        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+                            <label style="margin:0;font-weight:normal;">Background color:</label>
+                            <input type="color" @bind="virtualDesktopBackgroundColor" style="width:48px;height:32px;padding:2px;border:1px solid #ddd;border-radius:4px;cursor:pointer;" />
+                            <span style="font-size:12px;color:#666;">@virtualDesktopBackgroundColor</span>
+                        </div>
+                    }
+                </div>
+            </div>
         </div>
 
         <!-- Original Image Preview -->
@@ -435,9 +454,12 @@
     private bool supportPosterCreation = false;
 
     // NEW: Display type flags (will be passed to Create Assignment)
-    private bool isNewsOfWeek = true;       // Default checked
-    private bool isWallpaper = false;       // Future feature (disabled)
-    private bool isLogonScreen = false;     // Future feature (disabled)
+    private bool isNewsOfWeek = true;
+    private bool isWallpaper = false;
+    private bool isLogonScreen = false;
+
+    private bool useVirtualDesktop = false;
+    private string virtualDesktopBackgroundColor = "#000000";
 
     protected override async Task OnInitializedAsync()
     {
@@ -493,6 +515,8 @@
             isNewsOfWeek = presentation.IsNewsOfWeek;
             isWallpaper = presentation.IsWallpaper;
             isLogonScreen = presentation.IsLogonScreen;
+            useVirtualDesktop = presentation.UseVirtualDesktop;
+            virtualDesktopBackgroundColor = presentation.VirtualDesktopBackgroundColor ?? "#000000";
 
             // Load original image preview
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
@@ -593,7 +617,9 @@
                 moreUrl,
                 isNewsOfWeek,
                 isWallpaper,
-                isLogonScreen);
+                isLogonScreen,
+                useVirtualDesktop,
+                virtualDesktopBackgroundColor);
 
             successMessage = "Presentation updated successfully!";
             StateHasChanged();
@@ -656,7 +682,9 @@
                 moreUrl,
                 isNewsOfWeek,
                 isWallpaper,
-                isLogonScreen);
+                isLogonScreen,
+                useVirtualDesktop,
+                virtualDesktopBackgroundColor);
 
             // Then generate poster (this also updates display flags)
             var updatedPresentation = await PresentationService.UpdatePresentationWithPosterAsync(
