@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 1.7  
+**Version:** 1.8  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -581,7 +581,7 @@ Repository / network share mirrors the same team folder structure as the `%progr
 ### 8.1 NewsCentral
 
 **Type:** .NET 9 MAUI Blazor Hybrid desktop application  
-**Status:** Active development. Admin page, assignments, publishing workflow, and Azure blob distribution implemented.
+**Status:** Active development. Admin page, assignments, publishing workflow, Azure blob distribution, and ShowMode/UseVirtualDesktop/VirtualDesktopBackgroundColor UI implemented.
 
 #### Responsibilities
 
@@ -604,6 +604,13 @@ Repository / network share mirrors the same team folder structure as the `%progr
 | `TeamContextService` | Current team scope for the session |
 | `AuthenticationService` | Login, UPN detection, role resolution |
 | `DataSeederService` | Seeds default admin/team on first run |
+
+#### Key UI Pages
+
+| Page | Path | Purpose |
+|---|---|---|
+| `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
+| `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates, select target teams, choose `ShowMode` (ShowOnce / ShowNew), set approval requirement |
 
 #### Storage Backend
 
