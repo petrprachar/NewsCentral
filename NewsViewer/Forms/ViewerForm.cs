@@ -150,8 +150,8 @@ public sealed class ViewerForm : Form
             AutoSize  = false,
             Size      = new Size(1380, 38),
             Location  = new Point(0, 862),
-            TextAlign = ContentAlignment.MiddleLeft,
-            Padding   = new Padding(12, 0, 0, 0)
+            TextAlign = ContentAlignment.MiddleCenter,
+            Padding   = new Padding(0)
         };
         Controls.Add(_lblPosterText);
 
