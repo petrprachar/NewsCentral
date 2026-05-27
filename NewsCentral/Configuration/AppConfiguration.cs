@@ -54,4 +54,6 @@ public class AppConfiguration
     public string AzureBlobTenantId    => _configuration["AzureBlob:TenantId"]    ?? string.Empty;
     public string AzureBlobClientId    => _configuration["AzureBlob:ClientId"]    ?? string.Empty;
     public string AzureBlobAccountName => _configuration["AzureBlob:AccountName"] ?? string.Empty;
+
+    public string HmacSecretKey => _configuration["Hmac:SecretKey"] ?? string.Empty;
 }

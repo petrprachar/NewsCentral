@@ -1,6 +1,7 @@
 using NewsCentral.Models;
 using NewsCentral.Models.IndexFile;
 using NewsCentral.Repositories;
+using NewsCentral.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,6 +16,7 @@ public class IndexGenerationService
     private readonly IBlobDistributionService _blobDistribution;
     private readonly IServiceProvider _serviceProvider;
     private readonly AuthenticationService _authService;
+    private readonly HmacService _hmac;
 
     private const string IndexFileName = "index.json";
 
@@ -22,12 +24,14 @@ public class IndexGenerationService
         IStorageService storage,
         IBlobDistributionService blobDistribution,
         IServiceProvider serviceProvider,
-        AuthenticationService authService)
+        AuthenticationService authService,
+        HmacService hmac)
     {
         _storage          = storage;
         _blobDistribution = blobDistribution;
         _serviceProvider  = serviceProvider;
         _authService      = authService;
+        _hmac             = hmac;
     }
 
     // ── Index path ───────────────────────────────────────────────────────────
@@ -90,6 +94,7 @@ public class IndexGenerationService
 
         index.Statistics = CalculateStatistics(index.PublishedAssignments);
         index.IndexHash  = CalculateIndexHash(index);
+        index.Signature  = _hmac.Sign(index);
 
         System.Diagnostics.Debug.WriteLine(
             $"Index generated with {index.PublishedAssignments.Count} entries");

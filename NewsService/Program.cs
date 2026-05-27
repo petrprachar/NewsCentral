@@ -1,4 +1,5 @@
 using NewsCentral.Configuration;
+using NewsCentral.Security;
 using NewsService;
 using NewsService.Configuration;
 using NewsService.Services;
@@ -30,6 +31,9 @@ else
             config.Repository.SharePath,
             sp.GetRequiredService<ILogger<LocalShareRepositoryReader>>()));
 }
+
+// ── HMAC ─────────────────────────────────────────────────────────────────────
+builder.Services.AddSingleton(new HmacService(config.Hmac));
 
 // ── Cache and services ───────────────────────────────────────────────────────
 builder.Services.AddSingleton(_ => new CacheManager(

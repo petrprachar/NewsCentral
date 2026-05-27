@@ -16,6 +16,8 @@ public class Schedule : IEntity
     public enum DisplayMode { ShowOnce, ShowNew }
     public DisplayMode ShowMode { get; set; } = DisplayMode.ShowOnce;
 
+    public string? Signature { get; set; }
+
     public string GetId() => ScheduleID;
     public void SetId(string id) => ScheduleID = id;
 }

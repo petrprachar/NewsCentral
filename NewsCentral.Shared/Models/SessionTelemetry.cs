@@ -1,6 +1,8 @@
-namespace NewsViewer.Models;
+using NewsCentral.Security;
 
-public class SessionTelemetry
+namespace NewsCentral.Models;
+
+public class SessionTelemetry : ISignable
 {
     public string SessionId { get; set; } = string.Empty;
     public string PresentationId { get; set; } = string.Empty;

@@ -3,6 +3,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NewsCentral.Configuration;
+using NewsCentral.Security;
 using NewsCentral.Services;
 using System.Reflection;
 using Microsoft.Extensions.Localization;
@@ -134,6 +135,8 @@ public static class MauiProgram
         }
 
         builder.Services.AddSingleton(appConfig);
+        builder.Services.AddSingleton(
+            new HmacService(new HmacOptions { SecretKey = appConfig.HmacSecretKey }));
 
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         // LocalStorageService resolves all paths against AppConfig.DataPath.

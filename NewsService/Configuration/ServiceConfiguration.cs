@@ -1,3 +1,5 @@
+using NewsCentral.Security;
+
 namespace NewsService.Configuration;
 
 public class ServiceConfiguration
@@ -7,6 +9,7 @@ public class ServiceConfiguration
     public ServiceSection Service { get; set; } = new();
     public RepositorySection Repository { get; set; } = new();
     public AzureBlobSection AzureBlob { get; set; } = new();
+    public HmacOptions Hmac { get; set; } = new();
 }
 
 public class ServiceSection

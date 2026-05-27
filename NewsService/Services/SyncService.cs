@@ -1,5 +1,6 @@
 using System.Text.Json;
 using NewsCentral.Models.IndexFile;
+using NewsCentral.Security;
 using NewsService.Models;
 
 namespace NewsService.Services;
@@ -16,6 +17,7 @@ public sealed class SyncService(
     CacheManager cache,
     WallpaperService wallpaper,
     TelemetryUploader telemetry,
+    HmacService hmac,
     ILogger<SyncService> logger)
 {
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
@@ -81,6 +83,17 @@ public sealed class SyncService(
 
         var remoteIndex = JsonSerializer.Deserialize<TeamIndexFile>(remoteJson, Json);
         if (remoteIndex is null) return;
+
+        var sigResult = hmac.Verify(remoteIndex);
+        if (sigResult == VerifyResult.Invalid)
+        {
+            logger.LogError(
+                "Team {Team}: index.json HMAC signature invalid — sync aborted. " +
+                "Content may have been tampered with.", teamFolder);
+            return;
+        }
+        if (sigResult == VerifyResult.Unsigned)
+            logger.LogWarning("Team {Team}: index.json carries no HMAC signature", teamFolder);
 
         var cachedIndex = await cache.ReadJsonAsync<TeamIndexFile>($"{teamFolder}/index.json");
 

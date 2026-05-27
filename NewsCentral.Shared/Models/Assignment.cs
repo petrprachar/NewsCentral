@@ -30,6 +30,8 @@ public class Assignment : IEntity
     public DateTime? RejectedDate { get; set; }
     public string? RejectionReason { get; set; }
 
+    public string? Signature { get; set; }
+
     public string GetId() => AssignmentID;
     public void SetId(string id) => AssignmentID = id;
 }

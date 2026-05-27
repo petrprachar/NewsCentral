@@ -1,6 +1,8 @@
+using NewsCentral.Security;
+
 namespace NewsCentral.Models.IndexFile
 {
-    public class TeamIndexFile
+    public class TeamIndexFile : ISignable
     {
         public string TeamFolderName { get; set; } = string.Empty;
         public string TeamName { get; set; } = string.Empty;
@@ -9,5 +11,6 @@ namespace NewsCentral.Models.IndexFile
         public string IndexHash { get; set; } = string.Empty;
         public List<PublishedAssignmentIndex> PublishedAssignments { get; set; } = new();
         public IndexStatistics Statistics { get; set; } = new();
+        public string? Signature { get; set; }
     }
 }

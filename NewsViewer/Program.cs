@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using NewsCentral.Configuration;
 using NewsCentral.Models;
+using NewsCentral.Security;
 using NewsViewer.Configuration;
 using NewsViewer.Forms;
 using NewsViewer.Services;
@@ -26,7 +27,8 @@ static class Program
         if (!HasQualifyingMonitor()) return;
         if (IsRemoteOrVirtualSession()) return;
 
-        var selector = new PresentationSelector(config.CacheRootPath);
+        var hmac     = new HmacService(config.Hmac);
+        var selector = new PresentationSelector(config.CacheRootPath, hmac);
         var (assignment, imagePath) = selector.SelectActive(teams);
         if (assignment is null || imagePath is null) return;
 
@@ -36,7 +38,7 @@ static class Program
         Directory.CreateDirectory(userStatePath);
 
         var viewerState = new ViewerStateService(userStatePath);
-        var telemetry   = new TelemetryWriter(config.CacheRootPath);
+        var telemetry   = new TelemetryWriter(config.CacheRootPath, hmac);
         bool bypass     = config.BypassShowOnceCheck;
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday(assignment.PresentationId);
 

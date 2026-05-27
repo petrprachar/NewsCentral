@@ -1,6 +1,6 @@
 namespace NewsCentral.Models
 {
-    public class Presentation : IEntity
+    public class Presentation : IEntity, NewsCentral.Security.ISignable
     {
         public string PresentationID { get; set; } = Guid.NewGuid().ToString();
         public string Name { get; set; } = string.Empty;
