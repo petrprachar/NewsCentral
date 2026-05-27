@@ -134,13 +134,21 @@ NewsCentral.Shared\
 
 All model namespaces are `NewsCentral.Models` and `NewsCentral.Models.IndexFile` — identical to their previous location in the NewsCentral project, so no using-directive changes were required in NewsCentral when the shared library was extracted.
 
+### NewsCentral.Shared — Configuration Layout
+
+```
+NewsCentral.Shared\
+└── Configuration\
+    ├── RegistryConfigurationProvider.cs   IConfigurationProvider/IConfigurationSource + AddRegistryOverrides() extension
+    └── TeamConfigurationReader.cs         GetTeams(IConfiguration) helper
+```
+
 ### NewsService — Service Layout
 
 ```
 NewsService\
 ├── Configuration\
 │   ├── ServiceConfiguration.cs    typed POCOs bound from appsettings.json
-│   └── RegistryConfiguration.cs   reads HKLM overrides; registry wins over config
 ├── Models\
 │   ├── StatusFile.cs              status.json structure
 │   └── ServiceState.cs            servicestate.json structure
@@ -153,8 +161,8 @@ NewsService\
 │   ├── TelemetryUploader.cs       copies uploads\session-*.json to repository
 │   └── SyncService.cs             orchestrates the five-step poll cycle
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
-├── Worker.cs                      BackgroundService host; reads interval from registry
-├── Program.cs                     DI wiring; storage mode resolved from registry at startup
+├── Worker.cs                      BackgroundService host; reads interval from configuration
+├── Program.cs                     DI wiring; adds registry override source; storage mode resolved from merged config
 └── appsettings.json
 ```
 
@@ -163,8 +171,7 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   ├── ViewerConfiguration.cs        typed POCOs bound from appsettings.json
-│   └── RegistryConfiguration.cs      reads HKLM 'teams' and 'BypassShowOnceCheck'; same pattern as NewsService
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck
 ├── Models\
 │   ├── ViewerState.cs                viewerstate.json structure
 │   └── SessionTelemetry.cs           uploads\session-*.json structure
@@ -221,21 +228,49 @@ All registry-configurable values reside under:
 HKLM\Software\[Company]\[NewsCentral]\
 ```
 
-The `[Company]` and `[NewsCentral]` placeholder strings are defined in `appsettings.json` and are **not** overridable via registry.
+The `[Company]` and `[NewsCentral]` placeholder strings are defined in `appsettings.json` and are **not** overridable via registry (they define the registry path itself).
 
 ### 5.2 Precedence Rule
 
-Registry values override `appsettings.json` values. If a registry value is absent, the `appsettings.json` value applies.
+Registry values override `appsettings.json` values. Override is implemented via `RegistryConfigurationProvider` (in `NewsCentral.Shared`) wired into both `NewsService` and `NewsViewer` through `IConfigurationBuilder.AddRegistryOverrides(company, appName)`. Any `appsettings.json` key can be overridden by mirroring the JSON section hierarchy as registry subkeys.
 
-### 5.3 Registry Values
+### 5.3 Registry Layout
 
-| Value Name | Type | Description | Default |
-|---|---|---|---|
-| `teams` | `REG_SZ` | Semicolon-separated list of team identifiers configured for this machine. Example: `"team_xy;team_xz"` | — |
-| `StorageMode` | `REG_SZ` | Storage backend: `Share` or `Azure` | `Share` |
-| `AzureUploadEnabled` | `DWORD` | Whether NewsService uploads telemetry to Azure Blob | `0` |
-| `PollIntervalSeconds` | `DWORD` | NewsService polling interval in seconds | `300` |
-| `BypassShowOnceCheck` | `DWORD` | NewsViewer only. Set to `1` to skip the once-per-day guard at startup — allows repeated test runs without waiting for a new day. Does **not** affect the ShowNew watcher's day-boundary logic. | `0` |
+```
+HKLM\Software\[Company]\[NewsCentral]\
+│   StorageMode           REG_SZ    ("Share" or "Azure")
+│   PollIntervalSeconds   DWORD     (NewsService poll interval)
+│   AzureUploadEnabled    DWORD     (1 = enable telemetry upload to Azure)
+│   BypassShowOnceCheck   DWORD     (NewsViewer: 1 = skip once-per-day guard)
+│
+├── Service\
+│       PollIntervalSeconds   DWORD
+│       CacheRootPath         REG_SZ
+│
+├── Repository\
+│       StorageMode   REG_SZ
+│       SharePath     REG_SZ
+│
+├── AzureBlob\
+│       AuthMode               REG_SZ
+│       TenantId               REG_SZ
+│       ClientId               REG_SZ
+│       AccountName            REG_SZ
+│       ContainerName          REG_SZ
+│       CertificateThumbprint  REG_SZ
+│       ClientSecret           REG_SZ
+│
+└── teams\
+        (one REG_SZ value per team; value name = team folder name; data = "" or any string)
+        e.g.  MY_TEAM   REG_SZ   ""
+              EXP_JP    REG_SZ   ""
+```
+
+**DWORD mapping:** `0` → `"False"`, `1` → `"True"`, values > 1 → numeric string. The configuration binder selects the correct interpretation from the target POCO property type. **REG_SZ** values are stored as-is. All other registry value types are ignored.
+
+**`teams\` sub-hive:** team folder names are the value *names* (not the value data). The provider exposes them as `teams:0`, `teams:1`, … so `IConfiguration.GetSection("teams").GetChildren()` returns one entry per team. Use `TeamConfigurationReader.GetTeams(configuration)` to read them.
+
+**Root-level values** (e.g. `StorageMode` directly under the app key) are supported for backward compatibility. Prefer section-namespaced subkeys (e.g. `Repository\StorageMode`) so they map cleanly onto the `appsettings.json` hierarchy.
 
 ### 5.4 appsettings.json — NewsCentral
 
@@ -676,16 +711,18 @@ See [Section 4 — Solution Structure](#4-solution-structure) for the full file 
 
 #### Configuration Resolution
 
-`RegistryConfiguration` reads from `HKLM\Software\{Company}\{ApplicationName}\`. Registry values override `appsettings.json`:
+`RegistryConfigurationProvider` (from `NewsCentral.Shared`) is added to `IConfigurationBuilder` in `Program.cs` via `AddRegistryOverrides(company, appName)`. It reads from `HKLM\Software\{Company}\{ApplicationName}\` and merges registry values on top of `appsettings.json`. Any appsettings.json key can be overridden; see Section 5.3 for the full registry layout.
 
-| Registry value | Type | Effect |
+Key registry values for NewsService:
+
+| Registry path | Type | Effect |
 |---|---|---|
-| `teams` | `REG_SZ` | Semicolon-separated team folder names (e.g. `MY_TEAM;EXP_JP`) |
-| `StorageMode` | `REG_SZ` | `Share` (default) or `Azure` |
-| `PollIntervalSeconds` | `DWORD` | Overrides `Service:PollIntervalSeconds` |
+| `Repository\StorageMode` | `REG_SZ` | `Share` (default) or `Azure` |
+| `Service\PollIntervalSeconds` | `DWORD` | Overrides `Service:PollIntervalSeconds` |
 | `AzureUploadEnabled` | `DWORD` | `1` to enable telemetry upload to Azure Blob |
+| `teams\{teamFolderName}` | `REG_SZ` | Each value name is a team folder name |
 
-`Company` and `ApplicationName` keys are read from `appsettings.json` and are not registry-overridable.
+`Company` and `ApplicationName` are read from appsettings.json before the registry provider is added and are not registry-overridable.
 
 #### Poll Cycle — `SyncService.RunCycleAsync`
 

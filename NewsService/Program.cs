@@ -1,3 +1,4 @@
+using NewsCentral.Configuration;
 using NewsService;
 using NewsService.Configuration;
 using NewsService.Services;
@@ -6,16 +7,18 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddWindowsService(options => options.ServiceName = "NewsService");
 
-// ── Typed configuration ──────────────────────────────────────────────────────
+// ── Load appsettings, then apply registry overrides ──────────────────────────
+// Company/ApplicationName are read first (they define the registry path itself and
+// are therefore not registry-overridable).
+var baseConfig = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();
+builder.Configuration.AddRegistryOverrides(baseConfig.Company, baseConfig.ApplicationName);
+
+// Re-bind so all typed POCOs reflect registry overrides.
 var config = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();
 builder.Services.AddSingleton(config);
-builder.Services.AddSingleton<RegistryConfiguration>();
 
-// ── Repository reader — mode resolved from registry, falls back to appsettings ──
-var earlyRegistry    = new RegistryConfiguration(config);
-var effectiveMode    = earlyRegistry.GetStorageMode() ?? config.Repository.StorageMode;
-
-if (effectiveMode.Equals("Azure", StringComparison.OrdinalIgnoreCase))
+// ── Repository reader — mode resolved from merged configuration ───────────────
+if (config.Repository.StorageMode.Equals("Azure", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton(config.AzureBlob);
     builder.Services.AddSingleton<IRepositoryReader, AzureBlobRepositoryReader>();

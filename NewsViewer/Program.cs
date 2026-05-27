@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsViewer.Configuration;
 using NewsViewer.Forms;
@@ -15,10 +17,10 @@ static class Program
         Application.SetCompatibleTextRenderingDefault(false);
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
 
-        var config   = LoadConfiguration();
-        var registry = new RegistryConfiguration(config);
+        var configuration = BuildConfiguration();
+        var config        = configuration.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
-        var teams = registry.GetTeams();
+        var teams = TeamConfigurationReader.GetTeams(configuration);
         if (teams.Length == 0) return;
 
         if (!HasQualifyingMonitor()) return;
@@ -35,7 +37,7 @@ static class Program
 
         var viewerState = new ViewerStateService(userStatePath);
         var telemetry   = new TelemetryWriter(config.CacheRootPath);
-        bool bypass     = registry.GetBypassShowOnceCheck();
+        bool bypass     = config.BypassShowOnceCheck;
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday(assignment.PresentationId);
 
         if (assignment.ShowMode == Schedule.DisplayMode.ShowNew)
@@ -94,20 +96,20 @@ static class Program
         }
     }
 
-    private static ViewerConfiguration LoadConfiguration()
+    private static IConfiguration BuildConfiguration()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-        try
-        {
-            if (File.Exists(path))
-            {
-                var json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<ViewerConfiguration>(json, JsonDefaults.Options)
-                       ?? new ViewerConfiguration();
-            }
-        }
-        catch { }
-        return new ViewerConfiguration();
+        var jsonPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+
+        // Preliminary pass to read Company/ApplicationName (not registry-overridable).
+        var preliminary = new ConfigurationBuilder()
+            .AddJsonFile(jsonPath, optional: true)
+            .Build();
+        var baseConfig = preliminary.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
+
+        return new ConfigurationBuilder()
+            .AddJsonFile(jsonPath, optional: true)
+            .AddRegistryOverrides(baseConfig.Company, baseConfig.ApplicationName)
+            .Build();
     }
 
     private static bool HasQualifyingMonitor() =>

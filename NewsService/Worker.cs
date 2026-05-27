@@ -1,3 +1,4 @@
+using NewsCentral.Configuration;
 using NewsService.Configuration;
 using NewsService.Services;
 
@@ -6,24 +7,24 @@ namespace NewsService;
 public sealed class Worker(
     ILogger<Worker> logger,
     SyncService syncService,
-    RegistryConfiguration registry,
+    IConfiguration configuration,
     ServiceConfiguration config) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var intervalSeconds = registry.GetPollIntervalSeconds() ?? config.Service.PollIntervalSeconds;
-        var interval = TimeSpan.FromSeconds(intervalSeconds);
+        var interval = TimeSpan.FromSeconds(config.Service.PollIntervalSeconds);
 
-        logger.LogInformation("NewsService starting. Poll interval: {Interval}s", intervalSeconds);
+        logger.LogInformation("NewsService starting. Poll interval: {Interval}s",
+            config.Service.PollIntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var teams = registry.GetTeams();
+            var teams = TeamConfigurationReader.GetTeams(configuration);
 
             if (teams.Length == 0)
                 logger.LogWarning(
-                    "No teams configured. Add a 'teams' REG_SZ value under " +
-                    "HKLM\\Software\\{Company}\\{App} with semicolon-separated team folder names.",
+                    "No teams configured. Add team folder names as REG_SZ values under " +
+                    "HKLM\\Software\\{Company}\\{App}\\teams\\.",
                     config.Company, config.ApplicationName);
             else
                 await RunCycleAsync(teams, stoppingToken);
