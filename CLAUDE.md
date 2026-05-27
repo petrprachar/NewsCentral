@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.3  
+**Version:** 2.4  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -914,7 +914,7 @@ No direct inter-process communication between any components. All coordination i
 | ~~NewsService Azure mode~~ | Implemented — `AzureBlobRepositoryReader` with Certificate / ClientSecret auth (Section 5.6). |
 | ~~NewsCentral Azure distribution~~ | Implemented — `AzureBlobDistributionService` uses `InteractiveBrowserCredential` (MSAL interactive, token cached as `"NewsCentral"`). Config: `AzureBlob:{TenantId,ClientId,AccountName}`. |
 | NewsCentral web application | May be rewritten as a web application or replaced by an existing portal |
-| AI-assisted content generation | Folder structure (`original\`, `generated\`) already in place |
+| AI-assisted content generation | Folder structure (`original\`, `generated\`) in place. Poster UI collects headline, body, and CTA text fields (stored as component state); `PosterGenerationService` stores the original image as-is for now. AI text-overlay call is the planned next step — no external AI API keys are configured at this time. |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |
 | NewsTester | Independent preview application for content authors and approvers |
 | HMAC anti-tamper | `Signature` fields and verification stubs in place; full implementation deferred |

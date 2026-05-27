@@ -21,11 +21,6 @@ public class AppConfiguration
     public int    LockExpirationMinutes =>
         int.TryParse(_configuration["LockExpirationMinutes"], out var m) ? m : 15;
 
-    // ── AI services ─────────────────────────────────────────────────────────
-
-    public string ClaudeApiKey => _configuration["AI:ClaudeApiKey"] ?? string.Empty;
-    public string ClaudeApiUrl => _configuration["AI:ClaudeApiUrl"] ?? string.Empty;
-
     // ── Distribution tier (IBlobDistributionService) ─────────────────────────
     //
     // EnableBlobDistribution = false → NullBlobDistributionService (logs only)

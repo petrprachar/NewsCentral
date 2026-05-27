@@ -2,8 +2,8 @@ namespace NewsCentral.Services;
 
 /// <summary>
 /// Handles poster image storage for the authoring tier.
-/// Image processing (SixLabors) was removed — the original image is stored
-/// as-is under the "generated" folder, acting as the poster.
+/// The original image is stored as-is under the "generated" folder, acting as the poster.
+/// AI-assisted text overlay is planned for a future phase.
 ///
 /// No blob distribution here — pushing to Azure Blob is handled by
 /// PublishingService after the assignment is approved and published.
@@ -26,11 +26,7 @@ public class PosterGenerationService
         string teamFolderName,
         string presentationId,
         string version,
-        byte[] originalImageData,
-        string headlineText,
-        string bodyText,
-        string ctaText = "Learn More",
-        PosterLayout layout = PosterLayout.Standard)
+        byte[] originalImageData)
     {
         var posterFileName = $"poster_{presentationId}_v{version}.jpg";
         var relativePath   = $"{teamFolderName}/images/generated/{posterFileName}";
@@ -57,10 +53,3 @@ public class PosterGenerationService
     }
 }
 
-public enum PosterLayout
-{
-    Standard,
-    MinimalTop,
-    CenterFocus,
-    BottomOverlay
-}

@@ -140,9 +140,6 @@ public class PresentationService
     public async Task<Presentation> UpdatePresentationWithPosterAsync(
         string teamFolderName,
         string presentationId,
-        string headlineText,
-        string bodyText,
-        string ctaText,
         bool isNewsOfWeek,
         bool isWallpaper,
         bool isLogonScreen)
@@ -165,10 +162,7 @@ public class PresentationService
             teamFolderName,
             presentationId,
             presentation.Version.ToString(),
-            originalImageData,
-            headlineText,
-            bodyText,
-            ctaText);
+            originalImageData);
 
         var posterImageData = await _posterService.GetPosterImageDataAsync(teamFolderName, posterPath);
 

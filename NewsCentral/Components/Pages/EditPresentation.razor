@@ -170,7 +170,7 @@
             @if (supportPosterCreation)
             {
                 <button @onclick="SaveAndGeneratePoster" class="btn btn-primary" disabled="@isSaving" type="button">
-                    @(isSaving ? "Generating..." : "🎨 Generate & Save")
+                    @(isSaving ? "Saving..." : "💾 Save with poster text")
                 </button>
             }
             else
@@ -686,13 +686,10 @@
                 useVirtualDesktop,
                 virtualDesktopBackgroundColor);
 
-            // Then generate poster (this also updates display flags)
+            // Save with poster (stores original image as poster; AI text overlay planned for later phase)
             var updatedPresentation = await PresentationService.UpdatePresentationWithPosterAsync(
                 teamFolderName,
                 PresentationId,
-                headlineText,
-                bodyText,
-                ctaText,
                 isNewsOfWeek,
                 isWallpaper,
                 isLogonScreen);
@@ -700,7 +697,7 @@
             // Show generated poster
             posterPreview = $"data:image/jpeg;base64,{updatedPresentation.ContentImageBase64}";
 
-            successMessage = "Presentation updated and poster generated successfully!";
+            successMessage = "Presentation updated with poster text saved successfully!";
             StateHasChanged();
 
             await Task.Delay(1500);
