@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.5  
+**Version:** 2.6  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -176,12 +176,12 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck and HmacOptions
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck, BypassImageIntegrityCheck, and HmacOptions
 ├── Models\
 │   └── ViewerState.cs                viewerstate.json structure
 │   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)
 ├── Services\
-│   ├── PresentationSelector.cs       reads index.json per team, HMAC-verifies, filters active, picks most recent
+│   ├── PresentationSelector.cs       reads index.json per team, HMAC-verifies, filters active, picks most recent, verifies image SHA-256
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
 │   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
@@ -191,7 +191,7 @@ NewsViewer\
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; constructs HmacService; startup checks; remote session guard; branches on ShowMode
+├── Program.cs                        entry point; constructs HmacService; passes BypassImageIntegrityCheck to PresentationSelector; startup checks; remote session guard; branches on ShowMode
 └── appsettings.json
 ```
 
@@ -245,8 +245,9 @@ Registry values override `appsettings.json` values. Override is implemented via 
 HKLM\Software\[Company]\[NewsCentral]\
 │   StorageMode           REG_SZ    ("Share" or "Azure")
 │   PollIntervalSeconds   DWORD     (NewsService poll interval)
-│   AzureUploadEnabled    DWORD     (1 = enable telemetry upload to Azure)
-│   BypassShowOnceCheck   DWORD     (NewsViewer: 1 = skip once-per-day guard)
+│   AzureUploadEnabled           DWORD     (1 = enable telemetry upload to Azure)
+│   BypassShowOnceCheck          DWORD     (NewsViewer: 1 = skip once-per-day guard)
+│   BypassImageIntegrityCheck    DWORD     (NewsViewer: 1 = skip image SHA-256 verification)
 │
 ├── Service\
 │       PollIntervalSeconds   DWORD
@@ -348,6 +349,8 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   "Company": "MyCompany",
   "ApplicationName": "NewsCentral",
   "CacheRootPath": "C:\\ProgramData\\NewsCentral",
+  "BypassShowOnceCheck": false,
+  "BypassImageIntegrityCheck": false,
   "Hmac": {
     "SecretKey": ""
   }
@@ -871,6 +874,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 - Reads `index.json` from all team cache folders matching the `teams` registry configuration
 - **HMAC verification** — calls `HmacService.Verify(index)` on each team's index: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` → logs warning and continues
 - Selects the most recent active presentation by `PresentationLastModified` timestamp
+- **Image integrity verification** — after the winning assignment is selected, computes SHA-256 of the cached image file and compares it against `Content.ImageHash` from the signed index. Missing hash → warning logged, continues. Mismatch → error logged, returns `(best, null)` so the caller exits silently rather than displaying tampered content. Disabled by `BypassImageIntegrityCheck = true`.
 - If no valid presentation found: **exit silently, no window shown**
 - If no qualifying monitor (Full HD or better): **do not show the window**
 
@@ -1002,7 +1006,7 @@ No direct inter-process communication between any components. All coordination i
 - `SyncService` verifies each `index.json` before caching. `Invalid` → sync aborted for that team. `Unsigned` → warning logged, sync continues.
 - `TelemetryUploader` verifies each `session-*.json` before forwarding. `Invalid` → file discarded and logged.
 
-**Verification (NewsViewer):** `PresentationSelector` verifies each team's `index.json`. `Invalid` → team skipped entirely (no presentations displayed from that team). `Unsigned` → warning logged, team accepted.
+**Verification (NewsViewer):** `PresentationSelector` verifies each team's `index.json`. `Invalid` → team skipped entirely (no presentations displayed from that team). `Unsigned` → warning logged, team accepted. After selecting the winning assignment, `PresentationSelector` also verifies the cached image file against `Content.ImageHash` (SHA-256). A missing hash is accepted with a warning; a mismatch returns `(best, null)` so the caller exits silently. Disabled by `BypassImageIntegrityCheck`.
 
 **Key management:** `Hmac:SecretKey` is a Base64-encoded 32-byte key configured in `appsettings.json` or overridden via registry (`Hmac\SecretKey`). An empty key disables HMAC system-wide — all content is treated as `Disabled` and passes through. This enables phased rollout: deploy the key to all machines before enabling signing in NewsCentral.
 
