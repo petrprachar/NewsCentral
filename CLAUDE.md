@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.2  
+**Version:** 2.3  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -244,10 +244,7 @@ Registry values override `appsettings.json` values. If a registry value is absen
   "DataPath": "C:\\Download\\NewsCentral",
   "Initialization": {
     "DefaultAdminUsername": "admin",
-    "DefaultAdminPassword": "admin",
-    "DefaultTeamName": "My Team",
-    "DefaultTeamFolderName": "MY_TEAM",
-    "DefaultTeamDescription": "Default team"
+    "DefaultAdminPassword": "admin"
   },
   "LockExpirationMinutes": 15,
   "Authentication": {

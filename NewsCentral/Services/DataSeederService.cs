@@ -40,7 +40,7 @@ public class DataSeederService
 
         if (await _storage.FileExistsAsync("config/users.json"))
         {
-            System.Diagnostics.Debug.WriteLine("✓ Users file exists - initialization not needed");
+            System.Diagnostics.Debug.WriteLine("✓ Users file exists — initialization not needed");
             return;
         }
 
@@ -52,20 +52,8 @@ public class DataSeederService
     {
         System.Diagnostics.Debug.WriteLine("=== STARTING DATA INITIALIZATION ===");
 
-        // Ensure the config folder exists before writing JSON files
         await _storage.EnsureFolderExistsAsync("config");
         System.Diagnostics.Debug.WriteLine("✓ Config folder ready");
-
-        var teamName        = _configuration["Initialization:DefaultTeamName"]        ?? "My Team";
-        var teamFolderName  = _configuration["Initialization:DefaultTeamFolderName"]  ?? "MY_TEAM";
-        var teamDescription = _configuration["Initialization:DefaultTeamDescription"] ?? "Default team";
-
-        var defaultTeam = await CreateDefaultTeamAsync(teamName, teamFolderName, teamDescription);
-        System.Diagnostics.Debug.WriteLine($"✓ Created default team: {defaultTeam.Name}");
-
-        await CreateTeamFolderStructureAsync(defaultTeam.FolderName);
-        System.Diagnostics.Debug.WriteLine(
-            $"✓ Created folder structure for: {defaultTeam.FolderName}");
 
         var adminUser = await CreateDefaultAdminUserAsync();
         System.Diagnostics.Debug.WriteLine($"✓ Created admin user: {adminUser.Username}");
@@ -80,60 +68,6 @@ public class DataSeederService
     }
 
     // ── Private initialisation helpers ────────────────────────────────────────
-
-    private async Task<Team> CreateDefaultTeamAsync(
-        string teamName, string folderName, string description)
-    {
-        var defaultTeam = new Team
-        {
-            TeamID      = Guid.NewGuid().ToString(),
-            Name        = teamName,
-            FolderName  = folderName,
-            ContentPath = $"{folderName}/content",
-            Description = description,
-            CreatedBy   = "system",
-            DateCreated = DateTime.UtcNow,
-            IsActive    = true
-        };
-
-        var teamsCollection = new TeamsCollection
-        {
-            Teams        = new List<Team> { defaultTeam },
-            Version      = "1",
-            LastModified = DateTime.UtcNow,
-            ModifiedBy   = "system"
-        };
-
-        // Relative path matches JsonFileRepository<TeamsCollection>(_storage, "config", "")
-        // → GetById("teams") → "config/teams.json"
-        await _storage.WriteTextAsync(
-            "config/teams.json",
-            JsonSerializer.Serialize(teamsCollection, JsonOptions));
-
-        System.Diagnostics.Debug.WriteLine("✓ Teams collection file created: config/teams.json");
-        return defaultTeam;
-    }
-
-    private async Task CreateTeamFolderStructureAsync(string teamFolderName)
-    {
-        var folders = new[]
-        {
-            $"{teamFolderName}/content/presentations",
-            $"{teamFolderName}/content/schedules",
-            $"{teamFolderName}/content/assignments",
-            $"{teamFolderName}/content/drafts",      // ← add (was missing)
-            $"{teamFolderName}/images/original",
-            $"{teamFolderName}/images/generated",
-            // published/ removed — distribution goes to blob, not a local folder
-            $"{teamFolderName}/deleted"
-        };
-
-        foreach (var folder in folders)
-        {
-            await _storage.EnsureFolderExistsAsync(folder);
-            System.Diagnostics.Debug.WriteLine($"  Created: {folder}");
-        }
-    }
 
     private async Task<User> CreateDefaultAdminUserAsync()
     {
@@ -186,8 +120,7 @@ public class DataSeederService
     /// Safe to block: LocalStorageService.FileExistsAsync is synchronous underneath.
     /// </summary>
     public bool IsInitialized() =>
-        _storage.FileExistsAsync("config/users.json").GetAwaiter().GetResult() &&
-        _storage.FileExistsAsync("config/teams.json").GetAwaiter().GetResult();
+        _storage.FileExistsAsync("config/users.json").GetAwaiter().GetResult();
 
     public InitializationStatus GetInitializationStatus()
     {
