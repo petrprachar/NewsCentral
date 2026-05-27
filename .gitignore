@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/HMAC anti.docx
+/How NewsViewer works end.docx
+/TO DO list.docx

@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.4  
+**Version:** 2.5  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -54,7 +54,7 @@ The solution provides a structured communication channel between content author 
 - All components are configurable via `appsettings.json`. Selected values are additionally overridable via Windows registry (HKLM). Registry values take precedence over `appsettings.json`.
 - Storage backend (local file share vs. Azure Blob Storage) is switchable via registry without code changes.
 - Local/file share mode is the **primary development and testing configuration**. No Azure dependency is required for full functional testing of any component.
-- The architecture is prepared for future anti-tamper protection via HMAC signatures.
+- HMAC-SHA256 anti-tamper protection is implemented end-to-end: NewsCentral signs `index.json` and NewsViewer signs session telemetry; both NewsService and NewsViewer verify before using content.
 - A viable migration path to NativeAOT is preserved for NewsViewer.
 - All domain models live in **NewsCentral.Shared** and are referenced by every component — no model duplication across projects.
 
@@ -117,19 +117,24 @@ NewsCentral.sln
 
 ```
 NewsCentral.Shared\
-└── Models\
-    ├── IEntity.cs                     interface IEntity { GetId(); SetId(); }
-    ├── Presentation.cs
-    ├── Schedule.cs
-    ├── Assignment.cs
-    ├── Team.cs                        Team, TeamsCollection
-    ├── User.cs                        User, TeamRole, UsersCollection
-    └── IndexFile\
-        ├── TeamIndexFile.cs           root structure for index.json
-        ├── PublishedAssignmentIndex.cs one entry per published assignment
-        ├── ContentInfo.cs             image path, hash, size, URL
-        ├── DisplayTypeInfo.cs         IsNewsOfWeek, IsWallpaper, IsLogonScreen
-        └── IndexStatistics.cs         summary counts
+├── Models\
+│   ├── IEntity.cs                     interface IEntity { GetId(); SetId(); }
+│   ├── Presentation.cs                implements ISignable
+│   ├── Schedule.cs                    implements ISignable
+│   ├── Assignment.cs                  implements ISignable
+│   ├── SessionTelemetry.cs            cross-component DTO; implements ISignable
+│   ├── Team.cs                        Team, TeamsCollection
+│   ├── User.cs                        User, TeamRole, UsersCollection
+│   └── IndexFile\
+│       ├── TeamIndexFile.cs           root structure for index.json; implements ISignable
+│       ├── PublishedAssignmentIndex.cs one entry per published assignment
+│       ├── ContentInfo.cs             image path, hash, size, URL
+│       ├── DisplayTypeInfo.cs         IsNewsOfWeek, IsWallpaper, IsLogonScreen
+│       └── IndexStatistics.cs         summary counts
+└── Security\
+    ├── ISignable.cs                   interface ISignable { string? Signature { get; set; } }
+    ├── HmacOptions.cs                 POCO: SecretKey (Base64 string)
+    └── HmacService.cs                 Sign<T>, Verify<T>, VerifyResult enum
 ```
 
 All model namespaces are `NewsCentral.Models` and `NewsCentral.Models.IndexFile` — identical to their previous location in the NewsCentral project, so no using-directive changes were required in NewsCentral when the shared library was extracted.
@@ -148,7 +153,7 @@ NewsCentral.Shared\
 ```
 NewsService\
 ├── Configuration\
-│   ├── ServiceConfiguration.cs    typed POCOs bound from appsettings.json
+│   ├── ServiceConfiguration.cs    typed POCOs bound from appsettings.json; includes HmacOptions
 ├── Models\
 │   ├── StatusFile.cs              status.json structure
 │   └── ServiceState.cs            servicestate.json structure
@@ -158,11 +163,11 @@ NewsService\
 │   ├── AzureBlobRepositoryReader.cs   Azure implementation — Certificate / ClientSecret auth
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
 │   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
-│   ├── TelemetryUploader.cs       copies uploads\session-*.json to repository
-│   └── SyncService.cs             orchestrates the five-step poll cycle
+│   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
+│   └── SyncService.cs             orchestrates the poll cycle; HMAC-verifies index.json before caching
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
 ├── Worker.cs                      BackgroundService host; reads interval from configuration
-├── Program.cs                     DI wiring; adds registry override source; storage mode resolved from merged config
+├── Program.cs                     DI wiring; registers HmacService; adds registry override source; storage mode resolved from merged config
 └── appsettings.json
 ```
 
@@ -171,22 +176,22 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck and HmacOptions
 ├── Models\
-│   ├── ViewerState.cs                viewerstate.json structure
-│   └── SessionTelemetry.cs           uploads\session-*.json structure
+│   └── ViewerState.cs                viewerstate.json structure
+│   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)
 ├── Services\
-│   ├── PresentationSelector.cs       reads index.json per team, filters active, picks most recent
+│   ├── PresentationSelector.cs       reads index.json per team, HMAC-verifies, filters active, picks most recent
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
 │   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
-│   └── TelemetryWriter.cs            writes session-{guid}.json to uploads\ on close
+│   └── TelemetryWriter.cs            HMAC-signs and writes session-{guid}.json to uploads\ on close
 ├── Forms\
 │   ├── ViewerForm.cs                 1600×900 borderless WinForms window; hover-triggered side panel
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; startup checks; remote session guard; branches on ShowMode
+├── Program.cs                        entry point; constructs HmacService; startup checks; remote session guard; branches on ShowMode
 └── appsettings.json
 ```
 
@@ -260,6 +265,9 @@ HKLM\Software\[Company]\[NewsCentral]\
 │       CertificateThumbprint  REG_SZ
 │       ClientSecret           REG_SZ
 │
+├── Hmac\
+│       SecretKey   REG_SZ    (Base64-encoded 32-byte key; empty = HMAC disabled)
+│
 └── teams\
         (one REG_SZ value per team; value name = team folder name; data = "" or any string)
         e.g.  MY_TEAM   REG_SZ   ""
@@ -297,6 +305,9 @@ HKLM\Software\[Company]\[NewsCentral]\
     "TenantId": "",
     "ClientId": "",
     "AccountName": ""
+  },
+  "Hmac": {
+    "SecretKey": ""
   }
 }
 ```
@@ -323,11 +334,27 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
     "ClientSecret": "",
     "AccountName": "",
     "ContainerName": "newscentral"
+  },
+  "Hmac": {
+    "SecretKey": ""
   }
 }
 ```
 
-### 5.6 Azure Authentication Modes — NewsService only
+### 5.6 appsettings.json — NewsViewer
+
+```json
+{
+  "Company": "MyCompany",
+  "ApplicationName": "NewsCentral",
+  "CacheRootPath": "C:\\ProgramData\\NewsCentral",
+  "Hmac": {
+    "SecretKey": ""
+  }
+}
+```
+
+### 5.8 Azure Authentication Modes — NewsService only
 
 NewsService runs as an unattended Windows Service with no interactive user. It authenticates to Azure Blob using one of two modes selected by `AzureBlob:AuthMode`:
 
@@ -358,12 +385,46 @@ public interface IEntity
 }
 ```
 
-### 6.2 Presentation
+### 6.2 ISignable / HmacService
+
+`ISignable` (in `NewsCentral.Security`) marks any type whose JSON payload is covered by an HMAC-SHA256 signature.
+
+```csharp
+public interface ISignable { string? Signature { get; set; } }
+
+public class HmacOptions { public string SecretKey { get; set; } = string.Empty; }
+
+public enum VerifyResult { Disabled, Unsigned, Valid, Invalid }
+
+public sealed class HmacService
+{
+    public bool IsEnabled { get; }                    // false when SecretKey is empty
+    public string? Sign<T>(T entity) where T : ISignable;
+    public VerifyResult Verify<T>(T entity) where T : ISignable;
+}
+```
+
+**Key derivation:** `SecretKey` is a Base64-encoded 32-byte key stored in `Hmac:SecretKey` (`appsettings.json` or registry override `Hmac\SecretKey`). An empty key disables HMAC entirely — `Sign` returns `null`, `Verify` returns `Disabled` — so content flows through unchanged until a key is deployed.
+
+**Canonical serialization:** The payload serialized for signing uses non-indented camelCase JSON with `JsonStringEnumConverter`. The `Signature` property is temporarily nulled during signing to exclude it from its own payload.
+
+**Verification behavior:**
+
+| Result | Meaning | Action taken |
+|---|---|---|
+| `Disabled` | `HmacService.IsEnabled` is false | Accept and pass through |
+| `Unsigned` | `Signature` is null | Accept with a warning log |
+| `Valid` | Signature matches | Accept |
+| `Invalid` | Signature mismatch or corrupt | Reject — content discarded / team skipped |
+
+**Timing-safe comparison:** `CryptographicOperations.FixedTimeEquals` is used to prevent timing attacks.
+
+### 6.3 Presentation
 
 The core content unit distributed to NewsViewer.
 
 ```csharp
-public class Presentation : IEntity
+public class Presentation : IEntity, ISignable
 {
     public string PresentationID { get; set; }
     public string Name { get; set; }
@@ -395,14 +456,14 @@ public class Presentation : IEntity
     public DateTime LastModified { get; set; }
     public int Version { get; set; }
 
-    public string? Signature { get; set; }              // Reserved for HMAC
+    public string? Signature { get; set; }
 }
 ```
 
-### 6.3 Schedule
+### 6.4 Schedule
 
 ```csharp
-public class Schedule : IEntity
+public class Schedule : IEntity, ISignable
 {
     public string ScheduleID { get; set; }
     public string PresentationID { get; set; }
@@ -416,16 +477,18 @@ public class Schedule : IEntity
 
     public enum DisplayMode { ShowOnce, ShowNew }
     public DisplayMode ShowMode { get; set; } = DisplayMode.ShowOnce;
+
+    public string? Signature { get; set; }
 }
 ```
 
 `DisplayMode.ShowOnce` — show once per calendar day (first start or first unlock).  
 `DisplayMode.ShowNew` — same as ShowOnce, and also when new content arrives.
 
-### 6.4 Assignment
+### 6.5 Assignment
 
 ```csharp
-public class Assignment : IEntity
+public class Assignment : IEntity, ISignable
 {
     public string AssignmentID { get; set; }
     public string PresentationID { get; set; }
@@ -455,6 +518,8 @@ public class Assignment : IEntity
     public string? RejectedBy { get; set; }
     public DateTime? RejectedDate { get; set; }
     public string? RejectionReason { get; set; }
+
+    public string? Signature { get; set; }
 }
 
 public enum AssignmentStatus
@@ -463,7 +528,7 @@ public enum AssignmentStatus
 }
 ```
 
-### 6.5 Team / User
+### 6.6 Team / User
 
 ```csharp
 public class Team : IEntity
@@ -491,12 +556,12 @@ public class TeamRole { public string TeamID; public List<string> Roles; }
 public class UsersCollection : IEntity { public List<User> Users { get; set; } }
 ```
 
-### 6.6 TeamIndexFile (index.json per team)
+### 6.7 TeamIndexFile (index.json per team)
 
 The `index.json` written to each team folder by NewsCentral and consumed by NewsService and NewsViewer.
 
 ```csharp
-public class TeamIndexFile
+public class TeamIndexFile : ISignable
 {
     public string TeamFolderName { get; set; }
     public string TeamName { get; set; }
@@ -505,6 +570,7 @@ public class TeamIndexFile
     public string IndexHash { get; set; }               // SHA256 of content for change detection
     public List<PublishedAssignmentIndex> PublishedAssignments { get; set; }
     public IndexStatistics Statistics { get; set; }
+    public string? Signature { get; set; }              // HMAC-SHA256; set by IndexGenerationService after IndexHash
 }
 
 public class PublishedAssignmentIndex
@@ -556,7 +622,7 @@ public class IndexStatistics
 }
 ```
 
-### 6.7 status.json (NewsService → NewsViewer)
+### 6.8 status.json (NewsService → NewsViewer)
 
 Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 
@@ -570,7 +636,7 @@ Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 
 `SyncSource` values: `Azure`, `Share`, `None`
 
-### 6.8 viewerstate.json (NewsViewer internal)
+### 6.9 viewerstate.json (NewsViewer internal)
 
 Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-level).
 
@@ -581,7 +647,7 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 }
 ```
 
-### 6.9 servicestate.json (NewsService internal)
+### 6.10 servicestate.json (NewsService internal)
 
 ```json
 {
@@ -590,7 +656,9 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 }
 ```
 
-### 6.10 Session Telemetry (NewsViewer → uploads folder)
+### 6.11 Session Telemetry (NewsViewer → uploads folder)
+
+Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implements `ISignable`). Shared so both NewsViewer (writer) and NewsService (verifier) can deserialize and verify without model duplication.
 
 ```json
 {
@@ -600,11 +668,13 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
   "SessionStartTime": "2025-05-23T08:15:00Z",
   "SessionEndTime": "2025-05-23T08:15:34Z",
   "CloseReason": "Timeout",
-  "Signature": null
+  "Signature": "base64-hmac-sha256"
 }
 ```
 
 `CloseReason` values: `Timeout`, `UserClose`, `UrlLaunch`
+
+`Signature` is set by `TelemetryWriter` in NewsViewer immediately before writing the file. `TelemetryUploader` in NewsService verifies it before forwarding to the repository; files with `Invalid` signatures are discarded and logged.
 
 ---
 
@@ -656,7 +726,8 @@ Repository / network share mirrors the same team folder structure as the `%progr
 | `PresentationService` | CRUD for presentations |
 | `AssignmentService` | Assignment lifecycle and approval workflow |
 | `PublishingService` | Publishes approved assignments to the repository |
-| `IndexGenerationService` | Generates and writes `index.json` for each team |
+| `IndexGenerationService` | Generates and writes `index.json` for each team; signs the index via `HmacService` |
+| `HmacService` | Signs `TeamIndexFile` after `IndexHash` is set; singleton wired from `AppConfiguration.HmacSecretKey` |
 | `LocalStorageService` / `IStorageService` | File I/O abstraction |
 | `LocalBlobDistributionService` / `AzureBlobDistributionService` | Distribution backends |
 | `TeamContextService` | Current team scope for the session |
@@ -730,6 +801,7 @@ Executed by `Worker` on every interval tick:
 
 **Step 1 — Index sync (per team)**
 - Reads `{teamFolder}/index.json` from the repository
+- **HMAC verification** — calls `HmacService.Verify(remoteIndex)`: `Invalid` → logs error and skips the team entirely; `Unsigned` → logs warning and continues; `Valid` / `Disabled` → continues
 - Compares `IndexHash` with the cached copy
 - If unchanged: skips the team entirely (O(1) check, no I/O)
 - If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images
@@ -744,8 +816,9 @@ Executed by `Worker` on every interval tick:
 - Writes `LastSyncTime`, `IsOnline`, `SyncSource` (`Share` / `Azure` / `None`) to cache root
 
 **Step 4 — Telemetry upload**
-- Copies `uploads\session-*.json` from local cache to `{SharePath}\uploads\`
-- Deletes the local copy after a successful copy
+- Deserializes each `uploads\session-*.json` as `SessionTelemetry` and calls `HmacService.Verify`
+- Files with `Invalid` signature are logged and deleted without forwarding
+- `Valid` and `Unsigned` files are copied to `{SharePath}\uploads\`; the local copy is deleted after a successful copy
 
 #### Storage Abstraction
 
@@ -796,6 +869,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 #### Presentation Selection
 
 - Reads `index.json` from all team cache folders matching the `teams` registry configuration
+- **HMAC verification** — calls `HmacService.Verify(index)` on each team's index: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` → logs warning and continues
 - Selects the most recent active presentation by `PresentationLastModified` timestamp
 - If no valid presentation found: **exit silently, no window shown**
 - If no qualifying monitor (Full HD or better): **do not show the window**
@@ -868,7 +942,7 @@ Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Uni
 
 #### Session Telemetry
 
-Writes `session-{guid}.json` to `%programdata%\NewsCentral\uploads\` at session end.
+Writes `session-{guid}.json` to `%programdata%\NewsCentral\uploads\` at session end. The record is a `NewsCentral.Models.SessionTelemetry` instance (defined in `NewsCentral.Shared`); `TelemetryWriter` signs it via `HmacService` before serializing to disk.
 
 ---
 
@@ -916,11 +990,23 @@ No direct inter-process communication between any components. All coordination i
 - Architecture is prepared for future authentication requirement to access `%programdata%\NewsCentral\` data
 - No authentication implemented in this version
 
-### Anti-Tamper (All Components)
+### Anti-Tamper — HMAC-SHA256 (Implemented)
 
-- `Signature` field reserved in all JSON data structures (`Presentation`, `Schedule`, `Assignment`, `index.json`, session telemetry)
-- Stub HMAC verification hook present in all JSON read paths (no-op in this version)
-- Future implementation may extend scope (e.g. binary signing, cache file signing)
+`HmacService` (in `NewsCentral.Shared/Security/`) provides end-to-end content integrity using HMAC-SHA256.
+
+**Signing (NewsCentral):** `IndexGenerationService` calls `HmacService.Sign(index)` after `IndexHash` is computed. The signature covers the entire serialized index (excluding the `Signature` field itself) using canonical non-indented camelCase JSON.
+
+**Signing (NewsViewer):** `TelemetryWriter` calls `HmacService.Sign(record)` on each `SessionTelemetry` before writing to disk.
+
+**Verification (NewsService):**
+- `SyncService` verifies each `index.json` before caching. `Invalid` → sync aborted for that team. `Unsigned` → warning logged, sync continues.
+- `TelemetryUploader` verifies each `session-*.json` before forwarding. `Invalid` → file discarded and logged.
+
+**Verification (NewsViewer):** `PresentationSelector` verifies each team's `index.json`. `Invalid` → team skipped entirely (no presentations displayed from that team). `Unsigned` → warning logged, team accepted.
+
+**Key management:** `Hmac:SecretKey` is a Base64-encoded 32-byte key configured in `appsettings.json` or overridden via registry (`Hmac\SecretKey`). An empty key disables HMAC system-wide — all content is treated as `Disabled` and passes through. This enables phased rollout: deploy the key to all machines before enabling signing in NewsCentral.
+
+**`Signature` field** is present in: `Presentation`, `Schedule`, `Assignment`, `TeamIndexFile`, `SessionTelemetry`.
 
 ---
 
@@ -954,6 +1040,6 @@ No direct inter-process communication between any components. All coordination i
 | AI-assisted content generation | Folder structure (`original\`, `generated\`) in place. Poster UI collects headline, body, and CTA text fields (stored as component state); `PosterGenerationService` stores the original image as-is for now. AI text-overlay call is the planned next step — no external AI API keys are configured at this time. |
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |
 | NewsTester | Independent preview application for content authors and approvers |
-| HMAC anti-tamper | `Signature` fields and verification stubs in place; full implementation deferred |
+| ~~HMAC anti-tamper~~ | Implemented — `HmacService` in `NewsCentral.Shared/Security/`; `index.json` signed by NewsCentral, verified by NewsService and NewsViewer; session telemetry signed by NewsViewer, verified by NewsService. Key configured via `Hmac:SecretKey`; empty key disables HMAC. See Section 10. |
 | Extended presentation selection logic | Current selection (most recent by timestamp) designed as an extensible function |
 | NewsViewer authentication | Architecture prepared; not implemented in this version |
