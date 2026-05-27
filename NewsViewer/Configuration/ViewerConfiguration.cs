@@ -8,5 +8,6 @@ public class ViewerConfiguration
     public string ApplicationName { get; set; } = "NewsCentral";
     public string CacheRootPath { get; set; } = @"C:\ProgramData\NewsCentral";
     public bool BypassShowOnceCheck { get; set; } = false;
+    public bool BypassImageIntegrityCheck { get; set; } = false;
     public HmacOptions Hmac { get; set; } = new();
 }

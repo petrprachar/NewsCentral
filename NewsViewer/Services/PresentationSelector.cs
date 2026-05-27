@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using NewsCentral.Models.IndexFile;
 using NewsCentral.Security;
@@ -8,11 +9,13 @@ public sealed class PresentationSelector
 {
     private readonly string _cacheRootPath;
     private readonly HmacService _hmac;
+    private readonly bool _bypassImageIntegrityCheck;
 
-    public PresentationSelector(string cacheRootPath, HmacService hmac)
+    public PresentationSelector(string cacheRootPath, HmacService hmac, bool bypassImageIntegrityCheck = false)
     {
-        _cacheRootPath = cacheRootPath;
-        _hmac          = hmac;
+        _cacheRootPath             = cacheRootPath;
+        _hmac                      = hmac;
+        _bypassImageIntegrityCheck = bypassImageIntegrityCheck;
     }
 
     /// <summary>
@@ -72,6 +75,56 @@ public sealed class PresentationSelector
             _cacheRootPath,
             best.Content.ImagePath.Replace('/', Path.DirectorySeparatorChar));
 
+        if (!_bypassImageIntegrityCheck && !VerifyImageHash(imagePath, best.Content.ImageHash))
+            return (best, null);
+
         return (best, imagePath);
+    }
+
+    private static bool VerifyImageHash(string imagePath, string? storedHash)
+    {
+        if (string.IsNullOrEmpty(storedHash))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[ImageHash] {Path.GetFileName(imagePath)}: no hash in index — skipping integrity check");
+            return true;
+        }
+
+        if (!File.Exists(imagePath))
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[ImageHash] {Path.GetFileName(imagePath)}: file not found");
+            return false;
+        }
+
+        try
+        {
+            string prefix   = "sha256:";
+            string expected = storedHash.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? storedHash[prefix.Length..]
+                : storedHash;
+
+            using var sha256    = SHA256.Create();
+            using var stream    = File.OpenRead(imagePath);
+            byte[] hashBytes    = sha256.ComputeHash(stream);
+            string actual       = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+
+            if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ImageHash] {Path.GetFileName(imagePath)}: hash mismatch — image rejected");
+                return false;
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[ImageHash] {Path.GetFileName(imagePath)}: hash OK");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[ImageHash] {Path.GetFileName(imagePath)}: error during verification — {ex.Message}");
+            return false;
+        }
     }
 }
