@@ -457,7 +457,7 @@
     private bool isLoading = true;
     private bool isCreating = false;
 
-    private DateTime scheduleStartDate = DateTime.Today.AddDays(1);
+    private DateTime scheduleStartDate = DateTime.Today;
     private DateTime scheduleEndDate = DateTime.Today.AddDays(30);
     private Schedule.DisplayMode scheduleShowMode = Schedule.DisplayMode.ShowOnce;
     private bool monday = true;
@@ -465,8 +465,8 @@
     private bool wednesday = true;
     private bool thursday = true;
     private bool friday = true;
-    private bool saturday = false;
-    private bool sunday = false;
+    private bool saturday = true;
+    private bool sunday = true;
 
     private Team? currentTeam;
 

@@ -12,8 +12,9 @@
     Registry layout written by this script
     ───────────────────────────────────────
     HKLM\Software\<Company>\<ApplicationName>\
-    │   CacheRootPath         REG_SZ    (NewsViewer — overrides ViewerConfiguration.CacheRootPath)
-    │   BypassShowOnceCheck   DWORD     (NewsViewer — 1 = skip once-per-day guard at startup)
+    │   CacheRootPath                REG_SZ    (NewsViewer — overrides ViewerConfiguration.CacheRootPath)
+    │   BypassShowOnceCheck          DWORD     (NewsViewer — 1 = skip once-per-day guard at startup)
+    │   BypassImageIntegrityCheck    DWORD     (NewsViewer — 1 = skip image SHA-256 verification)
     │
     ├── Service\
     │       PollIntervalSeconds   DWORD    (NewsService poll interval in seconds)
@@ -31,6 +32,9 @@
     │       ContainerName          REG_SZ
     │       CertificateThumbprint  REG_SZ   (AuthMode=Certificate)
     │       ClientSecret           REG_SZ   (AuthMode=ClientSecret)
+    │
+    ├── Hmac\
+    │       SecretKey   REG_SZ   (Base64-encoded 32-byte HMAC key; empty string = HMAC disabled)
     │
     └── teams\
             <teamFolderName>   REG_SZ ""   (one value per team; name = folder name; data ignored)
@@ -65,6 +69,15 @@
     When $true, NewsViewer skips the once-per-day display guard.
     Useful for repeated test runs.
 
+.PARAMETER BypassImageIntegrityCheck
+    When $true, NewsViewer skips SHA-256 verification of the cached image file.
+    Useful when testing with manually replaced images.
+
+.PARAMETER HmacSecretKey
+    Base64-encoded 32-byte HMAC-SHA256 key shared across all components.
+    An empty string disables HMAC verification system-wide (phased rollout default).
+    Generate with: [Convert]::ToBase64String((1..32 | ForEach-Object { [byte](Get-Random -Max 256) }))
+
 .PARAMETER AzureTenantId
     Azure AD tenant ID (StorageMode=Azure).
 
@@ -93,7 +106,8 @@
         -StorageMode Share `
         -SharePath "\\fileserver\newscentral" `
         -PollIntervalSeconds 60 `
-        -BypassShowOnceCheck
+        -BypassShowOnceCheck `
+        -BypassImageIntegrityCheck
 
 .EXAMPLE
     # Azure setup
@@ -130,6 +144,10 @@ param(
 
     # ── NewsViewer ────────────────────────────────────────────────────────────
     [switch] $BypassShowOnceCheck,
+    [switch] $BypassImageIntegrityCheck,
+
+    # ── HMAC ──────────────────────────────────────────────────────────────────
+    [string] $HmacSecretKey,
 
     # ── Azure Blob ────────────────────────────────────────────────────────────
     [string] $AzureTenantId,
@@ -183,6 +201,16 @@ if ($PSBoundParameters.ContainsKey("CacheRootPath")) {
 if ($PSBoundParameters.ContainsKey("BypassShowOnceCheck")) {
     $dword = if ($BypassShowOnceCheck) { 1 } else { 0 }
     Set-RegValue -Path $base -Name "BypassShowOnceCheck" -Value $dword -Type DWord
+}
+
+if ($PSBoundParameters.ContainsKey("BypassImageIntegrityCheck")) {
+    $dword = if ($BypassImageIntegrityCheck) { 1 } else { 0 }
+    Set-RegValue -Path $base -Name "BypassImageIntegrityCheck" -Value $dword -Type DWord
+}
+
+# ── Hmac\ ────────────────────────────────────────────────────────────────────
+if ($PSBoundParameters.ContainsKey("HmacSecretKey")) {
+    Set-RegValue -Path "$base\Hmac" -Name "SecretKey" -Value $HmacSecretKey -Type String
 }
 
 # ── Service\ ─────────────────────────────────────────────────────────────────

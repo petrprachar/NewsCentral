@@ -113,6 +113,14 @@
                 <input type="text" @bind="username" class="form-control"
                        disabled="@(editingUser != null)"
                        placeholder="john.smith" />
+                <small class="form-text text-muted">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    Field is significant for local accounts only.
+                </small>
             </div>
 
             <div class="form-group">
@@ -125,6 +133,14 @@
                 <label>Email:</label>
                 <input type="email" @bind="email" class="form-control"
                        placeholder="john.smith@company.com" />
+                <small class="form-text text-muted">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    Optional. Usually matches corporate email.
+                </small>
             </div>
 
             <!-- NEW: UPN Field -->
@@ -138,7 +154,7 @@
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    Optional. For Windows auto-login. Usually matches corporate email.
+                    Important UPN-based. Usually Email.
                 </small>
             </div>
 

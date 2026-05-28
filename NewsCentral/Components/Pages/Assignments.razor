@@ -95,15 +95,9 @@
                             </div>
                         }
 
-                        @if (CanEdit(assignment) || CanDelete(assignment))
+                        @if (CanDelete(assignment))
                         {
                             <div class="action-buttons">
-                                @if (CanEdit(assignment))
-                                {
-                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAssignment(assignment)">
-                                        <i class="bi bi-pencil"></i> Edit
-                                    </button>
-                                }
                                 @if (CanDelete(assignment))
                                 {
                                     <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
@@ -204,15 +198,9 @@
                             </button>
                         }
 
-                        @if (CanEdit(assignment) || CanDelete(assignment))
+                        @if (CanDelete(assignment))
                         {
                             <div class="action-buttons">
-                                @if (CanEdit(assignment))
-                                {
-                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => EditAssignment(assignment)">
-                                        <i class="bi bi-pencil"></i> Edit
-                                    </button>
-                                }
                                 @if (CanDelete(assignment))
                                 {
                                     <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
@@ -667,7 +655,7 @@
             isLoading = false;
         }
     }
-
+    /*
     private bool CanEdit(Assignment assignment)
     {
         if (currentUser == null) return false;
@@ -682,7 +670,7 @@
 
         return false;
     }
-
+    */
     private bool CanDelete(Assignment assignment)
     {
         if (currentUser == null) return false;
@@ -774,12 +762,12 @@
             tr.TeamFolderName == teamFolderName &&
             tr.Roles.Contains("ContentAuthor"));
     }
-
+    /*
     private void EditAssignment(Assignment assignment)
     {
         Navigation.NavigateTo($"/edit-assignment/{assignment.SourceTeam}/{assignment.AssignmentID}");
     }
-
+    */
     private async Task DeleteAssignment(Assignment assignment)
     {
         try
