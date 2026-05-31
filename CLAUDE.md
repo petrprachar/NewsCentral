@@ -1,6 +1,6 @@
 # NewsCentral — Solution Specification
 
-**Version:** 2.6  
+**Version:** 2.7  
 **Status:** Implementation in progress  
 **Scope:** NewsCentral, NewsCentral.Shared, NewsService, NewsViewer, NewsTester
 
@@ -741,8 +741,8 @@ Repository / network share mirrors the same team folder structure as the `%progr
 
 | Page | Path | Purpose |
 |---|---|---|
-| `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
-| `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates, select target teams, choose `ShowMode` (ShowOnce / ShowNew), set approval requirement |
+| `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox (defaults to `true` for new presentations) and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
+| `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates (default start = today, all 7 days selected), select target teams, choose `ShowMode`, set approval requirement. ShowNew option is disabled (greyed out with hint) when the presentation has `UseVirtualDesktop = true`. Wallpaper and Logon Screen display-type badges are dimmed with a hint when `UseVirtualDesktop` is set, because those modes are incompatible with Virtual Desktop. |
 
 #### Storage Backend
 
@@ -753,6 +753,8 @@ Repository / network share mirrors the same team folder structure as the `%progr
 
 - `SystemAdmin` — full access across all teams
 - `ContentAuthor` — creates and edits content within their team; edit/delete restricted to creator or SystemAdmin
+
+Assignments are immutable after creation — there is no edit path. To change a scheduled assignment, delete it and create a new one.
 
 #### Folder Convention
 
@@ -940,7 +942,7 @@ When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
 7. `VirtualDesktopManager.Dispose()` calls `CloseDesktop` to release the handle.
 8. The main thread blocks on `uiThread.Join()` until the viewer closes, then the process exits.
 
-**ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`.
+**ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`. The `CreateAssignment` UI enforces this constraint: the ShowNew radio button is disabled (with an explanatory hint) when the selected presentation has `UseVirtualDesktop = true`.
 
 Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Unicode`, no unsafe blocks).
 
