@@ -104,12 +104,12 @@ static class Program
 
         // Preliminary pass to read Company/ApplicationName (not registry-overridable).
         var preliminary = new ConfigurationBuilder()
-            .AddJsonFile(jsonPath, optional: true)
+            .AddJsonFile(jsonPath, optional: false)
             .Build();
         var baseConfig = preliminary.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
         return new ConfigurationBuilder()
-            .AddJsonFile(jsonPath, optional: true)
+            .AddJsonFile(jsonPath, optional: false)
             .AddRegistryOverrides(baseConfig.Company, baseConfig.ApplicationName)
             .Build();
     }
