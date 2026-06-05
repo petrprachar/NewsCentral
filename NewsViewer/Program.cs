@@ -21,6 +21,19 @@ static class Program
         var configuration = BuildConfiguration();
         var config        = configuration.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
+        if (string.IsNullOrWhiteSpace(config.Company) ||
+            string.IsNullOrWhiteSpace(config.ApplicationName) ||
+            string.IsNullOrWhiteSpace(config.CacheRootPath))
+        {
+            MessageBox.Show(
+                "NewsViewer configuration is incomplete.\n" +
+                "Company, ApplicationName, and CacheRootPath must be set in appsettings.json.",
+                "NewsViewer — Configuration Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+            return;
+        }
+
         var teams = TeamConfigurationReader.GetTeams(configuration);
         if (teams.Length == 0) return;
 
