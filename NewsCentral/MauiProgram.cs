@@ -79,21 +79,22 @@ public static class MauiProgram
         {
             var inMemorySettings = new Dictionary<string, string>
             {
-                {"DataPath", "C:\\Download\\NewsCentral"},
-                {"DefaultAdminUsername", "admin"},
-                {"DefaultAdminPassword", "admin"},
-                {"LockExpirationMinutes", "15"},
-                {"Authentication:EnableAutoLogin", "true"},
-                {"Authentication:UseMockUPN", "true"},
-                {"Authentication:MockUPN", "petr.prachar@company.com"},
-                {"Storage:DefaultStorageType", "NetworkShare"},
-                {"Storage:EnableBlobDistribution",   "false"},
+                {"Company",                           "Contoso"},
+                {"DataPath",                          "C:\\Download\\NewsCentral"},
+                {"DefaultAdminUsername",              "admin"},
+                {"DefaultAdminPassword",              "admin"},
+                {"LockExpirationMinutes",             "15"},
+                {"Authentication:EnableAutoLogin",    "true"},
+                {"Authentication:UseMockUPN",         "true"},
+                {"Authentication:MockUPN",            "petr.prachar@company.com"},
+                {"Storage:DefaultStorageType",        "NetworkShare"},
+                {"Storage:EnableBlobDistribution",    "false"},
                 {"Storage:DistributionMode",          "Local"},
                 {"Storage:LocalDistributionPath",     "C:\\Download\\NewsCentralDist"},
                 {"Storage:AzureBlobContainerName",    "newscentral"},
-                {"AzureBlob:TenantId",               ""},
-                {"AzureBlob:ClientId",               ""},
-                {"AzureBlob:AccountName",            ""}
+                {"AzureBlob:TenantId",                ""},
+                {"AzureBlob:ClientId",                ""},
+                {"AzureBlob:AccountName",             ""}
             };
 
             config = new ConfigurationBuilder()
@@ -102,56 +103,43 @@ public static class MauiProgram
             System.Diagnostics.Debug.WriteLine("⚠ Using hardcoded default configuration");
         }
 
-        // Add configuration to builder
+        // Add appsettings as the base layer, then registry overrides on top.
+        // builder.Configuration is a ConfigurationManager — it implements both
+        // IConfigurationBuilder and IConfigurationRoot, so values added via
+        // AddRegistryOverrides are immediately readable from builder.Configuration.
         builder.Configuration.AddConfiguration(config);
         builder.Configuration.AddRegistryOverrides(
-            config["Company"] ?? "MyCompany",
+            config["Company"] ?? "Contoso",
             "NewsCentral",
             "NewsCentral");
 
-        // DEBUG: Verify configuration values
+        // DEBUG: read from builder.Configuration (includes registry overrides)
         System.Diagnostics.Debug.WriteLine("=== CONFIGURATION CHECK ===");
-        System.Diagnostics.Debug.WriteLine($"DataPath: '{config["DataPath"]}'");
-        System.Diagnostics.Debug.WriteLine($"EnableAutoLogin: '{config["Authentication:EnableAutoLogin"]}'");
-        System.Diagnostics.Debug.WriteLine($"UseMockUPN: '{config["Authentication:UseMockUPN"]}'");
-        System.Diagnostics.Debug.WriteLine($"MockUPN: '{config["Authentication:MockUPN"]}'");
+        System.Diagnostics.Debug.WriteLine($"DataPath:        '{builder.Configuration["DataPath"]}'");
+        System.Diagnostics.Debug.WriteLine($"EnableAutoLogin: '{builder.Configuration["Authentication:EnableAutoLogin"]}'");
+        System.Diagnostics.Debug.WriteLine($"UseMockUPN:      '{builder.Configuration["Authentication:UseMockUPN"]}'");
+        System.Diagnostics.Debug.WriteLine($"MockUPN:         '{builder.Configuration["Authentication:MockUPN"]}'");
         System.Diagnostics.Debug.WriteLine("=== END CONFIGURATION CHECK ===");
 
-        // Create and register AppConfiguration
-        var dataPath = config["DataPath"];
-        if (string.IsNullOrEmpty(dataPath))
-        {
-            dataPath = "C:\\Download\\NewsCentral";
-            System.Diagnostics.Debug.WriteLine($"⚠ DataPath was empty, using fallback: {dataPath}");
-        }
+        // Create AppConfiguration from the merged configuration — includes
+        // registry overrides on top of appsettings.json defaults.
+        // Previously this used the original 'config' object, which only held
+        // appsettings.json values and never saw registry overrides.
+        var appConfig = new AppConfiguration(builder.Configuration);
 
-        // Create AppConfiguration from IConfiguration
-        var appConfig = new AppConfiguration(config);
-
-        // Verify DataPath was loaded
         if (string.IsNullOrEmpty(appConfig.DataPath))
-        {
             System.Diagnostics.Debug.WriteLine("⚠ WARNING: AppConfig.DataPath is empty!");
-        }
         else
-        {
-            System.Diagnostics.Debug.WriteLine($"✓ AppConfig.DataPath set to: '{appConfig.DataPath}'");
-        }
+            System.Diagnostics.Debug.WriteLine($"✓ AppConfig.DataPath: '{appConfig.DataPath}'");
 
         builder.Services.AddSingleton(appConfig);
         builder.Services.AddSingleton(
             new HmacService(new HmacOptions { SecretKey = appConfig.HmacSecretKey }));
 
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
-        // LocalStorageService resolves all paths against AppConfig.DataPath.
-        // When Azure Files is mounted as a drive, no code changes are needed.
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
 
         // ── Distribution tier storage (config-driven) ────────────────────────
-        // EnableBlobDistribution = false  → NullBlobDistributionService  (dev)
-        // EnableBlobDistribution = true
-        //   DistributionMode = "Local"    → LocalBlobDistributionService  (test)
-        //   DistributionMode = "AzureBlob"→ AzureBlobDistributionService  (prod)
         builder.Services.AddSingleton<IBlobDistributionService>(sp =>
         {
             var cfg = sp.GetRequiredService<AppConfiguration>();
@@ -179,7 +167,8 @@ public static class MauiProgram
             var appConfiguration = sp.GetRequiredService<AppConfiguration>();
             var windowsIdentityService = sp.GetRequiredService<WindowsIdentityService>();
 
-            System.Diagnostics.Debug.WriteLine($"Creating AuthenticationService with DataPath: '{appConfiguration.DataPath}'");
+            System.Diagnostics.Debug.WriteLine(
+                $"Creating AuthenticationService with DataPath: '{appConfiguration.DataPath}'");
 
             return new AuthenticationService(appConfiguration, windowsIdentityService);
         });
@@ -196,16 +185,6 @@ public static class MauiProgram
         builder.Services.AddSingleton<PublishingService>();
 
         // Register DataSeederService with IConfiguration dependency
-
-        /*
-         Environment-Specific:
-        -----------------------
-            You can have different settings for different environments:
-            appsettings.json - Default
-            appsettings.Development.json - Dev environment
-            appsettings.Production.json - Production
-        */
-
         builder.Services.AddSingleton<DataSeederService>(sp =>
         {
             var appConfiguration = sp.GetRequiredService<AppConfiguration>();
@@ -221,7 +200,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<IStringLocalizer>(sp =>
         {
             var factory = sp.GetRequiredService<IStringLocalizerFactory>();
-            return factory.Create("Resources.Resources", typeof(MauiProgram).Assembly.GetName().Name!);
+            return factory.Create(
+                "Resources.Resources",
+                typeof(MauiProgram).Assembly.GetName().Name!);
         });
 
         // Set culture for testing
@@ -229,32 +210,9 @@ public static class MauiProgram
         CultureInfo.CurrentCulture = culture;
         CultureInfo.CurrentUICulture = culture;
 
-        // BUILD THE APP (this creates the 'app' variable)
         var app = builder.Build();
-
-        // Initialize data on first run (AFTER app is built)
-        // InitializeDataAsync(app.Services).GetAwaiter().GetResult();
-
-        // Return the app
         return app;
     }
-
-    // Initialize data method
-    /*
-    private static async Task InitializeDataAsync(IServiceProvider services)
-    {
-        try
-        {
-            var seeder = services.GetRequiredService<DataSeederService>();
-            await seeder.InitializeIfNeededAsync();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"ERROR during initialization: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
-        }
-    }
-    */
 }
 
 #pragma warning restore CA1416
