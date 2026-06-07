@@ -237,54 +237,88 @@ The `[Company]` and `[NewsCentral]` placeholder strings are defined in `appsetti
 
 ### 5.2 Precedence Rule
 
-Registry values override `appsettings.json` values. Override is implemented via `RegistryConfigurationProvider` (in `NewsCentral.Shared`) wired into both `NewsService` and `NewsViewer` through `IConfigurationBuilder.AddRegistryOverrides(company, appName)`. Any `appsettings.json` key can be overridden by mirroring the JSON section hierarchy as registry subkeys.
+Registry values override `appsettings.json` values. Override is implemented via `RegistryConfigurationProvider` (in `NewsCentral.Shared`) wired into all components through `IConfigurationBuilder.AddRegistryOverrides(company, "NewsCentral", componentName)`. Any `appsettings.json` key can be overridden by mirroring the JSON section hierarchy as registry subkeys.
 
 ### 5.3 Registry Layout
 
+Each component reads from its own subkey. Values set for one component do not affect another.
+
+**NewsService**
 ```
-HKLM\Software\[Company]\[NewsCentral]\
-│   StorageMode           REG_SZ    ("Share" or "Azure")
-│   PollIntervalSeconds   DWORD     (NewsService poll interval)
-│   AzureUploadEnabled           DWORD     (1 = enable telemetry upload to Azure)
-│   BypassShowOnceCheck          DWORD     (NewsViewer: 1 = skip once-per-day guard)
-│   BypassImageIntegrityCheck    DWORD     (NewsViewer: 1 = skip image SHA-256 verification)
-│
+HKLM\Software\[Company]\NewsCentral\NewsService\
 ├── Service\
-│       PollIntervalSeconds   DWORD
-│       CacheRootPath         REG_SZ
-│
+│       PollIntervalSeconds   DWORD     (poll interval in seconds)
+│       CacheRootPath         REG_SZ    (overrides Service:CacheRootPath)
 ├── Repository\
-│       StorageMode   REG_SZ
-│       SharePath     REG_SZ
-│
+│       StorageMode   REG_SZ   ("Share" or "Azure")
+│       SharePath     REG_SZ   (UNC or local path to the file-share repository)
 ├── AzureBlob\
-│       AuthMode               REG_SZ
+│       AuthMode               REG_SZ   ("Certificate" or "ClientSecret")
 │       TenantId               REG_SZ
 │       ClientId               REG_SZ
 │       AccountName            REG_SZ
 │       ContainerName          REG_SZ
 │       CertificateThumbprint  REG_SZ
 │       ClientSecret           REG_SZ
-│
 ├── Hmac\
 │       SecretKey   REG_SZ    (Base64-encoded 32-byte key; empty = HMAC disabled)
-│
 └── teams\
-        (one REG_SZ value per team; value name = team folder name; data = "" or any string)
-        e.g.  MY_TEAM   REG_SZ   ""
-              EXP_JP    REG_SZ   ""
+        (one REG_SZ value per team; value name = team folder name incl. team- prefix; data = "")
+        e.g.  team-cz-its   REG_SZ   ""
+              team-de-prod  REG_SZ   ""
+```
+
+**NewsViewer**
+```
+HKLM\Software\[Company]\NewsCentral\NewsViewer\
+│   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
+│   BypassShowOnceCheck          DWORD     (1 = skip once-per-day guard at startup)
+│   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
+├── Hmac\
+│       SecretKey   REG_SZ
+└── teams\
+        (one REG_SZ value per team; value name = full folder name incl. team- prefix)
+```
+
+**NewsCentral** (MAUI authoring app)
+```
+HKLM\Software\[Company]\NewsCentral\NewsCentral\
+│   DataPath               REG_SZ    (root for IStorageService)
+│   LockExpirationMinutes  DWORD
+├── Authentication\
+│       EnableAutoLogin   DWORD     (dev/test only — not for registry deployment)
+│       UseMockUPN        DWORD     (dev/test only — not for registry deployment)
+│       MockUPN           REG_SZ    (dev/test only — not for registry deployment)
+├── Storage\
+│       EnableBlobDistribution   DWORD
+│       DistributionMode         REG_SZ   ("Local" or "AzureBlob")
+│       LocalDistributionPath    REG_SZ
+│       AzureBlobContainerName   REG_SZ
+├── AzureBlob\
+│       TenantId      REG_SZ
+│       ClientId      REG_SZ
+│       AccountName   REG_SZ
+├── Hmac\
+│       SecretKey   REG_SZ
+└── teams\
+        (one REG_SZ value per team)
+```
+
+**NewsTester** (future — stub, no values defined yet)
+```
+HKLM\Software\[Company]\NewsCentral\NewsTester\
+    (reserved; no values written by current tooling)
 ```
 
 **DWORD mapping:** `0` → `"False"`, `1` → `"True"`, values > 1 → numeric string. The configuration binder selects the correct interpretation from the target POCO property type. **REG_SZ** values are stored as-is. All other registry value types are ignored.
 
-**`teams\` sub-hive:** team folder names are the value *names* (not the value data). The provider exposes them as `teams:0`, `teams:1`, … so `IConfiguration.GetSection("teams").GetChildren()` returns one entry per team. Use `TeamConfigurationReader.GetTeams(configuration)` to read them.
-
-**Root-level values** (e.g. `StorageMode` directly under the app key) are supported for backward compatibility. Prefer section-namespaced subkeys (e.g. `Repository\StorageMode`) so they map cleanly onto the `appsettings.json` hierarchy.
+**`teams\` sub-hive:** team folder names are the value *names* (not the value data). Value names must use the full generated folder name including the `team-` prefix (e.g. `team-cz-its`, not `CZ_ITS`). The provider exposes them as `teams:0`, `teams:1`, … so `IConfiguration.GetSection("teams").GetChildren()` returns one entry per team. Use `TeamConfigurationReader.GetTeams(configuration)` to read them.
 
 ### 5.4 appsettings.json — NewsCentral
 
 ```json
 {
+  "Company": "Contoso",
   "DataPath": "C:\\Download\\NewsCentral",
   "Initialization": {
     "DefaultAdminUsername": "admin",

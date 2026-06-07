@@ -104,6 +104,10 @@ public static class MauiProgram
 
         // Add configuration to builder
         builder.Configuration.AddConfiguration(config);
+        builder.Configuration.AddRegistryOverrides(
+            config["Company"] ?? "MyCompany",
+            "NewsCentral",
+            "NewsCentral");
 
         // DEBUG: Verify configuration values
         System.Diagnostics.Debug.WriteLine("=== CONFIGURATION CHECK ===");

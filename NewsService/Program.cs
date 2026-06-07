@@ -12,7 +12,7 @@ builder.Services.AddWindowsService(options => options.ServiceName = "NewsService
 // Company/ApplicationName are read first (they define the registry path itself and
 // are therefore not registry-overridable).
 var baseConfig = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();
-builder.Configuration.AddRegistryOverrides(baseConfig.Company, baseConfig.ApplicationName);
+builder.Configuration.AddRegistryOverrides(baseConfig.Company, "NewsCentral", "NewsService");
 
 // Re-bind so all typed POCOs reflect registry overrides.
 var config = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();

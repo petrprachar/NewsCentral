@@ -139,4 +139,11 @@ public static class RegistryConfigurationExtensions
         builder.Add(new RegistryConfigurationSource(company, applicationName));
         return builder;
     }
+
+    public static IConfigurationBuilder AddRegistryOverrides(
+        this IConfigurationBuilder builder, string company, string solutionName, string componentName)
+    {
+        builder.Add(new RegistryConfigurationSource(company, $@"{solutionName}\{componentName}"));
+        return builder;
+    }
 }

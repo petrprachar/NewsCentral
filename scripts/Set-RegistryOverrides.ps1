@@ -1,29 +1,23 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Configures all registry overrides for NewsService and NewsViewer.
+    Configures registry overrides for a single NewsCentral component.
 
 .DESCRIPTION
-    Writes values under HKLM\Software\<Company>\<ApplicationName>\ using the
-    subkey layout expected by RegistryConfigurationProvider.  Any value not
+    Writes values under HKLM\Software\<Company>\NewsCentral\<ComponentName>\ using
+    the subkey layout expected by RegistryConfigurationProvider.  Any value not
     supplied is left unchanged (or omitted when creating the key for the first
     time).  Run with -WhatIf to preview without writing.
 
-    Registry layout written by this script
-    ───────────────────────────────────────
-    HKLM\Software\<Company>\<ApplicationName>\
-    │   CacheRootPath                REG_SZ    (NewsViewer — overrides ViewerConfiguration.CacheRootPath)
-    │   BypassShowOnceCheck          DWORD     (NewsViewer — 1 = skip once-per-day guard at startup)
-    │   BypassImageIntegrityCheck    DWORD     (NewsViewer — 1 = skip image SHA-256 verification)
-    │
+    Registry layout written by this script (NewsService example)
+    ─────────────────────────────────────────────────────────────
+    HKLM\Software\<Company>\NewsCentral\NewsService\
     ├── Service\
-    │       PollIntervalSeconds   DWORD    (NewsService poll interval in seconds)
-    │       CacheRootPath         REG_SZ   (NewsService — overrides Service:CacheRootPath)
-    │
+    │       PollIntervalSeconds   DWORD    (poll interval in seconds)
+    │       CacheRootPath         REG_SZ   (overrides Service:CacheRootPath)
     ├── Repository\
     │       StorageMode   REG_SZ   ("Share" or "Azure")
     │       SharePath     REG_SZ   (UNC or local path to the file-share repository)
-    │
     ├── AzureBlob\
     │       AuthMode               REG_SZ   ("Certificate" or "ClientSecret")
     │       TenantId               REG_SZ
@@ -32,21 +26,34 @@
     │       ContainerName          REG_SZ
     │       CertificateThumbprint  REG_SZ   (AuthMode=Certificate)
     │       ClientSecret           REG_SZ   (AuthMode=ClientSecret)
-    │
     ├── Hmac\
     │       SecretKey   REG_SZ   (Base64-encoded 32-byte HMAC key; empty string = HMAC disabled)
-    │
     └── teams\
             <teamFolderName>   REG_SZ ""   (one value per team; name = folder name; data ignored)
 
-    Company and ApplicationName are read from appsettings.json and must match
-    exactly — they define the registry path and are never registry-overridable.
+    HKLM\Software\<Company>\NewsCentral\NewsViewer\
+    │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
+    │   BypassShowOnceCheck          DWORD     (1 = skip once-per-day guard at startup)
+    │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
+    ├── Hmac\
+    │       SecretKey   REG_SZ
+    └── teams\
+            <teamFolderName>   REG_SZ ""
+
+    Each component reads only its own subkey; values set for one component do
+    not affect another.  Company is read from appsettings.json and must match
+    exactly — it defines the registry path and is never registry-overridable.
 
 .PARAMETER Company
     Must match the Company value in appsettings.json. Default: Contoso
 
 .PARAMETER ApplicationName
-    Must match the ApplicationName value in appsettings.json. Default: NewsCentral
+    Kept for documentation only — no longer used for registry path construction.
+    The registry path is now HKLM\Software\<Company>\NewsCentral\<ComponentName>\.
+
+.PARAMETER ComponentName
+    The component whose registry subkey to write.
+    Must be one of: NewsCentral, NewsService, NewsViewer, NewsTester.
 
 .PARAMETER Teams
     Array of team folder names to register.  Existing teams not in this list
@@ -127,6 +134,10 @@ param(
     [string] $Company         = "Contoso",
     [string] $ApplicationName = "NewsCentral",
 
+    [Parameter(Mandatory)]
+    [ValidateSet("NewsCentral","NewsService","NewsViewer","NewsTester")]
+    [string] $ComponentName,
+
     # ── Teams ─────────────────────────────────────────────────────────────────
     [string[]] $Teams,
 
@@ -165,7 +176,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$base = "HKLM:\Software\$Company\$ApplicationName"
+$base = "HKLM:\Software\$Company\NewsCentral\$ComponentName"
 
 function Set-RegValue {
     param([string]$Path, [string]$Name, $Value, [string]$Type)

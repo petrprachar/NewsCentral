@@ -11,6 +11,8 @@ public class AppConfiguration
         _configuration = configuration;
     }
 
+    public string Company => _configuration["Company"] ?? "MyCompany";
+
     // ── Authoring tier ───────────────────────────────────────────────────────
     // DataPath is the root for IStorageService / LocalStorageService.
     // When using Azure Files, mount the share as a drive and set DataPath to it.

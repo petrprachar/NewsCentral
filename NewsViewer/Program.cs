@@ -123,7 +123,7 @@ static class Program
 
         return new ConfigurationBuilder()
             .AddJsonFile(jsonPath, optional: false)
-            .AddRegistryOverrides(baseConfig.Company, baseConfig.ApplicationName)
+            .AddRegistryOverrides(baseConfig.Company, "NewsCentral", "NewsViewer")
             .Build();
     }
 
