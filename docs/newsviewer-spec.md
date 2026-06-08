@@ -29,26 +29,42 @@
 - If no valid presentation found: **exit silently, no window shown**
 - If no qualifying monitor (Full HD or better): **do not show the window**
 
-## Window Layout
+#### Window Layout
 
-```
-┌─────────────────────────────────────────────┐
-│                                             │
-│           [Image — main area]               │  ← 1600×900 frame
-│                                             │
-│  [Label 1 — single-line comment text]       │
-│                                             │  ← Online/Offline indicator (always visible)
-│                                      [▶]    │  ← Side panel trigger (hover on right edge)
-└─────────────────────────────────────────────┘
-```
+Borderless, top-most, centered frame sized **1810×954** = 1600×900 image
++ 200px side panel + 44px caption bar, wrapped in a 5px solid gray frame.
 
-**Side panel** (revealed on hover over right edge):
+┌─ 5px gray frame ─────────────────────────────┬──────────┐
+│                                              │ ● Online │
+│            Image — fixed 1600×900            │ [Close]  │
+│            (Zoom, #606060 stage mat)         │ [More..] │
+│                                              │ [card]   │
+├──────────────────────────────────────────────┤          │
+│  Caption bar — PosterText / PresentationName │          │
+└──────────────────────────────────────────────┴──────────┘
 
-| Control | Label | Action |
-|---|---|---|
-| Button 1 | `Close` | Close window; return to original desktop if on virtual desktop |
-| Button 2 | `Click to see more information..` | Switch to original desktop; open `MoreUrl` in browser |
-| Label 2 | Countdown: `N seconds` | Counts down from `DisplayDurationSeconds`; closes at zero |
+The side panel is a **fixed, always-visible column** (the earlier hover-reveal /
+slide-in trigger and the 8px trigger strip have been removed). Top to bottom:
+Online/Offline indicator, `Close`, `Click to see more information..` (opens
+`Content.MoreInfoUrl`), and the auto-close card.
+
+#### Auto-close card
+
+A checkbox ("Form closes in") + large countdown number + "seconds" label + a
+progress bar, laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
+overlap regardless of font/DPI). The checkbox is checked by default; unchecking
+**stops** the countdown and grays the number, unit, and bar; re-checking resumes
+from the current value. Counts down from `DisplayDurationSeconds` (default 60),
+closes at zero with reason `Timeout`.
+
+#### Styling — FluentControls.cs
+
+`NewsViewer/Forms/FluentControls.cs` defines `FluentTheme` (Windows light-gray
+palette: #F0F0F0 surfaces, #E1E1E1 button faces, #ADADAD borders, #0078D7 accent,
+black text) plus two custom-painted controls: `RoundedPanel` and `RoundedButton`
+(`Radius = 0` → square; buttons have hover/press fill and a blue hover/press
+border). All public properties carry
+`[DesignerSerializationVisibility(Hidden)]` to satisfy analyzer WFO1000.
 
 ## Virtual Desktop (overview)
 
