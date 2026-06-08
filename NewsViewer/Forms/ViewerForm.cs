@@ -6,13 +6,20 @@ namespace NewsViewer.Forms;
 
 public sealed class ViewerForm : Form
 {
-    private const int SidePanelWidth   = 200;
-    private const int TriggerWidth     = 8;
-    private const int FormWidth        = 1600;
-    private const int FormHeight       = 900;
+    private const int ImageWidth = 1600;
+    private const int ImageHeight = 900;
+    private const int SidePanelWidth = 200;
+    private const int PosterStripHeight = 44;
+    private const int FormWidth = ImageWidth + SidePanelWidth;       // 1800
+    private const int FormHeight = ImageHeight + PosterStripHeight;   // 944
     private const int DefaultDurationSeconds = 60;
-    private const int SlideSpeed       = 30;  // px per tick
-    private const int SlideIntervalMs  = 12;  // ~83 fps
+    private const int PanelMargin = 16;
+    private const int ContentWidth = SidePanelWidth - (PanelMargin * 2);   // 168
+    private const int ProgressWidth = 144;
+    private const int FrameThickness = 5;
+
+    private static readonly Color FrameBand = Color.FromArgb(150, 150, 150);
+    private static readonly Color FrameEdge = Color.FromArgb(105, 105, 105);
 
     private readonly PublishedAssignmentIndex _assignment;
     private readonly string _imagePath;
@@ -24,13 +31,16 @@ public sealed class ViewerForm : Form
     private readonly Label _lblPosterText;
     private readonly Label _lblOnlineStatus;
     private readonly Panel _pnlSide;
-    private readonly Panel _pnlTrigger;
+    private readonly RoundedPanel _pnlAutoClose;
+    private readonly CheckBox _chkAutoClose;
     private readonly Label _lblCountdown;
+    private readonly Label _lblCountdownUnit;
+    private readonly Panel _progressFill;
+    private readonly ToolTip _toolTip = new();
 
     private readonly System.Windows.Forms.Timer _timer;
-    private readonly System.Windows.Forms.Timer _slideTimer;
     private int _secondsRemaining;
-    private int _targetX;
+    private int _totalSeconds;
     private readonly DateTime _sessionStart = DateTime.UtcNow;
     private string _closeReason = "UserClose";
 
@@ -41,196 +51,257 @@ public sealed class ViewerForm : Form
         ViewerStateService viewerState,
         bool isOnline)
     {
-        _assignment  = assignment;
-        _imagePath   = imagePath;
-        _telemetry   = telemetry;
+        _assignment = assignment;
+        _imagePath = imagePath;
+        _telemetry = telemetry;
         _viewerState = viewerState;
-        _isOnline    = isOnline;
+        _isOnline = isOnline;
 
-        // ── Form ────────────────────────────────────────────────────────────
+        // ── Form — solid 5px frame around the whole window ───────────────────
         FormBorderStyle = FormBorderStyle.None;
-        ClientSize      = new Size(FormWidth, FormHeight);
-        StartPosition   = FormStartPosition.CenterScreen;
-        BackColor       = Color.Black;
-        TopMost         = true;
-        Text            = "NewsViewer";
+        ClientSize = new Size(FormWidth + FrameThickness * 2, FormHeight + FrameThickness * 2);
+        StartPosition = FormStartPosition.CenterScreen;
+        BackColor = FrameBand;
+        TopMost = true;
+        Text = "NewsViewer";
+        Paint += OnFramePaint;
 
-        // ── PictureBox (behind all other controls) ───────────────────────────
+        // ── Root content host (inset by the frame thickness) ─────────────────
+        var root = new Panel
+        {
+            Location = new Point(FrameThickness, FrameThickness),
+            Size = new Size(FormWidth, FormHeight),
+            BackColor = FluentTheme.PanelBg
+        };
+        Controls.Add(root);
+
+        // ── PictureBox — fixed 1600×900, gray stage backing ─────────────────
         _pictureBox = new PictureBox
         {
             Location = new Point(0, 0),
-            Size     = new Size(FormWidth, FormHeight),
+            Size = new Size(ImageWidth, ImageHeight),
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = Color.Black
+            BackColor = FluentTheme.Stage
         };
-        Controls.Add(_pictureBox);
+        root.Controls.Add(_pictureBox);
 
-        // ── Side panel — initially off-screen to the right ───────────────────
-        _targetX = FormWidth; // hidden position
-
+        // ── Side panel — fixed column, gray surface, left separator ─────────
         _pnlSide = new Panel
         {
-            Location  = new Point(FormWidth, 0),
-            Size      = new Size(SidePanelWidth, FormHeight),
-            BackColor = Color.FromArgb(45, 45, 48)
+            Location = new Point(ImageWidth, 0),
+            Size = new Size(SidePanelWidth, FormHeight),
+            BackColor = FluentTheme.PanelBg
         };
-        Controls.Add(_pnlSide);
-
-        var btnClose = new Button
+        _pnlSide.Paint += (_, e) =>
         {
-            Text      = "Close",
-            Font      = new Font("Segoe UI", 11),
-            ForeColor = Color.White,
-            BackColor = Color.FromArgb(63, 63, 70),
-            FlatStyle = FlatStyle.Flat,
-            Size      = new Size(164, 38),
-            Location  = new Point(18, 30),
-            Cursor    = Cursors.Hand
+            using var pen = new Pen(FluentTheme.Border);
+            e.Graphics.DrawLine(pen, 0, 0, 0, _pnlSide.Height);
         };
-        btnClose.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
+        root.Controls.Add(_pnlSide);
+
+        // Online / Offline indicator
+        _lblOnlineStatus = new Label
+        {
+            Text = _isOnline ? "● Online" : "● Offline",
+            Font = new Font("Segoe UI", 9.5f),
+            ForeColor = _isOnline ? Color.FromArgb(0, 130, 0) : Color.FromArgb(190, 0, 0),
+            BackColor = Color.Transparent,
+            AutoSize = true,
+            Location = new Point(PanelMargin, 16)
+        };
+        _pnlSide.Controls.Add(_lblOnlineStatus);
+
+        var btnClose = new RoundedButton
+        {
+            Text = "Close",
+            Font = new Font("Segoe UI", 11),
+            Size = new Size(ContentWidth, 40),
+            Location = new Point(PanelMargin, 44)
+        };
         btnClose.Click += (_, _) => { _closeReason = "UserClose"; Close(); };
         _pnlSide.Controls.Add(btnClose);
 
-        var btnMoreInfo = new Button
+        var btnMoreInfo = new RoundedButton
         {
-            Text      = "Click to see more information..",
-            Font      = new Font("Segoe UI", 8.5f),
-            ForeColor = Color.White,
-            BackColor = Color.FromArgb(63, 63, 70),
-            FlatStyle = FlatStyle.Flat,
-            Size      = new Size(164, 52),
-            Location  = new Point(18, 86),
-            Cursor    = Cursors.Hand
+            Text = "Click to see more information..",
+            Font = new Font("Segoe UI", 8.5f),
+            Size = new Size(ContentWidth, 48),
+            Location = new Point(PanelMargin, 96)
         };
-        btnMoreInfo.FlatAppearance.BorderColor = Color.FromArgb(90, 90, 90);
         btnMoreInfo.Click += OnMoreInfoClicked;
         _pnlSide.Controls.Add(btnMoreInfo);
 
+        // ── Auto-close card — TableLayoutPanel guarantees no row overlap ─────
+        _pnlAutoClose = new RoundedPanel
+        {
+            Location = new Point(PanelMargin, 156),
+            Size = new Size(ContentWidth, 126),
+            FillColor = FluentTheme.Surface,
+            BorderColor = FluentTheme.Border,
+            Padding = new Padding(1)
+        };
+        _pnlSide.Controls.Add(_pnlAutoClose);
+
+        var cardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            BackColor = FluentTheme.Surface,
+            Padding = new Padding(11, 9, 11, 9)
+        };
+        cardLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cardLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cardLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        cardLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _pnlAutoClose.Controls.Add(cardLayout);
+
+        var header = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            BackColor = FluentTheme.Surface,
+            Margin = new Padding(0, 0, 0, 6)
+        };
+
+        _chkAutoClose = new CheckBox
+        {
+            Text = string.Empty,
+            Checked = true,
+            AutoSize = false,
+            Size = new Size(16, 16),
+            Margin = new Padding(0, 1, 7, 0),
+            BackColor = FluentTheme.Surface,
+            FlatStyle = FlatStyle.Standard,
+            Cursor = Cursors.Hand
+        };
+        _chkAutoClose.CheckedChanged += OnAutoCloseChanged;
+
+        var lblAutoCloseCaption = new Label
+        {
+            Text = "Form closes in",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 9.5f),
+            ForeColor = FluentTheme.TextPrimary,
+            BackColor = FluentTheme.Surface,
+            Margin = new Padding(0, 2, 0, 0),
+            Cursor = Cursors.Hand
+        };
+        lblAutoCloseCaption.Click += (_, _) => _chkAutoClose.Checked = !_chkAutoClose.Checked;
+
+        header.Controls.Add(_chkAutoClose);
+        header.Controls.Add(lblAutoCloseCaption);
+        cardLayout.Controls.Add(header, 0, 0);
+
         _lblCountdown = new Label
         {
-            Text      = string.Empty,
-            Font      = new Font("Segoe UI", 11),
-            ForeColor = Color.FromArgb(180, 180, 180),
-            BackColor = Color.Transparent,
-            AutoSize  = false,
-            Size      = new Size(164, 28),
-            Location  = new Point(18, 158),
-            TextAlign = ContentAlignment.MiddleCenter
+            Text = string.Empty,
+            AutoSize = true,
+            Font = new Font("Segoe UI", 11, FontStyle.Regular),
+            ForeColor = FluentTheme.TextPrimary,
+            BackColor = FluentTheme.Surface,
+            Anchor = AnchorStyles.None,
+            Margin = new Padding(0)
         };
-        _pnlSide.Controls.Add(_lblCountdown);
+        cardLayout.Controls.Add(_lblCountdown, 0, 1);
 
-        // ── Trigger strip — right edge, captures hover to reveal side panel ──
-        _pnlTrigger = new Panel
+        _lblCountdownUnit = new Label
         {
-            Location  = new Point(FormWidth - TriggerWidth, 0),
-            Size      = new Size(TriggerWidth, FormHeight),
-            BackColor = Color.Transparent,
-            Cursor    = Cursors.Hand
+            Text = "seconds",
+            AutoSize = true,
+            Font = new Font("Segoe UI", 8.5f),
+            ForeColor = FluentTheme.TextSecondary,
+            BackColor = FluentTheme.Surface,
+            Anchor = AnchorStyles.None,
+            Margin = new Padding(0, 2, 0, 6)
         };
-        _pnlTrigger.MouseEnter += (_, _) => SlideIn();
-        Controls.Add(_pnlTrigger);
+        cardLayout.Controls.Add(_lblCountdownUnit, 0, 2);
 
-        // Side panel mouse leave — slide out when cursor leaves the panel area
-        _pnlSide.MouseLeave    += OnSidePanelMouseLeave;
-        btnClose.MouseLeave    += OnSidePanelMouseLeave;
-        btnMoreInfo.MouseLeave += OnSidePanelMouseLeave;
-        _lblCountdown.MouseLeave += OnSidePanelMouseLeave;
+        var progressTrack = new Panel
+        {
+            Size = new Size(ProgressWidth, 4),
+            BackColor = FluentTheme.Border,
+            Anchor = AnchorStyles.None,
+            Margin = new Padding(0)
+        };
+        _progressFill = new Panel
+        {
+            Location = new Point(0, 0),
+            Size = new Size(ProgressWidth, 4),
+            BackColor = FluentTheme.Accent
+        };
+        progressTrack.Controls.Add(_progressFill);
+        cardLayout.Controls.Add(progressTrack, 0, 3);
 
-        // ── PosterText overlay (bottom-left of image) ────────────────────────
+        _toolTip.SetToolTip(_chkAutoClose,
+            "Uncheck to stop the timer and keep this window open");
+        _toolTip.SetToolTip(lblAutoCloseCaption,
+            "Uncheck to stop the timer and keep this window open");
+
+        // ── Caption bar — hairline divider ties it to the image above ────────
+        var pnlPoster = new Panel
+        {
+            Location = new Point(0, ImageHeight),
+            Size = new Size(ImageWidth, PosterStripHeight),
+            BackColor = FluentTheme.PanelBg
+        };
+        pnlPoster.Paint += (_, e) =>
+        {
+            using var pen = new Pen(FluentTheme.Border);
+            e.Graphics.DrawLine(pen, 0, 0, pnlPoster.Width, 0);
+        };
+        root.Controls.Add(pnlPoster);
+
         var posterText = !string.IsNullOrWhiteSpace(_assignment.PosterText)
             ? _assignment.PosterText
             : _assignment.PresentationName;
 
         _lblPosterText = new Label
         {
-            Text      = posterText,
-            Font      = new Font("Segoe UI", 13),
-            ForeColor = Color.White,
-            BackColor = Color.FromArgb(140, 0, 0, 0),
-            AutoSize  = false,
-            Size      = new Size(1380, 38),
-            Location  = new Point(0, 862),
+            Text = posterText,
+            Font = new Font("Segoe UI", 12.5f),
+            ForeColor = FluentTheme.TextPrimary,
+            BackColor = Color.Transparent,
+            AutoSize = false,
+            Location = new Point(0, 1),
+            Size = new Size(ImageWidth, PosterStripHeight - 1),
             TextAlign = ContentAlignment.MiddleCenter,
-            Padding   = new Padding(0)
+            Padding = new Padding(0)
         };
-        Controls.Add(_lblPosterText);
-
-        // ── Online / Offline indicator ───────────────────────────────────────
-        _lblOnlineStatus = new Label
-        {
-            Text      = _isOnline ? "● Online" : "● Offline",
-            Font      = new Font("Segoe UI", 9),
-            ForeColor = _isOnline ? Color.LimeGreen : Color.OrangeRed,
-            BackColor = Color.FromArgb(140, 0, 0, 0),
-            AutoSize  = true,
-            Location  = new Point(12, 10),
-            Padding   = new Padding(6, 3, 6, 3)
-        };
-        Controls.Add(_lblOnlineStatus);
-
-        // z-order: PictureBox at back; trigger strip and overlays in front
-        _pictureBox.SendToBack();
-        _pnlSide.BringToFront();
-        _pnlTrigger.BringToFront();
-        _lblPosterText.BringToFront();
-        _lblOnlineStatus.BringToFront();
+        pnlPoster.Controls.Add(_lblPosterText);
 
         // ── Countdown timer ──────────────────────────────────────────────────
         _secondsRemaining = _assignment.DisplayDurationSeconds > 0
             ? _assignment.DisplayDurationSeconds
             : DefaultDurationSeconds;
+        _totalSeconds = _secondsRemaining;
 
-        UpdateCountdownLabel();
+        UpdateCountdownUi();
 
         _timer = new System.Windows.Forms.Timer { Interval = 1000 };
         _timer.Tick += OnTimerTick;
         _timer.Start();
-
-        // ── Slide animation timer ────────────────────────────────────────────
-        _slideTimer = new System.Windows.Forms.Timer { Interval = SlideIntervalMs };
-        _slideTimer.Tick += OnSlideTick;
 
         FormClosed += OnFormClosed;
 
         LoadImage();
     }
 
-    // ── Slide helpers ────────────────────────────────────────────────────────
+    // ── Frame ────────────────────────────────────────────────────────────────
 
-    private void SlideIn()
+    private void OnFramePaint(object? sender, PaintEventArgs e)
     {
-        _targetX = FormWidth - SidePanelWidth;
-        _slideTimer.Start();
+        int w = ClientSize.Width;
+        int h = ClientSize.Height;
+        using var edge = new Pen(FrameEdge);
+        e.Graphics.DrawRectangle(edge, 0, 0, w - 1, h - 1);
+        e.Graphics.DrawRectangle(edge, FrameThickness - 1, FrameThickness - 1,
+            w - 2 * (FrameThickness - 1) - 1, h - 2 * (FrameThickness - 1) - 1);
     }
 
-    private void SlideOut()
-    {
-        _targetX = FormWidth;
-        _slideTimer.Start();
-    }
-
-    private void OnSlideTick(object? sender, EventArgs e)
-    {
-        var current = _pnlSide.Left;
-        if (current == _targetX) { _slideTimer.Stop(); return; }
-
-        var delta = _targetX - current;
-        var step  = Math.Sign(delta) * Math.Min(SlideSpeed, Math.Abs(delta));
-        _pnlSide.Left = current + step;
-
-        if (_pnlSide.Left == _targetX)
-            _slideTimer.Stop();
-    }
-
-    private void OnSidePanelMouseLeave(object? sender, EventArgs e)
-    {
-        // MouseLeave fires when moving between child controls; check real position.
-        var pos = _pnlSide.PointToClient(Cursor.Position);
-        if (!_pnlSide.ClientRectangle.Contains(pos))
-            SlideOut();
-    }
-
-    // ── Image ────────────────────────────────────────────────────────────────
+    // ── Image ──────────────────────────────────────────────────────────────────
 
     private void LoadImage()
     {
@@ -244,12 +315,12 @@ public sealed class ViewerForm : Form
         catch { }
     }
 
-    // ── Countdown ────────────────────────────────────────────────────────────
+    // ── Countdown ──────────────────────────────────────────────────────────────
 
     private void OnTimerTick(object? sender, EventArgs e)
     {
         _secondsRemaining--;
-        UpdateCountdownLabel();
+        UpdateCountdownUi();
         if (_secondsRemaining <= 0)
         {
             _closeReason = "Timeout";
@@ -257,8 +328,32 @@ public sealed class ViewerForm : Form
         }
     }
 
-    private void UpdateCountdownLabel() =>
-        _lblCountdown.Text = $"{_secondsRemaining} seconds";
+    private void OnAutoCloseChanged(object? sender, EventArgs e)
+    {
+        if (_chkAutoClose.Checked)
+        {
+            _lblCountdown.ForeColor = FluentTheme.TextPrimary;
+            _lblCountdownUnit.ForeColor = FluentTheme.TextSecondary;
+            _progressFill.BackColor = FluentTheme.Accent;
+            _timer.Start();
+        }
+        else
+        {
+            _timer.Stop();
+            _lblCountdown.ForeColor = FluentTheme.AccentPaused;
+            _lblCountdownUnit.ForeColor = FluentTheme.AccentPaused;
+            _progressFill.BackColor = FluentTheme.AccentPaused;
+        }
+    }
+
+    private void UpdateCountdownUi()
+    {
+        _lblCountdown.Text = _secondsRemaining.ToString();
+        int w = _totalSeconds > 0
+            ? (int)Math.Round(ProgressWidth * (double)_secondsRemaining / _totalSeconds)
+            : 0;
+        _progressFill.Width = Math.Clamp(w, 0, ProgressWidth);
+    }
 
     // ── More info ────────────────────────────────────────────────────────────
 
@@ -274,14 +369,13 @@ public sealed class ViewerForm : Form
         Close();
     }
 
-    // ── Cleanup ──────────────────────────────────────────────────────────────
+    // ── Cleanup ────────────────────────────────────────────────────────────────
 
     private void OnFormClosed(object? sender, FormClosedEventArgs e)
     {
         _timer.Stop();
         _timer.Dispose();
-        _slideTimer.Stop();
-        _slideTimer.Dispose();
+        _toolTip.Dispose();
         _pictureBox.Image?.Dispose();
 
         _viewerState.RecordShown(_assignment.PresentationId);
