@@ -1,0 +1,326 @@
+# Data Model
+
+All models are defined in `NewsCentral.Shared` and implement `IEntity`.
+
+## IEntity
+
+```csharp
+public interface IEntity
+{
+    string GetId();
+    void SetId(string id);
+}
+```
+
+## ISignable / HmacService
+
+`ISignable` (in `NewsCentral.Security`) marks any type whose JSON payload is covered by an HMAC-SHA256 signature.
+
+```csharp
+public interface ISignable { string? Signature { get; set; } }
+
+public class HmacOptions { public string SecretKey { get; set; } = string.Empty; }
+
+public enum VerifyResult { Disabled, Unsigned, Valid, Invalid }
+
+public sealed class HmacService
+{
+    public bool IsEnabled { get; }                    // false when SecretKey is empty
+    public string? Sign<T>(T entity) where T : ISignable;
+    public VerifyResult Verify<T>(T entity) where T : ISignable;
+}
+```
+
+**Key derivation:** `SecretKey` is a Base64-encoded 32-byte key stored in `Hmac:SecretKey`. An empty key disables HMAC entirely — `Sign` returns `null`, `Verify` returns `Disabled`.
+
+**Canonical serialization:** The payload serialized for signing uses non-indented camelCase JSON with `JsonStringEnumConverter`. The `Signature` property is temporarily nulled during signing to exclude it from its own payload.
+
+**Verification behavior:**
+
+| Result | Meaning | Action taken |
+|---|---|---|
+| `Disabled` | `HmacService.IsEnabled` is false | Accept and pass through |
+| `Unsigned` | `Signature` is null | Accept with a warning log |
+| `Valid` | Signature matches | Accept |
+| `Invalid` | Signature mismatch or corrupt | Reject — content discarded / team skipped |
+
+**Timing-safe comparison:** `CryptographicOperations.FixedTimeEquals` is used to prevent timing attacks.
+
+## Presentation
+
+The core content unit distributed to NewsViewer.
+
+```csharp
+public class Presentation : IEntity, ISignable
+{
+    public string PresentationID { get; set; }
+    public string Name { get; set; }
+    public string Description { get; set; }
+
+    public string TeamID { get; set; }
+    public string TeamFolderName { get; set; }
+
+    public string OriginalImagePath { get; set; }
+    public string? GeneratedImagePath { get; set; }
+    public string ImageOriginalName { get; set; }
+    public string ImageName { get; set; }
+
+    public bool IsNewsOfWeek { get; set; }
+    public bool IsWallpaper { get; set; }
+    public bool IsLogonScreen { get; set; }
+
+    public int DisplayDurationSeconds { get; set; }     // Countdown timer; no registry default
+    public bool UseVirtualDesktop { get; set; }
+    public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
+
+    public string ContentImageBase64 { get; set; }      // Base64-encoded image
+    public string? PosterText { get; set; }
+    public string MoreUrl { get; set; }
+
+    public string CreatedBy { get; set; }
+    public DateTime DateCreated { get; set; }
+    public string ModifiedBy { get; set; }
+    public DateTime LastModified { get; set; }
+    public int Version { get; set; }
+
+    public string? Signature { get; set; }
+}
+```
+
+## Schedule
+
+```csharp
+public class Schedule : IEntity, ISignable
+{
+    public string ScheduleID { get; set; }
+    public string PresentationID { get; set; }
+    public string Version { get; set; }
+    public DateTime ScheduleStart { get; set; }
+    public DateTime ScheduleEnd { get; set; }
+    public string DaysOfWeek { get; set; } = "1,2,3,4,5,6,7";  // Mon–Sun
+    public bool IsActive { get; set; }
+    public string CreatedBy { get; set; }
+    public DateTime LastModified { get; set; }
+
+    public enum DisplayMode { ShowOnce, ShowNew }
+    public DisplayMode ShowMode { get; set; } = DisplayMode.ShowOnce;
+
+    public string? Signature { get; set; }
+}
+```
+
+`DisplayMode.ShowOnce` — show once per calendar day (first start or first unlock).  
+`DisplayMode.ShowNew` — same as ShowOnce, and also when new content arrives.
+
+## Assignment
+
+```csharp
+public class Assignment : IEntity, ISignable
+{
+    public string AssignmentID { get; set; }
+    public string PresentationID { get; set; }
+    public string PresentationVersion { get; set; }
+    public string ScheduleID { get; set; }
+    public string SourceTeam { get; set; }
+    public string TargetTeam { get; set; }
+    public AssignmentStatus Status { get; set; }        // see enum below
+    public bool RequiresApproval { get; set; }
+
+    public bool IsNewsOfWeek { get; set; }
+    public bool IsWallpaper { get; set; }
+    public bool IsLogonScreen { get; set; }
+
+    // Audit trail
+    public string CreatedBy { get; set; }
+    public DateTime DateCreated { get; set; }
+    public string? ApprovedBy { get; set; }
+    public DateTime? ApprovedDate { get; set; }
+    public string? ApprovalNotes { get; set; }
+    public string? PublishedBy { get; set; }
+    public DateTime? PublishedDate { get; set; }
+    public List<string> PublishedPaths { get; set; }
+    public string? CancelledBy { get; set; }
+    public DateTime? CancelledDate { get; set; }
+    public string? CancellationReason { get; set; }
+    public string? RejectedBy { get; set; }
+    public DateTime? RejectedDate { get; set; }
+    public string? RejectionReason { get; set; }
+
+    public string? Signature { get; set; }
+}
+
+public enum AssignmentStatus
+{
+    Draft, PendingApproval, Approved, Published, Cancelled, Rejected
+}
+```
+
+## Team / User
+
+```csharp
+public class Team : IEntity
+{
+    public string TeamID { get; set; }
+    public string Name { get; set; }
+    public string FolderName { get; set; }
+    public string Description { get; set; }
+    public bool IsActive { get; set; }
+    // ...
+}
+public class TeamsCollection : IEntity { public List<Team> Teams { get; set; } }
+
+public class User : IEntity
+{
+    public string UserID { get; set; }
+    public string Username { get; set; }
+    public string Email { get; set; }
+    public string? UPN { get; set; }
+    public bool IsSystemAdmin { get; set; }
+    public List<TeamRole> TeamRoles { get; set; }
+    // ...
+}
+public class TeamRole { public string TeamID; public List<string> Roles; }
+public class UsersCollection : IEntity { public List<User> Users { get; set; } }
+```
+
+## TeamIndexFile (index.json per team)
+
+The `index.json` written to each team folder by NewsCentral and consumed by NewsService and NewsViewer.
+
+```csharp
+public class TeamIndexFile : ISignable
+{
+    public string TeamFolderName { get; set; }
+    public string TeamName { get; set; }
+    public DateTime GeneratedAt { get; set; }
+    public string Version { get; set; } = "1.0.0";
+    public string IndexHash { get; set; }               // SHA256 of content for change detection
+    public List<PublishedAssignmentIndex> PublishedAssignments { get; set; }
+    public IndexStatistics Statistics { get; set; }
+    public string? Signature { get; set; }              // HMAC-SHA256; set by IndexGenerationService after IndexHash
+}
+
+public class PublishedAssignmentIndex
+{
+    public string AssignmentId { get; set; }
+    public string PresentationId { get; set; }
+    public string ScheduleId { get; set; }
+    public string PresentationName { get; set; }
+    public int PresentationVersion { get; set; }
+    public DateTime PresentationLastModified { get; set; }
+    public DateTime ScheduleStart { get; set; }         // Client local time (no Z suffix)
+    public DateTime ScheduleEnd { get; set; }           // Client local time (no Z suffix)
+    public string DaysOfWeek { get; set; }
+    public DateTime PublishedDate { get; set; }
+    public string PublishedBy { get; set; }
+    public DisplayTypeInfo DisplayTypes { get; set; }
+    public ContentInfo Content { get; set; }
+    public string SourceTeamFolderName { get; set; }
+
+    public string? PosterText { get; set; }             // From Presentation.PosterText
+    public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
+    public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
+    public bool UseVirtualDesktop { get; set; }
+    public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
+}
+
+public class ContentInfo
+{
+    public string ImagePath { get; set; }               // Relative path from team root
+    public string? ImageUrl { get; set; }               // Azure Blob URL
+    public string ImageHash { get; set; }               // SHA256 for cache invalidation
+    public long ImageSizeBytes { get; set; }
+    public string MoreInfoUrl { get; set; }
+}
+
+public class DisplayTypeInfo
+{
+    public bool IsNewsOfWeek { get; set; }
+    public bool IsWallpaper { get; set; }
+    public bool IsLogonScreen { get; set; }
+}
+
+public class IndexStatistics
+{
+    public int TotalPublishedAssignments { get; set; }
+    public int ActiveAssignments { get; set; }
+    public int UpcomingAssignments { get; set; }
+    public int ExpiredAssignments { get; set; }
+}
+```
+
+## status.json (NewsService → NewsViewer)
+
+Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
+
+```json
+{
+  "LastSyncTime": "2025-05-23T08:12:00Z",
+  "IsOnline": true,
+  "SyncSource": "Share"
+}
+```
+
+`SyncSource` values: `Azure`, `Share`, `None`
+
+## viewerstate.json (NewsViewer internal)
+
+Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-level).
+
+```json
+{
+  "LastShownDate": "2025-05-23",
+  "LastShownPresentationId": "abc-123"
+}
+```
+
+## servicestate.json (NewsService internal)
+
+```json
+{
+  "LastWallpaperPresentationId": "abc-123",
+  "LastLockscreenPresentationId": "def-456"
+}
+```
+
+## Session Telemetry (NewsViewer → uploads folder)
+
+Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implements `ISignable`). Shared so both NewsViewer (writer) and NewsService (verifier) can deserialize and verify without model duplication.
+
+```json
+{
+  "SessionId": "guid",
+  "PresentationId": "abc-123",
+  "TeamId": "team_xy",
+  "SessionStartTime": "2025-05-23T08:15:00Z",
+  "SessionEndTime": "2025-05-23T08:15:34Z",
+  "CloseReason": "Timeout",
+  "Signature": "base64-hmac-sha256"
+}
+```
+
+`CloseReason` values: `Timeout`, `UserClose`, `UrlLaunch`
+
+`Signature` is set by `TelemetryWriter` in NewsViewer immediately before writing the file. `TelemetryUploader` in NewsService verifies it before forwarding to the repository; files with `Invalid` signatures are discarded and logged.
+
+## Cache Folder Structure
+
+```
+%programdata%\NewsCentral\              ← machine-level; shared across all users
+├── team_xy\
+│   ├── index.json                     TeamIndexFile
+│   └── images\generated\              downloaded presentation images
+├── team_xz\
+│   └── ...
+├── uploads\
+│   └── session-{guid}.json            written by NewsViewer, uploaded by NewsService
+├── status.json                        sync state — written by NewsService
+└── servicestate.json                  wallpaper/lockscreen tracking — written by NewsService
+
+%localappdata%\NewsCentral\             ← per-user; one copy per Windows user account
+└── viewerstate.json                   display tracking — written by NewsViewer
+```
+
+`viewerstate.json` is intentionally per-user so that in multi-session environments (Citrix RDSH, Windows Server RDS) each user's shown-today state is independent. All other cache files remain machine-level.
+
+Repository / network share mirrors the same team folder structure as the `%programdata%` cache.
