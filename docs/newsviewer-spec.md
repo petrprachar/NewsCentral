@@ -29,7 +29,7 @@
 - If no valid presentation found: **exit silently, no window shown**
 - If no qualifying monitor (Full HD or better): **do not show the window**
 
-#### Window Layout
+## Window Layout
 
 Borderless, top-most, centered frame sized **1810×954** = image area (1600 × 900)
 + 200px side panel + 44px caption bar, wrapped in a 5px solid gray frame.
@@ -48,7 +48,7 @@ slide-in trigger and the 8px trigger strip have been removed). Top to bottom:
 Online/Offline indicator, `Close`, `Click to see more information..` (opens
 `Content.MoreInfoUrl`), and the auto-close card.
 
-#### Auto-close card
+### Auto-close card
 
 A checkbox ("Form closes in") + countdown number + "seconds" label + a
 progress bar, laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
@@ -57,7 +57,7 @@ overlap regardless of font/DPI). The checkbox is checked by default; unchecking
 from the current value. Counts down from `DisplayDurationSeconds` (default 60),
 closes at zero with reason `Timeout`.
 
-#### Styling — FluentControls.cs
+### Styling — FluentControls.cs
 
 `NewsViewer/Forms/FluentControls.cs` defines `FluentTheme` (Windows light-gray
 palette: #F0F0F0 surfaces, #E1E1E1 button faces, #ADADAD borders, #0078D7 accent,
