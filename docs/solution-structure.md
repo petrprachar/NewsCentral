@@ -96,7 +96,8 @@ NewsViewer\
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
 │   └── TelemetryWriter.cs            HMAC-signs and writes session-{guid}.json to uploads\ on close
 ├── Forms\
-│   ├── ViewerForm.cs                 1600×900 borderless WinForms window; hover-triggered side panel
+│   ├── ViewerForm.cs                 1810×954 borderless WinForms window; fixed Fluent gray side panel
+│   ├── FluentControls.cs             FluentTheme palette + RoundedPanel/RoundedButton (custom-painted, square, hover/press states)
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)

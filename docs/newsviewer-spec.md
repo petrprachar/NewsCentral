@@ -1,7 +1,7 @@
 # NewsViewer — Component Specification
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 2 complete. All four Phase 2 features implemented and tested. NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
+**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass. NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
 ## Launch Conditions
 
@@ -31,12 +31,12 @@
 
 #### Window Layout
 
-Borderless, top-most, centered frame sized **1810×954** = 1600×900 image
+Borderless, top-most, centered frame sized **1810×954** = image area (1600 × 900)
 + 200px side panel + 44px caption bar, wrapped in a 5px solid gray frame.
 
 ┌─ 5px gray frame ─────────────────────────────┬──────────┐
 │                                              │ ● Online │
-│            Image — fixed 1600×900            │ [Close]  │
+│            Image — fixed size                │ [Close]  │
 │            (Zoom, #606060 stage mat)         │ [More..] │
 │                                              │ [card]   │
 ├──────────────────────────────────────────────┤          │
@@ -50,7 +50,7 @@ Online/Offline indicator, `Close`, `Click to see more information..` (opens
 
 #### Auto-close card
 
-A checkbox ("Form closes in") + large countdown number + "seconds" label + a
+A checkbox ("Form closes in") + countdown number + "seconds" label + a
 progress bar, laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
 overlap regardless of font/DPI). The checkbox is checked by default; unchecking
 **stops** the countdown and grays the number, unit, and bar; re-checking resumes
@@ -69,10 +69,6 @@ border). All public properties carry
 ## Virtual Desktop (overview)
 
 When `Presentation.UseVirtualDesktop = true`: creates a new Windows desktop via `CreateDesktop` / `SwitchDesktop` / `SetThreadDesktop`. Taskbar not visible. Background set to `VirtualDesktopBackgroundColor`. Auto-detected and suppressed in RDP / Citrix / VMware Horizon sessions.
-
-## Side Panel — Hover Trigger (Phase 2)
-
-An 8px transparent `_pnlTrigger` strip is pinned to the right edge of the form. When the mouse enters it, `SlideIn()` sets `_targetX = FormWidth - SidePanelWidth` and starts `_slideTimer` (12 ms interval, 30 px per tick). The panel slides in from off-screen. `OnSidePanelMouseLeave` uses a `PointToClient` + `ClientRectangle.Contains` bounds check — moving between child controls does not falsely trigger slide-out. Mouse leaving the panel area calls `SlideOut()`.
 
 ## ShowNew Mode — `ShowNewApplicationContext` (Phase 2)
 
