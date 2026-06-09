@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsCentral.Shared", "NewsC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsViewer", "NewsViewer\NewsViewer.csproj", "{C5A1E9F3-2B7D-4A8E-9C3F-6D1B5E8A2C4F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsCentral.Shared.Tests", "NewsCentral.Shared.Tests\NewsCentral.Shared.Tests.csproj", "{D2646CA1-564E-47B0-9CE2-E680458C9EBB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,18 @@ Global
 		{C5A1E9F3-2B7D-4A8E-9C3F-6D1B5E8A2C4F}.Release|x64.Build.0 = Release|Any CPU
 		{C5A1E9F3-2B7D-4A8E-9C3F-6D1B5E8A2C4F}.Release|x86.ActiveCfg = Release|Any CPU
 		{C5A1E9F3-2B7D-4A8E-9C3F-6D1B5E8A2C4F}.Release|x86.Build.0 = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|x64.Build.0 = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Debug|x86.Build.0 = Debug|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x64.ActiveCfg = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x64.Build.0 = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x86.ActiveCfg = Release|Any CPU
+		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
