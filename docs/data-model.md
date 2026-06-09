@@ -12,16 +12,33 @@ public interface IEntity
 }
 ```
 
-## ISignable / HmacService
+## Signing Infrastructure
 
-`ISignable` (in `NewsCentral.Security`) marks any type whose JSON payload is covered by an HMAC-SHA256 signature.
+`ISignable` (in `NewsCentral.Security`) marks any type whose JSON payload is covered by a signature. Two signing services exist; both live in `NewsCentral.Shared/Security/`.
 
 ```csharp
 public interface ISignable { string? Signature { get; set; } }
 
-public class HmacOptions { public string SecretKey { get; set; } = string.Empty; }
-
 public enum VerifyResult { Disabled, Unsigned, Valid, Invalid }
+```
+
+**Canonical serialization** (identical across both services): non-indented camelCase JSON with `JsonStringEnumConverter`; `Signature` temporarily nulled before serialization so it is excluded from its own payload.
+
+**Verification behavior** (shared semantics):
+
+| Result | Meaning | Action taken |
+|---|---|---|
+| `Disabled` | No key configured | Accept and pass through |
+| `Unsigned` | `Signature` is null | Accept with a warning log |
+| `Valid` | Signature matches | Accept |
+| `Invalid` | Signature present but does not match | Reject — content discarded / team skipped |
+
+### HmacService
+
+Symmetric shared-key signing; used for session telemetry (`session-*.json`).
+
+```csharp
+public class HmacOptions { public string SecretKey { get; set; } = string.Empty; }
 
 public sealed class HmacService
 {
@@ -31,20 +48,38 @@ public sealed class HmacService
 }
 ```
 
-**Key derivation:** `SecretKey` is a Base64-encoded 32-byte key stored in `Hmac:SecretKey`. An empty key disables HMAC entirely — `Sign` returns `null`, `Verify` returns `Disabled`.
+`SecretKey` is a Base64-encoded 32-byte key in `Hmac:SecretKey`. An empty key disables HMAC — `Sign` returns `null`, `Verify` returns `Disabled`. Timing-safe comparison via `CryptographicOperations.FixedTimeEquals`.
 
-**Canonical serialization:** The payload serialized for signing uses non-indented camelCase JSON with `JsonStringEnumConverter`. The `Signature` property is temporarily nulled during signing to exclude it from its own payload.
+### EcdsaSignatureService
 
-**Verification behavior:**
+Stateless asymmetric signing; foundation for per-team `index.json` signing. Key material is passed per call.
 
-| Result | Meaning | Action taken |
-|---|---|---|
-| `Disabled` | `HmacService.IsEnabled` is false | Accept and pass through |
-| `Unsigned` | `Signature` is null | Accept with a warning log |
-| `Valid` | Signature matches | Accept |
-| `Invalid` | Signature mismatch or corrupt | Reject — content discarded / team skipped |
+```csharp
+public sealed class EcdsaSignatureService
+{
+    // Returns Base64 IEEE P1363 (64-byte r‖s). Does not modify entity.Signature.
+    public string Sign<T>(T entity, string privateKeyBase64Pkcs8) where T : ISignable;
 
-**Timing-safe comparison:** `CryptographicOperations.FixedTimeEquals` is used to prevent timing attacks.
+    // Pass [PublicKey, PublicKeyPrevious] for rotation-window support.
+    // No non-empty keys → Disabled. Null Signature → Unsigned. Any key match → Valid. All fail → Invalid.
+    public VerifyResult Verify<T>(T entity, params string?[] publicKeysSpkiBase64) where T : ISignable;
+}
+```
+
+Algorithm: ECDSA nistP256, SHA-256, IEEE P1363 fixed-field concatenation (64-byte r‖s, Base64). A key attempt that throws is treated as that key failing.
+
+### SigningKeyTool
+
+Static helpers for key management UI and offline tooling.
+
+```csharp
+public static class SigningKeyTool
+{
+    public static (string PrivateKeyBase64, string PublicKeyBase64) GenerateKeyPair();
+    public static string DerivePublicKey(string privateKeyInput);   // PEM or Base64 PKCS#8; throws ArgumentException on bad input
+    public static string Truncate(string? key, int head = 12, int tail = 6);
+}
+```
 
 ## Presentation
 
@@ -183,6 +218,21 @@ public class TeamRole { public string TeamID; public List<string> Roles; }
 public class UsersCollection : IEntity { public List<User> Users { get; set; } }
 ```
 
+## TeamSigningKeys
+
+Stored at `{teamFolderName}/team-signing.json` on the authoring tier only. Must never be written through `IBlobDistributionService` or synced to client machines.
+
+```csharp
+public sealed class TeamSigningKeys
+{
+    public string? PrivateKey { get; set; }         // Base64 PKCS#8 — authoring side only
+    public string? PublicKey { get; set; }           // Base64 SubjectPublicKeyInfo
+    public string? PublicKeyPrevious { get; set; }   // Base64 SPKI; optional; retained for the rotation window
+}
+```
+
+Trust assumption: team content authors are trusted, and their processes are granted access to the team private key by design. `PublicKey` and `PublicKeyPrevious` are distributed to verifying components (NewsService, NewsViewer); `PrivateKey` stays on the authoring tier.
+
 ## TeamIndexFile (index.json per team)
 
 The `index.json` written to each team folder by NewsCentral and consumed by NewsService and NewsViewer.
@@ -197,7 +247,7 @@ public class TeamIndexFile : ISignable
     public string IndexHash { get; set; }               // SHA256 of content for change detection
     public List<PublishedAssignmentIndex> PublishedAssignments { get; set; }
     public IndexStatistics Statistics { get; set; }
-    public string? Signature { get; set; }              // HMAC-SHA256; set by IndexGenerationService after IndexHash
+    public string? Signature { get; set; }              // HMAC-SHA256 today; ECDSA P-256 per-team migration planned
 }
 
 public class PublishedAssignmentIndex

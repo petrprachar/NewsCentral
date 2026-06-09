@@ -54,6 +54,7 @@ Each team folder in the repository contains:
 - `images\original\` — uploaded source images
 - `images\generated\` — AI-generated or processed images (reserved)
 - `index.json` — generated team index
+- `team-signing.json` — ECDSA P-256 key pair (`TeamSigningKeys`); authoring tier only; never distributed via `IBlobDistributionService`
 
 ---
 

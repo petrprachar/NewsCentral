@@ -20,5 +20,6 @@
 | NativeAOT for NewsViewer | Migration path preserved; Win32 P/Invoke usage kept compatible |
 | NewsTester | Independent preview application for content authors and approvers |
 | ~~HMAC anti-tamper~~ | Implemented — `HmacService` in `NewsCentral.Shared/Security/`; `index.json` signed by NewsCentral, verified by NewsService and NewsViewer; session telemetry signed by NewsViewer, verified by NewsService. Key configured via `Hmac:SecretKey`; empty key disables HMAC. |
+| ECDSA per-team index signing | Core implemented (`EcdsaSignatureService`, `SigningKeyTool`, `TeamSigningKeys` in `NewsCentral.Shared`). Remaining: wire `EcdsaSignatureService` into `IndexGenerationService` (NewsCentral), `SyncService` (NewsService), and `PresentationSelector` (NewsViewer); add key-management UI; provision `team-signing.json` per team. Session telemetry stays on HMAC. |
 | Extended presentation selection logic | Current selection (most recent by timestamp) designed as an extensible function |
 | NewsViewer authentication | Architecture prepared; not implemented in this version |

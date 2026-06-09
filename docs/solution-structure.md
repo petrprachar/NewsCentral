@@ -5,6 +5,7 @@
 ```
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
+├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — NewsCentral.Shared unit tests
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)
@@ -33,6 +34,7 @@ NewsCentral.Shared\
 │   ├── Assignment.cs                  implements ISignable
 │   ├── SessionTelemetry.cs            cross-component DTO; implements ISignable
 │   ├── Team.cs                        Team, TeamsCollection
+│   ├── TeamSigningKeys.cs             ECDSA key pair for a team: PrivateKey (PKCS#8), PublicKey, PublicKeyPrevious (SPKI)
 │   ├── User.cs                        User, TeamRole, UsersCollection
 │   └── IndexFile\
 │       ├── TeamIndexFile.cs           root structure for index.json; implements ISignable
@@ -43,7 +45,9 @@ NewsCentral.Shared\
 └── Security\
     ├── ISignable.cs                   interface ISignable { string? Signature { get; set; } }
     ├── HmacOptions.cs                 POCO: SecretKey (Base64 string)
-    └── HmacService.cs                 Sign<T>, Verify<T>, VerifyResult enum
+    ├── HmacService.cs                 Sign<T>, Verify<T>, VerifyResult enum
+    ├── EcdsaSignatureService.cs       stateless ECDSA P-256/SHA-256 Sign<T>/Verify<T>; IEEE P1363; key-list rotation
+    └── SigningKeyTool.cs              GenerateKeyPair, DerivePublicKey, Truncate — key-management helpers
 ```
 
 All model namespaces are `NewsCentral.Models` and `NewsCentral.Models.IndexFile` — identical to their previous location in the NewsCentral project, so no using-directive changes were required in NewsCentral when the shared library was extracted.
@@ -103,6 +107,13 @@ NewsViewer\
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
 ├── Program.cs                        entry point; constructs HmacService; passes BypassImageIntegrityCheck to PresentationSelector; startup checks; remote session guard; branches on ShowMode
 └── appsettings.json
+```
+
+## NewsCentral.Shared.Tests — Layout
+
+```
+NewsCentral.Shared.Tests\
+└── EcdsaRoundTripTests.cs    round-trip: GenerateKeyPair → Sign → Verify (Valid / Invalid / Unsigned / Disabled / rotation fallback)
 ```
 
 ## JSON Serialization Convention
