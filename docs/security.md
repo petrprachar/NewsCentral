@@ -27,16 +27,16 @@
 **Signing (NewsViewer):** `TelemetryWriter` calls `HmacService.Sign(record)` on each `SessionTelemetry` before writing to disk.
 
 **Verification (NewsService):**
-- `SyncService` verifies each `index.json` before caching. `Invalid` → sync aborted for that team. `Unsigned` → warning logged, sync continues.
+- `SyncService` verifies each `index.json` via ECDSA (Phase C — see below). HMAC is no longer used for index verification.
 - `TelemetryUploader` verifies each `session-*.json` before forwarding. `Invalid` → file discarded and logged.
 
-**Verification (NewsViewer):** `PresentationSelector` verifies each team's `index.json`. `Invalid` → team skipped entirely (no presentations displayed from that team). `Unsigned` → warning logged, team accepted. After selecting the winning assignment, `PresentationSelector` also verifies the cached image file against `Content.ImageHash` (SHA-256). A missing hash is accepted with a warning; a mismatch returns `(best, null)` so the caller exits silently. Disabled by `BypassImageIntegrityCheck`.
+**Verification (NewsViewer):** `PresentationSelector` verifies each team's `index.json` via ECDSA (Phase C — see below). HMAC is no longer used for index verification. After selecting the winning assignment, `PresentationSelector` also verifies the cached image file against `Content.ImageHash` (SHA-256). A missing hash is accepted with a warning; a mismatch returns `(best, null)` so the caller exits silently. Disabled by `BypassImageIntegrityCheck`.
 
 **Key management:** `Hmac:SecretKey` is a Base64-encoded 32-byte key configured in `appsettings.json` or overridden via registry (`Hmac\SecretKey`). An empty key disables HMAC system-wide — all content is treated as `Disabled` and passes through. This enables phased rollout: deploy the key to all machines before enabling signing in NewsCentral.
 
 **`Signature` field** is present in: `Presentation`, `Schedule`, `Assignment`, `TeamIndexFile`, `SessionTelemetry`.
 
-## Per-Team Asymmetric Signing — ECDSA P-256 (Phases A & B1 — implemented and tested)
+## Per-Team Asymmetric Signing — ECDSA P-256 (Phases A, B1 & C — implemented and tested)
 
 `EcdsaSignatureService` (in `NewsCentral.Shared/Security/`) provides ECDSA P-256 / SHA-256 signing and verification as the foundation for replacing the shared HMAC key on `index.json` with per-team asymmetric keys. Session telemetry remains on HMAC-SHA256 and is not affected.
 
@@ -64,7 +64,7 @@
 
 **Phase B2 — pending:** Admin-only Key Management page in NewsCentral for generating and viewing team ECDSA key pairs.
 
-**Phase C — pending:** Swap `SyncService` (NewsService) and `PresentationSelector` (NewsViewer) from `HmacService.Verify` to `EcdsaSignatureService.Verify` with the per-team registry public key (`Signing\<teamFolderName>\PublicKey` / `PublicKeyPrevious`) and dual-key rotation fallback.
+**Phase C — complete (C1 + C2):** `SyncService` (NewsService, C1) and `PresentationSelector` (NewsViewer, C2) now verify `index.json` with `EcdsaSignatureService.Verify` using the team's registry public key read by `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` — `Signing:{teamFolderName}:PublicKey` and `:PublicKeyPrevious` — with dual-key rotation fallback. Outcome logging: `Valid` (verified and accepted), `Disabled` (no key configured — accepted, logged), `Unsigned` (no signature — accepted with warning), `Invalid` (mismatch — NewsService aborts the team sync; NewsViewer skips the team entirely). Verifiers deserialize `index.json` with standard ISO timestamp parsing and no `DateTime` converter, so the parsed values byte-match the signed, persisted form.
 
 **Phase D — pending:** `Set-RegistryOverrides.ps1` per-team signing parameters and configuration/security documentation updates.
 

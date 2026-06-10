@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using NewsCentral.Configuration;
 using NewsCentral.Models.IndexFile;
 using NewsCentral.Security;
 
@@ -8,13 +10,19 @@ namespace NewsViewer.Services;
 public sealed class PresentationSelector
 {
     private readonly string _cacheRootPath;
-    private readonly HmacService _hmac;
+    private readonly EcdsaSignatureService _ecdsa;
+    private readonly IConfiguration _configuration;
     private readonly bool _bypassImageIntegrityCheck;
 
-    public PresentationSelector(string cacheRootPath, HmacService hmac, bool bypassImageIntegrityCheck = false)
+    public PresentationSelector(
+        string cacheRootPath,
+        EcdsaSignatureService ecdsa,
+        IConfiguration configuration,
+        bool bypassImageIntegrityCheck = false)
     {
         _cacheRootPath             = cacheRootPath;
-        _hmac                      = hmac;
+        _ecdsa                     = ecdsa;
+        _configuration             = configuration;
         _bypassImageIntegrityCheck = bypassImageIntegrityCheck;
     }
 
@@ -47,17 +55,23 @@ public sealed class PresentationSelector
 
             if (index?.PublishedAssignments is null) continue;
 
-            var sigResult = _hmac.Verify(index);
+            var keys      = SigningKeyConfigurationReader.GetPublicKeys(_configuration, team);
+            var sigResult = _ecdsa.Verify(index, keys);
             if (sigResult == VerifyResult.Invalid)
             {
-                // Tampered index: refuse to display anything from this team.
                 System.Diagnostics.Debug.WriteLine(
-                    $"[HMAC] Team {team}: index.json signature invalid — skipping team");
+                    $"[ECDSA] {team}: index signature invalid — team skipped");
                 continue;
             }
             if (sigResult == VerifyResult.Unsigned)
                 System.Diagnostics.Debug.WriteLine(
-                    $"[HMAC] Team {team}: index.json carries no signature");
+                    $"[ECDSA] {team}: index.json carries no ECDSA signature");
+            else if (sigResult == VerifyResult.Valid)
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ECDSA] {team}: index signature valid");
+            else if (sigResult == VerifyResult.Disabled)
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ECDSA] {team}: no public key configured — verification disabled");
 
             foreach (var a in index.PublishedAssignments)
             {

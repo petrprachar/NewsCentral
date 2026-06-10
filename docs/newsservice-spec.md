@@ -16,6 +16,8 @@ Key registry values for NewsService:
 | `Service\PollIntervalSeconds` | `DWORD` | Overrides `Service:PollIntervalSeconds` |
 | `AzureUploadEnabled` | `DWORD` | `1` to enable telemetry upload to Azure Blob |
 | `teams\{teamFolderName}` | `REG_SZ` | Each value name is a team folder name |
+| `Signing\{teamFolderName}\PublicKey` | `REG_SZ` | Base64 SPKI for ECDSA `index.json` verification |
+| `Signing\{teamFolderName}\PublicKeyPrevious` | `REG_SZ` | Base64 SPKI — rotation window (optional) |
 
 `Company` and `ApplicationName` are read from appsettings.json before the registry provider is added and are not registry-overridable.
 
@@ -25,7 +27,7 @@ Executed by `Worker` on every interval tick:
 
 **Step 1 — Index sync (per team)**
 - Reads `{teamFolder}/index.json` from the repository
-- **HMAC verification** — calls `HmacService.Verify(remoteIndex)`: `Invalid` → logs error and skips the team entirely; `Unsigned` → logs warning and continues; `Valid` / `Disabled` → continues
+- **ECDSA verification** — calls `EcdsaSignatureService.Verify(remoteIndex, keys)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`: `Invalid` → logs error and skips the team entirely; `Unsigned` → logs warning and continues; `Valid` / `Disabled` → continues. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
 - Compares `IndexHash` with the cached copy
 - If unchanged: skips the team entirely (O(1) check, no I/O)
 - If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images

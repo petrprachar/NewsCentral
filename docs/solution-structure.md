@@ -58,7 +58,8 @@ All model namespaces are `NewsCentral.Models` and `NewsCentral.Models.IndexFile`
 NewsCentral.Shared\
 └── Configuration\
     ├── RegistryConfigurationProvider.cs   IConfigurationProvider/IConfigurationSource + AddRegistryOverrides() extension
-    └── TeamConfigurationReader.cs         GetTeams(IConfiguration) helper
+    ├── TeamConfigurationReader.cs         GetTeams(IConfiguration) helper
+    └── SigningKeyConfigurationReader.cs   GetPublicKeys(IConfiguration, teamFolderName) — reads Signing:{team}:PublicKey / :PublicKeyPrevious for ECDSA verification
 ```
 
 ## NewsService — Service Layout

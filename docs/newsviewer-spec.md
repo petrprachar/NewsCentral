@@ -23,7 +23,7 @@
 ## Presentation Selection
 
 - Reads `index.json` from all team cache folders matching the `teams` registry configuration
-- **HMAC verification** — calls `HmacService.Verify(index)` on each team's index: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` → logs warning and continues
+- **ECDSA verification** — calls `EcdsaSignatureService.Verify(index, keys)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` / `Disabled` / `Valid` → all logged distinctly, team accepted. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
 - Selects the most recent active presentation by `PresentationLastModified` timestamp
 - **Image integrity verification** — after the winning assignment is selected, computes SHA-256 of the cached image file and compares it against `Content.ImageHash` from the signed index. Missing hash → warning logged, continues. Mismatch → error logged, returns `(best, null)` so the caller exits silently rather than displaying tampered content. Disabled by `BypassImageIntegrityCheck = true`.
 - If no valid presentation found: **exit silently, no window shown**

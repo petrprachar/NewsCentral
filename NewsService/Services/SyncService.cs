@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using NewsCentral.Configuration;
 using NewsCentral.Models.IndexFile;
 using NewsCentral.Security;
 using NewsService.Models;
@@ -17,7 +19,8 @@ public sealed class SyncService(
     CacheManager cache,
     WallpaperService wallpaper,
     TelemetryUploader telemetry,
-    HmacService hmac,
+    EcdsaSignatureService ecdsa,
+    IConfiguration configuration,
     ILogger<SyncService> logger)
 {
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
@@ -84,16 +87,17 @@ public sealed class SyncService(
         var remoteIndex = JsonSerializer.Deserialize<TeamIndexFile>(remoteJson, Json);
         if (remoteIndex is null) return;
 
-        var sigResult = hmac.Verify(remoteIndex);
+        var keys      = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolder);
+        var sigResult = ecdsa.Verify(remoteIndex, keys);
         if (sigResult == VerifyResult.Invalid)
         {
             logger.LogError(
-                "Team {Team}: index.json HMAC signature invalid — sync aborted. " +
+                "Team {Team}: index.json ECDSA signature invalid — sync aborted. " +
                 "Content may have been tampered with.", teamFolder);
             return;
         }
         if (sigResult == VerifyResult.Unsigned)
-            logger.LogWarning("Team {Team}: index.json carries no HMAC signature", teamFolder);
+            logger.LogWarning("Team {Team}: index.json carries no ECDSA signature", teamFolder);
 
         var cachedIndex = await cache.ReadJsonAsync<TeamIndexFile>($"{teamFolder}/index.json");
 

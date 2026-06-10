@@ -32,8 +32,9 @@ else
             sp.GetRequiredService<ILogger<LocalShareRepositoryReader>>()));
 }
 
-// ── HMAC ─────────────────────────────────────────────────────────────────────
-builder.Services.AddSingleton(new HmacService(config.Hmac));
+// ── Signing services ─────────────────────────────────────────────────────────
+builder.Services.AddSingleton(new HmacService(config.Hmac));   // telemetry (unchanged)
+builder.Services.AddSingleton<EcdsaSignatureService>();         // index.json verification
 
 // ── Cache and services ───────────────────────────────────────────────────────
 builder.Services.AddSingleton(_ => new CacheManager(

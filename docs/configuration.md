@@ -37,6 +37,11 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       ClientSecret           REG_SZ
 ├── Hmac\
 │       SecretKey   REG_SZ    (Base64-encoded 32-byte key; empty = HMAC disabled)
+├── Signing\
+│       <teamFolderName>\
+│           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
+│           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
+│       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
 └── teams\
         (one REG_SZ value per team; value name = team folder name incl. team- prefix; data = "")
         e.g.  team-cz-its   REG_SZ   ""
@@ -51,6 +56,11 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
 ├── Hmac\
 │       SecretKey   REG_SZ
+├── Signing\
+│       <teamFolderName>\
+│           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
+│           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
+│       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
 └── teams\
         (one REG_SZ value per team; value name = full folder name incl. team- prefix)
 ```
@@ -88,6 +98,8 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 **DWORD mapping:** `0` → `"False"`, `1` → `"True"`, values > 1 → numeric string. The configuration binder selects the correct interpretation from the target POCO property type. **REG_SZ** values are stored as-is. All other registry value types are ignored.
 
 **`teams\` sub-hive:** team folder names are the value *names* (not the value data). Value names must use the full generated folder name including the `team-` prefix (e.g. `team-cz-its`, not `CZ_ITS`). The provider exposes them as `teams:0`, `teams:1`, … so `IConfiguration.GetSection("teams").GetChildren()` returns one entry per team. Use `TeamConfigurationReader.GetTeams(configuration)` to read them.
+
+**`Signing\` sub-hive:** each team has its own subkey holding `PublicKey` and (optionally) `PublicKeyPrevious` as `REG_SZ` values containing Base64-encoded SubjectPublicKeyInfo. `RegistryConfigurationProvider` surfaces them via its recursive `WalkKey` traversal as `Signing:{teamFolderName}:PublicKey` and `Signing:{teamFolderName}:PublicKeyPrevious`. Use `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` to read them; the returned array is passed directly to `EcdsaSignatureService.Verify`. NewsService and NewsViewer each maintain their own separate `Signing\` subtrees.
 
 ## appsettings.json — NewsCentral
 
