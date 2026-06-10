@@ -365,5 +365,6 @@ FodyWeavers.xsd
 /How NewsViewer works end.docx
 /TO DO list.docx
 
-# team-related signing definition file
+# Per-team ECDSA signing key material (contains private keys — authoring tier only)
 team-signing.json
+**/team-signing.json

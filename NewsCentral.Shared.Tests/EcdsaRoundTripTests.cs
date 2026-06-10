@@ -1,6 +1,10 @@
+using NewsCentral.Models;
+using NewsCentral.Models.IndexFile;
 using NewsCentral.Security;
 using System.Runtime.Intrinsics.Arm;
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace NewsCentral.Shared.Tests;
@@ -100,4 +104,5 @@ public sealed class EcdsaRoundTripTests
     {
         Assert.Throws<ArgumentException>(() => SigningKeyTool.DerivePublicKey("not-a-key"));
     }
+
 }

@@ -5,7 +5,7 @@
 ```
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
-├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — NewsCentral.Shared unit tests
+├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core (9 facts, all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)

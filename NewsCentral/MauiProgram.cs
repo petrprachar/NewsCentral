@@ -135,6 +135,7 @@ public static class MauiProgram
         builder.Services.AddSingleton(appConfig);
         builder.Services.AddSingleton(
             new HmacService(new HmacOptions { SecretKey = appConfig.HmacSecretKey }));
+        builder.Services.AddSingleton<EcdsaSignatureService>();
 
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();

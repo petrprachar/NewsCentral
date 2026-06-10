@@ -16,7 +16,7 @@ public class IndexGenerationService
     private readonly IBlobDistributionService _blobDistribution;
     private readonly IServiceProvider _serviceProvider;
     private readonly AuthenticationService _authService;
-    private readonly HmacService _hmac;
+    private readonly EcdsaSignatureService _ecdsa;
 
     private const string IndexFileName = "index.json";
 
@@ -25,13 +25,13 @@ public class IndexGenerationService
         IBlobDistributionService blobDistribution,
         IServiceProvider serviceProvider,
         AuthenticationService authService,
-        HmacService hmac)
+        EcdsaSignatureService ecdsa)
     {
         _storage          = storage;
         _blobDistribution = blobDistribution;
         _serviceProvider  = serviceProvider;
         _authService      = authService;
-        _hmac             = hmac;
+        _ecdsa            = ecdsa;
     }
 
     // ── Index path ───────────────────────────────────────────────────────────
@@ -94,7 +94,29 @@ public class IndexGenerationService
 
         index.Statistics = CalculateStatistics(index.PublishedAssignments);
         index.IndexHash  = CalculateIndexHash(index);
-        index.Signature  = _hmac.Sign(index);
+
+        // Normalize through the same options used to persist the file so that
+        // DateTimes are truncated to second precision before signing.  Without
+        // this, EcdsaSignatureService canonicalizes sub-second timestamps that
+        // SmartDateTimeConverter then drops on write, causing every verifier to
+        // return Invalid.  The normalized instance is also the one returned to
+        // the caller and written to disk, keeping sign payload and file in sync.
+        var indexJsonOptions = JsonConfiguration.GetIndexJsonOptions();
+        index = JsonSerializer.Deserialize<TeamIndexFile>(
+            JsonSerializer.Serialize(index, indexJsonOptions), indexJsonOptions)!;
+
+        var privateKey = await LoadTeamPrivateKeyAsync(teamFolderName);
+        if (!string.IsNullOrEmpty(privateKey))
+        {
+            index.Signature = _ecdsa.Sign(index, privateKey);
+            System.Diagnostics.Debug.WriteLine($"✓ index.json signed (ECDSA) for {teamFolderName}");
+        }
+        else
+        {
+            index.Signature = null;
+            System.Diagnostics.Debug.WriteLine(
+                $"⚠ WARNING: No signing key for {teamFolderName}; index.json published unsigned");
+        }
 
         System.Diagnostics.Debug.WriteLine(
             $"Index generated with {index.PublishedAssignments.Count} entries");
@@ -389,6 +411,33 @@ public class IndexGenerationService
             $"✓ Regenerated {successCount} of {allTeams.Count} team indexes");
 
         return successCount;
+    }
+
+    // ── Signing ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads team-signing.json from the authoring tier and returns the private key.
+    /// Returns null if the file is absent, unreadable, or contains no private key.
+    /// team-signing.json is intentionally never passed to IBlobDistributionService.
+    /// </summary>
+    private async Task<string?> LoadTeamPrivateKeyAsync(string teamFolderName)
+    {
+        var path = $"{teamFolderName}/team-signing.json";
+        try
+        {
+            var json = await _storage.ReadTextAsync(path);
+            if (json == null) return null;
+
+            var keys = JsonSerializer.Deserialize<TeamSigningKeys>(
+                json, JsonConfiguration.GetIndexJsonOptions());
+            return string.IsNullOrEmpty(keys?.PrivateKey) ? null : keys.PrivateKey;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"Failed to load team-signing.json for {teamFolderName}: {ex.Message}");
+            return null;
+        }
     }
 
     // ── Hashing ──────────────────────────────────────────────────────────────

@@ -18,8 +18,9 @@
 | `PresentationService` | CRUD for presentations |
 | `AssignmentService` | Assignment lifecycle and approval workflow |
 | `PublishingService` | Publishes approved assignments to the repository |
-| `IndexGenerationService` | Generates and writes `index.json` for each team; signs the index via `HmacService` |
-| `HmacService` | Signs `TeamIndexFile` after `IndexHash` is set; singleton wired from `AppConfiguration.HmacSecretKey` |
+| `IndexGenerationService` | Generates and writes `index.json` for each team; signs the index via `EcdsaSignatureService` using the team's private key from `team-signing.json`; missing key → published unsigned with a warning |
+| `EcdsaSignatureService` | Signs `TeamIndexFile` with per-team ECDSA P-256; stateless singleton; index is normalized through `GetIndexJsonOptions` before signing |
+| `HmacService` | Registered singleton; no longer used for index signing in NewsCentral — session telemetry signing is done by NewsViewer |
 | `LocalStorageService` / `IStorageService` | File I/O abstraction |
 | `LocalBlobDistributionService` / `AzureBlobDistributionService` | Distribution backends |
 | `TeamContextService` | Current team scope for the session |

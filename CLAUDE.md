@@ -23,7 +23,8 @@
 - All components are configurable via `appsettings.json`. Registry values (`HKLM\Software\[Company]\NewsCentral\`) override `appsettings.json`. Each component has its own subkey.
 - Storage backend (local file share vs. Azure Blob Storage) is switchable via registry without code changes.
 - Local/file share mode is the **primary development and testing configuration**. No Azure dependency is required for full functional testing.
-- HMAC-SHA256 anti-tamper protection is implemented end-to-end: NewsCentral signs `index.json`; NewsViewer signs session telemetry; both NewsService and NewsViewer verify before using content.
+- HMAC-SHA256 anti-tamper for session telemetry — NewsViewer signs, NewsService verifies; `index.json` signing moved to per-team ECDSA (see below).
+- ECDSA P-256 per-team `index.json` signing — Phases A & B1 complete: signing core in `NewsCentral.Shared` (9 unit tests passing), `IndexGenerationService` now signs with team ECDSA private key (missing key → unsigned, warning, continues). Phase C (verifier swap in NewsService/NewsViewer), B2 (Key Management page), D (registry scripts) pending; see `docs/security.md`.
 - All domain models live in **NewsCentral.Shared** — no model duplication across projects.
 - NativeAOT migration path is preserved for NewsViewer.
 

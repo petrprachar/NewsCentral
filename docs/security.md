@@ -22,7 +22,7 @@
 
 `HmacService` (in `NewsCentral.Shared/Security/`) provides end-to-end content integrity using HMAC-SHA256.
 
-**Signing (NewsCentral):** `IndexGenerationService` calls `HmacService.Sign(index)` after `IndexHash` is computed. The signature covers the entire serialized index (excluding the `Signature` field itself) using canonical non-indented camelCase JSON.
+**Signing (NewsCentral):** `index.json` signing has moved to per-team ECDSA (see below); `HmacService` is no longer used for index signing in NewsCentral.
 
 **Signing (NewsViewer):** `TelemetryWriter` calls `HmacService.Sign(record)` on each `SessionTelemetry` before writing to disk.
 
@@ -36,7 +36,7 @@
 
 **`Signature` field** is present in: `Presentation`, `Schedule`, `Assignment`, `TeamIndexFile`, `SessionTelemetry`.
 
-## Per-Team Asymmetric Signing — ECDSA P-256 (foundation implemented)
+## Per-Team Asymmetric Signing — ECDSA P-256 (Phases A & B1 — implemented and tested)
 
 `EcdsaSignatureService` (in `NewsCentral.Shared/Security/`) provides ECDSA P-256 / SHA-256 signing and verification as the foundation for replacing the shared HMAC key on `index.json` with per-team asymmetric keys. Session telemetry remains on HMAC-SHA256 and is not affected.
 
@@ -56,4 +56,16 @@
 
 **Key management — `SigningKeyTool`:** `GenerateKeyPair()` creates a fresh nistP256 key pair and returns Base64 PKCS#8 + SPKI; `DerivePublicKey()` accepts PEM or raw Base64 PKCS#8; `Truncate()` produces a short display string for the UI.
 
-**Current status:** Core implemented in `NewsCentral.Shared`. Wiring into `IndexGenerationService` (NewsCentral), `SyncService` (NewsService), and `PresentationSelector` (NewsViewer) is the next integration step.
+**Phase A — complete:** `EcdsaSignatureService`, `SigningKeyTool`, and `TeamSigningKeys` are implemented in `NewsCentral.Shared` and covered by `NewsCentral.Shared.Tests` (9 passing xUnit facts): sign/verify round-trip, wrong-key rejection, rotation key-list fallback, `Disabled` and `Unsigned` states, public-key derivation from both Base64 PKCS#8 and PEM input, malformed-input rejection (`ArgumentException`), and tamper detection (mutated payload fails verification).
+
+**Phase B1 — complete:** `IndexGenerationService` (NewsCentral) signs `index.json` with the team's ECDSA private key loaded from `team-signing.json` (authoring tier only; never written through `IBlobDistributionService`). A team with no key is published unsigned with a warning and continues normally — phased-rollout safe.
+
+**Persisted-form signing:** The index is normalized through `GetIndexJsonOptions` before signing so the signed form equals the persisted form. `GetIndexJsonOptions` uses `SmartDateTimeConverter`, which writes whole-second timestamps; signing the in-memory object directly would cover sub-second precision that is lost on write. The index is round-tripped through `GetIndexJsonOptions` before the `Sign` call so the payload is byte-consistent with the file on disk. Verifiers must parse the persisted timestamps back to the same values (standard ISO parsing and `SmartDateTimeConverter` both do so faithfully).
+
+**Phase B2 — pending:** Admin-only Key Management page in NewsCentral for generating and viewing team ECDSA key pairs.
+
+**Phase C — pending:** Swap `SyncService` (NewsService) and `PresentationSelector` (NewsViewer) from `HmacService.Verify` to `EcdsaSignatureService.Verify` with the per-team registry public key (`Signing\<teamFolderName>\PublicKey` / `PublicKeyPrevious`) and dual-key rotation fallback.
+
+**Phase D — pending:** `Set-RegistryOverrides.ps1` per-team signing parameters and configuration/security documentation updates.
+
+Session telemetry (`session-*.json`) remains on HMAC-SHA256 throughout all phases.
