@@ -364,3 +364,6 @@ FodyWeavers.xsd
 /HMAC anti.docx
 /How NewsViewer works end.docx
 /TO DO list.docx
+
+# team-related signing definition file
+team-signing.json
