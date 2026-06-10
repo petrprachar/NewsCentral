@@ -1,4 +1,6 @@
 using NewsCentral.Security;
+using System.Runtime.Intrinsics.Arm;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace NewsCentral.Shared.Tests;
@@ -70,5 +72,32 @@ public sealed class EcdsaRoundTripTests
 
         // Correct key is second — simulates rotation window
         Assert.Equal(VerifyResult.Valid, Svc.Verify(e, wrongPub, pub));
+    }
+
+    [Fact]
+    public void Verify_InvalidWhenPayloadTamperedAfterSigning()
+    {
+        var (priv, pub) = SigningKeyTool.GenerateKeyPair();
+        var e = new SampleEntity();
+        e.Signature = Svc.Sign(e, priv);
+
+        e.Value = 99;                       // mutate a covered field after signing
+        Assert.Equal(VerifyResult.Invalid, Svc.Verify(e, pub));
+    }
+
+    [Fact]
+    public void DerivePublicKey_AcceptsPemInput()
+    {
+        using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var pem = ec.ExportPkcs8PrivateKeyPem();    // -----BEGIN PRIVATE KEY-----
+        var expectedPub = Convert.ToBase64String(ec.ExportSubjectPublicKeyInfo());
+
+        Assert.Equal(expectedPub, SigningKeyTool.DerivePublicKey(pem));
+    }
+
+    [Fact]
+    public void DerivePublicKey_ThrowsArgumentExceptionOnGarbage()
+    {
+        Assert.Throws<ArgumentException>(() => SigningKeyTool.DerivePublicKey("not-a-key"));
     }
 }
