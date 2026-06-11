@@ -397,6 +397,9 @@
 	<data name="NavMenu.IndexManagement" xml:space="preserve">
 		<value>Index Management</value>
 	</data>
+	<data name="NavMenu.KeyManagement" xml:space="preserve">
+		<value>Key Management</value>
+	</data>
 	<data name="NavMenu.Home" xml:space="preserve">
     <value>Home</value>
 	</data>
@@ -468,5 +471,108 @@
 </data>
 	<data name="Assignments.ViewAndManageTeamAssignments" xml:space="preserve">
     <value>View and manage all team assignments</value>
-</data>	
+</data>
+	<!-- Key Management Page -->
+	<data name="KeyManagement.PageTitle" xml:space="preserve">
+		<value>Key Management</value>
+	</data>
+	<data name="KeyManagement.PageDescription" xml:space="preserve">
+		<value>Generate, view, and rotate the signing key pair for the current team.</value>
+	</data>
+	<data name="KeyManagement.NoTeamSelected" xml:space="preserve">
+		<value>Select a team first.</value>
+	</data>
+	<data name="KeyManagement.AccessDenied" xml:space="preserve">
+		<value>Access Denied</value>
+	</data>
+	<data name="KeyManagement.AccessDeniedMessage" xml:space="preserve">
+		<value>You must be a Team Administrator for this team to manage signing keys.</value>
+	</data>
+	<data name="KeyManagement.CurrentKeysSection" xml:space="preserve">
+		<value>Current Keys</value>
+	</data>
+	<data name="KeyManagement.CurrentTeam" xml:space="preserve">
+		<value>Current Team</value>
+	</data>
+	<data name="KeyManagement.NoKeyConfigured" xml:space="preserve">
+		<value>No signing key configured for this team.</value>
+	</data>
+	<data name="KeyManagement.CurrentPublicKey" xml:space="preserve">
+		<value>Current Public Key</value>
+	</data>
+	<data name="KeyManagement.CopyForGPO" xml:space="preserve">
+		<value>Copy for GPO</value>
+	</data>
+	<data name="KeyManagement.Copied" xml:space="preserve">
+		<value>Copied to clipboard.</value>
+	</data>
+	<data name="KeyManagement.CopyFailed" xml:space="preserve">
+		<value>Copy failed — please copy the text manually.</value>
+	</data>
+	<data name="KeyManagement.CurrentPrivateKey" xml:space="preserve">
+		<value>Current Private Key</value>
+	</data>
+	<data name="KeyManagement.PrivateKeyTruncatedHint" xml:space="preserve">
+		<value>The private key is shown truncated and is never displayed in full.</value>
+	</data>
+	<data name="KeyManagement.PreviousPublicKey" xml:space="preserve">
+		<value>Previous Public Key</value>
+	</data>
+	<data name="KeyManagement.GenerateSection" xml:space="preserve">
+		<value>Generate New Key Pair</value>
+	</data>
+	<data name="KeyManagement.GenerateDescription" xml:space="preserve">
+		<value>Generate a new ECDSA key pair. It is held locally and is not saved until you apply it.</value>
+	</data>
+	<data name="KeyManagement.GenerateNewKeyPair" xml:space="preserve">
+		<value>Generate New Key Pair</value>
+	</data>
+	<data name="KeyManagement.NotYetApplied" xml:space="preserve">
+		<value>New key pair generated — not yet applied. Click Apply to save it.</value>
+	</data>
+	<data name="KeyManagement.NotYetAppliedHint" xml:space="preserve">
+		<value>Held in memory — not saved to disk until you click Apply.</value>
+	</data>
+	<data name="KeyManagement.NewPublicKey" xml:space="preserve">
+		<value>New Public Key</value>
+	</data>
+	<data name="KeyManagement.NewPrivateKey" xml:space="preserve">
+		<value>New Private Key</value>
+	</data>
+	<data name="KeyManagement.Applying" xml:space="preserve">
+		<value>Applying...</value>
+	</data>
+	<data name="KeyManagement.Apply" xml:space="preserve">
+		<value>Apply</value>
+	</data>
+	<data name="KeyManagement.ApplySuccess" xml:space="preserve">
+		<value>New key pair applied and saved.</value>
+	</data>
+	<data name="KeyManagement.RotationReminder" xml:space="preserve">
+		<value>Remember to deploy the new public key to clients before republishing.</value>
+	</data>
+	<data name="KeyManagement.ApplyError" xml:space="preserve">
+		<value>Failed to apply the new key pair</value>
+	</data>
+	<data name="KeyManagement.RepublishSection" xml:space="preserve">
+		<value>Republish</value>
+	</data>
+	<data name="KeyManagement.RepublishReminder" xml:space="preserve">
+		<value>Deploy the new public key to clients (and keep the previous one) before republishing, or clients will reject the index until they receive the new key.</value>
+	</data>
+	<data name="KeyManagement.Republishing" xml:space="preserve">
+		<value>Republishing...</value>
+	</data>
+	<data name="KeyManagement.RepublishIndex" xml:space="preserve">
+		<value>Republish Index</value>
+	</data>
+	<data name="KeyManagement.RepublishSuccess" xml:space="preserve">
+		<value>Index republished successfully for {0}.</value>
+	</data>
+	<data name="KeyManagement.RepublishError" xml:space="preserve">
+		<value>Failed to republish the index</value>
+	</data>
+	<data name="KeyManagement.LoadError" xml:space="preserve">
+		<value>Error loading signing keys</value>
+	</data>
 </root>

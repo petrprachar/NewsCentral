@@ -654,6 +654,210 @@ namespace NewsCentral.Resources {
             }
         }
         
+        public static string KeyManagement_AccessDenied {
+            get {
+                return ResourceManager.GetString("KeyManagement.AccessDenied", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_AccessDeniedMessage {
+            get {
+                return ResourceManager.GetString("KeyManagement.AccessDeniedMessage", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_Apply {
+            get {
+                return ResourceManager.GetString("KeyManagement.Apply", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_ApplyError {
+            get {
+                return ResourceManager.GetString("KeyManagement.ApplyError", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_ApplySuccess {
+            get {
+                return ResourceManager.GetString("KeyManagement.ApplySuccess", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_Applying {
+            get {
+                return ResourceManager.GetString("KeyManagement.Applying", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_Copied {
+            get {
+                return ResourceManager.GetString("KeyManagement.Copied", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CopyFailed {
+            get {
+                return ResourceManager.GetString("KeyManagement.CopyFailed", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CopyForGPO {
+            get {
+                return ResourceManager.GetString("KeyManagement.CopyForGPO", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CurrentKeysSection {
+            get {
+                return ResourceManager.GetString("KeyManagement.CurrentKeysSection", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CurrentPrivateKey {
+            get {
+                return ResourceManager.GetString("KeyManagement.CurrentPrivateKey", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CurrentPublicKey {
+            get {
+                return ResourceManager.GetString("KeyManagement.CurrentPublicKey", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_CurrentTeam {
+            get {
+                return ResourceManager.GetString("KeyManagement.CurrentTeam", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_GenerateDescription {
+            get {
+                return ResourceManager.GetString("KeyManagement.GenerateDescription", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_GenerateNewKeyPair {
+            get {
+                return ResourceManager.GetString("KeyManagement.GenerateNewKeyPair", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_GenerateSection {
+            get {
+                return ResourceManager.GetString("KeyManagement.GenerateSection", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_LoadError {
+            get {
+                return ResourceManager.GetString("KeyManagement.LoadError", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NewPrivateKey {
+            get {
+                return ResourceManager.GetString("KeyManagement.NewPrivateKey", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NewPublicKey {
+            get {
+                return ResourceManager.GetString("KeyManagement.NewPublicKey", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NoKeyConfigured {
+            get {
+                return ResourceManager.GetString("KeyManagement.NoKeyConfigured", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NoTeamSelected {
+            get {
+                return ResourceManager.GetString("KeyManagement.NoTeamSelected", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NotYetApplied {
+            get {
+                return ResourceManager.GetString("KeyManagement.NotYetApplied", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_NotYetAppliedHint {
+            get {
+                return ResourceManager.GetString("KeyManagement.NotYetAppliedHint", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_PageDescription {
+            get {
+                return ResourceManager.GetString("KeyManagement.PageDescription", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_PageTitle {
+            get {
+                return ResourceManager.GetString("KeyManagement.PageTitle", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_PreviousPublicKey {
+            get {
+                return ResourceManager.GetString("KeyManagement.PreviousPublicKey", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_PrivateKeyTruncatedHint {
+            get {
+                return ResourceManager.GetString("KeyManagement.PrivateKeyTruncatedHint", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RepublishError {
+            get {
+                return ResourceManager.GetString("KeyManagement.RepublishError", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RepublishIndex {
+            get {
+                return ResourceManager.GetString("KeyManagement.RepublishIndex", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RepublishReminder {
+            get {
+                return ResourceManager.GetString("KeyManagement.RepublishReminder", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RepublishSection {
+            get {
+                return ResourceManager.GetString("KeyManagement.RepublishSection", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RepublishSuccess {
+            get {
+                return ResourceManager.GetString("KeyManagement.RepublishSuccess", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_Republishing {
+            get {
+                return ResourceManager.GetString("KeyManagement.Republishing", resourceCulture);
+            }
+        }
+
+        public static string KeyManagement_RotationReminder {
+            get {
+                return ResourceManager.GetString("KeyManagement.RotationReminder", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   Looks up a localized string similar to Invalid username or password.
         /// </summary>
@@ -770,7 +974,13 @@ namespace NewsCentral.Resources {
                 return ResourceManager.GetString("NavMenu.IndexManagement", resourceCulture);
             }
         }
-        
+
+        public static string NavMenu_KeyManagement {
+            get {
+                return ResourceManager.GetString("NavMenu.KeyManagement", resourceCulture);
+            }
+        }
+
         /// <summary>
         ///   Looks up a localized string similar to Schedules.
         /// </summary>
