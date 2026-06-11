@@ -58,14 +58,36 @@
 
 **Phase A — complete:** `EcdsaSignatureService`, `SigningKeyTool`, and `TeamSigningKeys` are implemented in `NewsCentral.Shared` and covered by `NewsCentral.Shared.Tests` (9 passing xUnit facts): sign/verify round-trip, wrong-key rejection, rotation key-list fallback, `Disabled` and `Unsigned` states, public-key derivation from both Base64 PKCS#8 and PEM input, malformed-input rejection (`ArgumentException`), and tamper detection (mutated payload fails verification).
 
-**Phase B1 — complete:** `IndexGenerationService` (NewsCentral) signs `index.json` with the team's ECDSA private key loaded from `team-signing.json` (authoring tier only; never written through `IBlobDistributionService`). A team with no key is published unsigned with a warning and continues normally — phased-rollout safe.
+**Phase B1 — complete:** `IndexGenerationService` (NewsCentral) signs `index.json` with the team's ECDSA private key loaded from `team-signing.json` (authoring tier only; never written through `IBlobDistributionService`). A team with no key is published unsigned with a warning and continues normally — phased-rollout safe. A publish-time self-verify guard was subsequently added (see **Publish-time self-verify guard** below).
+
+**Publish-time self-verify guard:** After signing, `IndexGenerationService` immediately verifies that the signed index will pass client verification before `SaveIndexFileAsync` is called. The guard:
+1. Serializes the signed `TeamIndexFile` with `GetIndexJsonOptions()` — producing the exact bytes that will be written to disk.
+2. Deserializes with client-verifier options (`PropertyNameCaseInsensitive = true`, `JsonStringEnumConverter`, **no** `SmartDateTimeConverter`) — matching exactly how `SyncService` and `PresentationSelector` parse the file.
+3. Calls `_ecdsa.Verify(reloaded, signingKeys.PublicKey)`. Any result other than `Valid` throws `InvalidOperationException` and aborts the publish before any file is written or pushed to the blob tier.
+
+This catches canonical/persisted-form drift at the authoring tier — if a future change to `SmartDateTimeConverter` or the serializer options causes a byte mismatch, the error surfaces on publish rather than silently distributing an index every client will reject.
 
 **Persisted-form signing:** The index is normalized through `GetIndexJsonOptions` before signing so the signed form equals the persisted form. `GetIndexJsonOptions` uses `SmartDateTimeConverter`, which writes whole-second timestamps; signing the in-memory object directly would cover sub-second precision that is lost on write. The index is round-tripped through `GetIndexJsonOptions` before the `Sign` call so the payload is byte-consistent with the file on disk. Verifiers must parse the persisted timestamps back to the same values (standard ISO parsing and `SmartDateTimeConverter` both do so faithfully).
 
 **Phase B2 — pending:** Admin-only Key Management page in NewsCentral for generating and viewing team ECDSA key pairs.
 
-**Phase C — complete (C1 + C2):** `SyncService` (NewsService, C1) and `PresentationSelector` (NewsViewer, C2) now verify `index.json` with `EcdsaSignatureService.Verify` using the team's registry public key read by `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` — `Signing:{teamFolderName}:PublicKey` and `:PublicKeyPrevious` — with dual-key rotation fallback. Outcome logging: `Valid` (verified and accepted), `Disabled` (no key configured — accepted, logged), `Unsigned` (no signature — accepted with warning), `Invalid` (mismatch — NewsService aborts the team sync; NewsViewer skips the team entirely). Verifiers deserialize `index.json` with standard ISO timestamp parsing and no `DateTime` converter, so the parsed values byte-match the signed, persisted form.
+**Phase C — complete (C1 + C2):** `SyncService` (NewsService, C1) and `PresentationSelector` (NewsViewer, C2) now verify `index.json` with `EcdsaSignatureService.Verify` using the team's registry public key read by `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` — `Signing:{teamFolderName}:PublicKey` and `:PublicKeyPrevious` — with dual-key rotation fallback. Both verifiers now route through `SignatureGate.ShouldReject` (see **Phase E** below). Outcome logging with the gate: rejected → `LogError`/`Debug.WriteLine` with the gate reason string; `Valid` accepted → `LogInformation`; `Unsigned` accepted (default) → `LogWarning`; `Disabled` accepted (default) → `LogInformation`. Reject action unchanged: NewsService aborts the team sync; NewsViewer skips the team entirely. Verifiers deserialize `index.json` with standard ISO timestamp parsing and no `DateTime` converter, so the parsed values byte-match the signed, persisted form.
 
-**Phase D — pending:** `Set-RegistryOverrides.ps1` per-team signing parameters and configuration/security documentation updates.
+**Phase D — partially complete:** `docs/configuration.md` and `docs/security.md` updated to cover per-team signing parameters and the `Signing:RequireSignedIndex` enforcement flag. `Set-RegistryOverrides.ps1` registry provisioning script still pending.
+
+**Phase E — complete: Fail-closed enforcement flag (`SignatureGate` + `Signing:RequireSignedIndex`):** `SignatureGate` (in `NewsCentral.Shared/Security/`) centralizes the accept/reject decision for ECDSA verification results. Both `SyncService` and `PresentationSelector` call `SignatureGate.ShouldReject(result, requireSignedIndex, out reason)` in place of inline `VerifyResult` checks.
+
+`Signing:RequireSignedIndex` (bool, default `false`) is read from `IConfiguration` by both verifiers. Registry override: `<Component>\Signing\RequireSignedIndex` REG_SZ `"true"` or `"false"`.
+
+| `VerifyResult` | `RequireSignedIndex = false` (default) | `RequireSignedIndex = true` |
+|---|---|---|
+| `Valid` | accept | accept |
+| `Invalid` | **reject** | **reject** |
+| `Unsigned` | accept | **reject** |
+| `Disabled` | accept | **reject** |
+
+Default `false` preserves the Phase C pass-through behavior — only `Invalid` is rejected. Set `true` to go fail-closed: unsigned indexes and teams whose public key has not been registered are rejected with the same per-component action as `Invalid`. The two measures shipped together in commit `64d3171`. `SignatureGate` is covered by 14 new xUnit facts in `NewsCentral.Shared.Tests/SignatureGateTests.cs` (full `VerifyResult × requireSignedIndex` matrix plus reason-string assertions). `NewsCentral.Shared.Tests` now has 28 passing facts in total.
+
+**Canonical serialization and `SmartDateTimeConverter`:** `IndexGenerationService` serializes `index.json` via `JsonConfiguration.GetIndexJsonOptions()`, which includes `SmartDateTimeConverter`. This converter truncates `DateTime` values to whole-second precision before writing (UTC → `2026-05-17T14:22:00Z`; Unspecified schedule times → `2026-05-18T09:00:00`). Before signing, the index is round-tripped through these options so the payload covered by the ECDSA signature is byte-for-byte identical to what lands on disk. Verifiers (NewsService, NewsViewer) use their own `JsonDefaults.Options` (no `SmartDateTimeConverter`) and standard ISO parsing — which faithfully round-trips whole-second timestamps — so the deserialized values match the signed form. Changing the serializer options on either side without re-signing will cause all verifiers to return `Invalid`.
 
 Session telemetry (`session-*.json`) remains on HMAC-SHA256 throughout all phases.
