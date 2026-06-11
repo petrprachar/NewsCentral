@@ -198,9 +198,9 @@ public static class MauiProgram
         builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
         // Set culture for testing
-        // var culture = new CultureInfo("es");
-        // CultureInfo.CurrentCulture = culture;
-        // CultureInfo.CurrentUICulture = culture;
+        var culture = new CultureInfo("es");
+        CultureInfo.CurrentCulture = culture;
+        CultureInfo.CurrentUICulture = culture;
 
         var app = builder.Build();
         return app;

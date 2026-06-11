@@ -1,27 +1,29 @@
-﻿@page "/teams"
+@page "/teams"
+@using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Components.Shared
 @inject Services.TeamService TeamService
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<Teams> Localizer
 
-<PageTitle>Teams - NewsCentral</PageTitle>
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="page-container">
     <div class="page-header">
-        <h1>Team Management</h1>
-        <button @onclick="ShowCreateDialog" class="btn btn-primary">+ Create Team</button>
+        <h1>@Localizer["PageTitle"]</h1>
+        <button @onclick="ShowCreateDialog" class="btn btn-primary">@Localizer["CreateTeam"]</button>
     </div>
 
     @if (isLoading)
     {
-        <div class="loading">Loading teams...</div>
+        <div class="loading">@Localizer["Loading"]</div>
     }
     else if (teams.Count == 0)
     {
         <div class="empty-state">
-            <h3>No teams yet</h3>
-            <p>Create your first team to get started</p>
+            <h3>@Localizer["NoTeamsYet"]</h3>
+            <p>@Localizer["CreateFirstTeam"]</p>
         </div>
     }
     else
@@ -36,11 +38,11 @@
                     </div>
                     <p class="team-description">@team.Description</p>
                     <div class="team-meta">
-                        <small>Created: @team.DateCreated.ToString("yyyy-MM-dd")</small>
+                        <small>@Localizer["Created"] @team.DateCreated.ToString("yyyy-MM-dd")</small>
                     </div>
                     <div class="team-actions">
-                        <button @onclick="() => EditTeam(team)" class="btn btn-secondary">Edit</button>
-                        <button @onclick="() => DeleteTeam(team)" class="btn btn-danger">Delete</button>
+                        <button @onclick="() => EditTeam(team)" class="btn btn-secondary">@Localizer["Edit"]</button>
+                        <button @onclick="() => DeleteTeam(team)" class="btn btn-danger">@Localizer["Delete"]</button>
                     </div>
                 </div>
             }
@@ -52,19 +54,19 @@
 {
     <div class="modal-overlay" @onclick="CloseDialog">
         <div class="modal-content" @onclick:stopPropagation="true">
-            <h2>@(editingTeam == null ? "Create Team" : "Edit Team")</h2>
+            <h2>@(editingTeam == null ? Localizer["CreateTeamTitle"].Value : Localizer["EditTeamTitle"].Value)</h2>
 
             <div class="form-group">
-                <label>Team Name:</label>
+                <label>@Localizer["TeamNameLabel"]</label>
                 <input type="text" @bind="teamName" class="form-control" placeholder="e.g., Engineering Team" />
                 @if (!string.IsNullOrEmpty(teamName))
                 {
-                    <small class="hint">Folder name: @GeneratePreviewFolderName(teamName)</small>
+                    <small class="hint">@Localizer["FolderNameHint"] @GeneratePreviewFolderName(teamName)</small>
                 }
             </div>
 
             <div class="form-group">
-                <label>Description:</label>
+                <label>@Localizer["DescriptionLabel"]</label>
                 <textarea @bind="teamDescription" class="form-control" rows="3" placeholder="Brief description of the team"></textarea>
             </div>
 
@@ -74,9 +76,9 @@
             }
 
             <div class="modal-actions">
-                <button @onclick="CloseDialog" class="btn btn-secondary">Cancel</button>
+                <button @onclick="CloseDialog" class="btn btn-secondary">@Localizer["Cancel"]</button>
                 <button @onclick="SaveTeam" class="btn btn-primary" disabled="@isSaving">
-                    @(isSaving ? "Saving..." : "Save")
+                    @(isSaving ? Localizer["Saving"].Value : Localizer["Save"].Value)
                 </button>
             </div>
         </div>
@@ -287,12 +289,12 @@
     }
 </style>
 
-<ConfirmDialog 
+<ConfirmDialog
     IsVisible="@showDeleteConfirm"
-    Title="Delete Team"
-    Message="@($"Are you sure you want to delete '{teamToDelete?.Name}'? This action cannot be undone.")"
-    ConfirmText="Delete"
-    CancelText="Cancel"
+    Title="@Localizer["DeleteTeam"]"
+    Message="@(teamToDelete != null ? string.Format(Localizer["DeleteTeamConfirm"].Value, teamToDelete.Name) : string.Empty)"
+    ConfirmText="@Localizer["Delete"]"
+    CancelText="@Localizer["Cancel"]"
     DialogType="danger"
     OnConfirm="ConfirmDelete"
     OnCancel="CancelDelete" />
@@ -368,7 +370,7 @@
     {
         if (string.IsNullOrWhiteSpace(teamName))
         {
-            errorMessage = "Team name is required";
+            errorMessage = Localizer["NameRequired"];
             return;
         }
 

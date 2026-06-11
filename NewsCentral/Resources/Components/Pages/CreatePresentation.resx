@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Create Presentation</value></data>
+  <data name="SelectTeamFirst" xml:space="preserve"><value>Please select a team first before creating a presentation.</value></data>
+  <data name="GoToDashboard" xml:space="preserve"><value>Go to Dashboard</value></data>
+  <data name="UploadImageSection" xml:space="preserve"><value>1. Upload Image</value></data>
+  <data name="SelectImageLabel" xml:space="preserve"><value>Select Image:</value></data>
+  <data name="FileSelected" xml:space="preserve"><value>✓ Selected: {0}</value></data>
+  <data name="PresentationDetailsSection" xml:space="preserve"><value>2. Presentation Details</value></data>
+  <data name="NameLabel" xml:space="preserve"><value>Name: *</value></data>
+  <data name="DescriptionLabel" xml:space="preserve"><value>Description:</value></data>
+  <data name="MoreInfoUrlLabel" xml:space="preserve"><value>More Info URL:</value></data>
+  <data name="DisplayTimeLabel" xml:space="preserve"><value>Display Time (seconds):</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Saving" xml:space="preserve"><value>Saving...</value></data>
+  <data name="CreatePresentationButton" xml:space="preserve"><value>Create Presentation</value></data>
+  <data name="ViewPresentations" xml:space="preserve"><value>View Presentations</value></data>
+  <data name="NameRequired" xml:space="preserve"><value>Presentation name is required</value></data>
+  <data name="PleaseSelectImage" xml:space="preserve"><value>Please select an image</value></data>
+  <data name="InvalidImageType" xml:space="preserve"><value>Please select a valid image file</value></data>
+  <data name="ImageTooLarge" xml:space="preserve"><value>Image file must be smaller than 10MB</value></data>
+  <data name="ImageLoadFailed" xml:space="preserve"><value>Failed to load image data</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>No team selected</value></data>
+</root>

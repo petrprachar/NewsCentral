@@ -1,22 +1,24 @@
-﻿@page "/users"
+@page "/users"
+@using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Components.Shared
 @inject Services.UserService UserService
 @inject Services.TeamService TeamService
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<Users> Localizer
 
-<PageTitle>Users - NewsCentral</PageTitle>
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="page-container">
     <div class="page-header">
-        <h1>User Management</h1>
-        <button @onclick="ShowCreateDialog" class="btn btn-primary">+ Create User</button>
+        <h1>@Localizer["PageTitle"]</h1>
+        <button @onclick="ShowCreateDialog" class="btn btn-primary">@Localizer["CreateUser"]</button>
     </div>
 
     @if (isLoading)
     {
-        <div class="loading">Loading users...</div>
+        <div class="loading">@Localizer["Loading"]</div>
     }
     else
     {
@@ -32,21 +34,20 @@
                         <div class="user-badges">
                             @if (user.IsSystemAdmin)
                             {
-                                <span class="badge badge-admin">System Admin</span>
+                                <span class="badge badge-admin">@Localizer["SystemAdmin"]</span>
                             }
                             @if (!user.IsActive)
                             {
-                                <span class="badge badge-inactive">Inactive</span>
+                                <span class="badge badge-inactive">@Localizer["Inactive"]</span>
                             }
                         </div>
                     </div>
 
                     <div class="user-info">
-                        <p><strong>Email:</strong> @user.Email</p>
+                        <p><strong>@Localizer["Email"]</strong> @user.Email</p>
 
-                        <!-- NEW: Display UPN -->
                         <p>
-                            <strong>UPN:</strong>
+                            <strong>@Localizer["Upn"]</strong>
                             @if (!string.IsNullOrEmpty(user.UPN))
                             {
                                 <span class="upn-badge">@user.UPN</span>
@@ -54,22 +55,22 @@
                             }
                             else
                             {
-                                <span class="text-muted">Not set</span>
+                                <span class="text-muted">@Localizer["NotSet"]</span>
                             }
                         </p>
 
-                        <p><strong>Created:</strong> @user.DateCreated.ToString("yyyy-MM-dd")</p>
+                        <p><strong>@Localizer["Created"]</strong> @user.DateCreated.ToString("yyyy-MM-dd")</p>
                         @if (user.LastLogin.HasValue)
                         {
-                            <p><strong>Last Login:</strong> @user.LastLogin.Value.ToString("yyyy-MM-dd HH:mm")</p>
+                            <p><strong>@Localizer["LastLogin"]</strong> @user.LastLogin.Value.ToString("yyyy-MM-dd HH:mm")</p>
                         }
                     </div>
 
                     <div class="user-teams">
-                        <strong>Teams & Roles:</strong>
+                        <strong>@Localizer["TeamsAndRoles"]</strong>
                         @if (user.TeamRoles.Count == 0)
                         {
-                            <p class="no-teams">Not assigned to any teams</p>
+                            <p class="no-teams">@Localizer["NotAssignedToTeams"]</p>
                         }
                         else
                         {
@@ -89,11 +90,11 @@
                     </div>
 
                     <div class="user-actions">
-                        <button @onclick="() => EditUser(user)" class="btn btn-secondary">Edit</button>
-                        <button @onclick="() => ManageTeams(user)" class="btn btn-primary">Manage Teams</button>
+                        <button @onclick="() => EditUser(user)" class="btn btn-secondary">@Localizer["Edit"]</button>
+                        <button @onclick="() => ManageTeams(user)" class="btn btn-primary">@Localizer["ManageTeams"]</button>
                         @if (user.UserID != AuthService.GetCurrentUser()?.UserID)
                         {
-                            <button @onclick="() => DeleteUser(user)" class="btn btn-danger">Delete</button>
+                            <button @onclick="() => DeleteUser(user)" class="btn btn-danger">@Localizer["Delete"]</button>
                         }
                     </div>
                 </div>
@@ -106,10 +107,10 @@
 {
     <div class="modal-overlay" @onclick="CloseCreateDialog">
         <div class="modal-content" @onclick:stopPropagation="true">
-            <h2>@(editingUser == null ? "Create User" : "Edit User")</h2>
+            <h2>@(editingUser == null ? Localizer["CreateUserTitle"].Value : Localizer["EditUserTitle"].Value)</h2>
 
             <div class="form-group">
-                <label>Username:</label>
+                <label>@Localizer["UsernameLabel"]</label>
                 <input type="text" @bind="username" class="form-control"
                        disabled="@(editingUser != null)"
                        placeholder="john.smith" />
@@ -119,18 +120,18 @@
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    Field is significant for local accounts only.
+                    @Localizer["UsernameHint"]
                 </small>
             </div>
 
             <div class="form-group">
-                <label>Display Name:</label>
+                <label>@Localizer["DisplayNameLabel"]</label>
                 <input type="text" @bind="displayName" class="form-control"
                        placeholder="John Smith" />
             </div>
 
             <div class="form-group">
-                <label>Email:</label>
+                <label>@Localizer["EmailLabel"]</label>
                 <input type="email" @bind="email" class="form-control"
                        placeholder="john.smith@company.com" />
                 <small class="form-text text-muted">
@@ -139,13 +140,12 @@
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    Optional. Usually matches corporate email.
+                    @Localizer["EmailHint"]
                 </small>
             </div>
 
-            <!-- NEW: UPN Field -->
             <div class="form-group">
-                <label>UPN (User Principal Name):</label>
+                <label>@Localizer["UpnLabel"]</label>
                 <input type="text" @bind="upn" class="form-control"
                        placeholder="john.smith@company.com" />
                 <small class="form-text text-muted">
@@ -154,21 +154,21 @@
                         <line x1="12" y1="16" x2="12" y2="12"></line>
                         <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
-                    Important UPN-based. Usually Email.
+                    @Localizer["UpnHint"]
                 </small>
             </div>
 
             @if (editingUser == null)
             {
                 <div class="form-group">
-                    <label>Password:</label>
+                    <label>@Localizer["PasswordLabel"]</label>
                     <input type="password" @bind="password" class="form-control" />
                 </div>
 
                 <div class="form-group">
                     <label>
                         <input type="checkbox" @bind="isSystemAdmin" />
-                        System Administrator
+                        @Localizer["SystemAdminLabel"]
                     </label>
                 </div>
             }
@@ -177,7 +177,7 @@
                 <div class="form-group">
                     <label>
                         <input type="checkbox" @bind="isActive" />
-                        Active
+                        @Localizer["ActiveLabel"]
                     </label>
                 </div>
             }
@@ -188,9 +188,9 @@
             }
 
             <div class="modal-actions">
-                <button @onclick="CloseCreateDialog" class="btn btn-secondary">Cancel</button>
+                <button @onclick="CloseCreateDialog" class="btn btn-secondary">@Localizer["Cancel"]</button>
                 <button @onclick="SaveUser" class="btn btn-primary" disabled="@isSaving">
-                    @(isSaving ? "Saving..." : "Save")
+                    @(isSaving ? Localizer["Saving"].Value : Localizer["Save"].Value)
                 </button>
             </div>
         </div>
@@ -201,7 +201,7 @@
 {
     <div class="modal-overlay" @onclick="CloseTeamsDialog">
         <div class="modal-content large" @onclick:stopPropagation="true">
-            <h2>Manage Teams - @managingUser?.DisplayName</h2>
+            <h2>@string.Format(Localizer["ManageTeamsTitle"].Value, managingUser?.DisplayName)</h2>
 
             @foreach (var team in teams)
             {
@@ -225,19 +225,19 @@
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("ContentAuthor")"
                                        @onchange="@(e => ToggleRole(team, "ContentAuthor", (bool)e.Value!))" />
-                                Content Author
+                                @Localizer["ContentAuthor"]
                             </label>
                             <label>
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("ContentApprover")"
                                        @onchange="@(e => ToggleRole(team, "ContentApprover", (bool)e.Value!))" />
-                                Content Approver
+                                @Localizer["ContentApprover"]
                             </label>
                             <label>
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("TeamAdmin")"
                                        @onchange="@(e => ToggleRole(team, "TeamAdmin", (bool)e.Value!))" />
-                                Team Admin
+                                @Localizer["TeamAdmin"]
                             </label>
                         </div>
                     }
@@ -250,7 +250,7 @@
             }
 
             <div class="modal-actions">
-                <button @onclick="CloseTeamsDialog" class="btn btn-secondary">Close</button>
+                <button @onclick="CloseTeamsDialog" class="btn btn-secondary">@Localizer["Close"]</button>
             </div>
         </div>
     </div>
@@ -512,10 +512,10 @@
 </style>
 
 <ConfirmDialog IsVisible="@showDeleteConfirm"
-               Title="Delete User"
-               Message="@($"Are you sure you want to delete '{userToDelete?.DisplayName}'? This will remove all team assignments and cannot be undone.")"
-               ConfirmText="Delete"
-               CancelText="Cancel"
+               Title="@Localizer["DeleteUser"]"
+               Message="@(userToDelete != null ? string.Format(Localizer["DeleteUserConfirm"].Value, userToDelete.DisplayName) : string.Empty)"
+               ConfirmText="@Localizer["Delete"]"
+               CancelText="@Localizer["Cancel"]"
                DialogType="danger"
                OnConfirm="ConfirmDeleteUser"
                OnCancel="CancelDeleteUser" />
@@ -532,7 +532,7 @@
     private string displayName = string.Empty;
     private string email = string.Empty;
     private string password = string.Empty;
-    private string upn = string.Empty; // NEW: UPN field
+    private string upn = string.Empty;
     private bool isSystemAdmin = false;
     private bool isActive = true;
     private string errorMessage = string.Empty;
@@ -579,7 +579,7 @@
         displayName = string.Empty;
         email = string.Empty;
         password = string.Empty;
-        upn = string.Empty; // NEW: Clear UPN
+        upn = string.Empty;
         isSystemAdmin = false;
         isActive = true;
         errorMessage = string.Empty;
@@ -592,7 +592,7 @@
         username = user.Username;
         displayName = user.DisplayName;
         email = user.Email;
-        upn = user.UPN ?? string.Empty; // NEW: Load UPN
+        upn = user.UPN ?? string.Empty;
         isActive = user.IsActive;
         errorMessage = string.Empty;
         showCreateDialog = true;
@@ -607,13 +607,13 @@
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(displayName))
         {
-            errorMessage = "Username and display name are required";
+            errorMessage = Localizer["UsernameDisplayNameRequired"];
             return;
         }
 
         if (editingUser == null && string.IsNullOrWhiteSpace(password))
         {
-            errorMessage = "Password is required for new users";
+            errorMessage = Localizer["PasswordRequired"];
             return;
         }
 
@@ -624,7 +624,6 @@
         {
             if (editingUser == null)
             {
-                // Create new user with UPN
                 await UserService.CreateUserWithUPNAsync(
                     username,
                     email,
@@ -635,7 +634,6 @@
             }
             else
             {
-                // Update existing user with UPN
                 await UserService.UpdateUserWithUPNAsync(
                     editingUser.UserID,
                     email,
@@ -678,7 +676,6 @@
         {
             if (isAssigned)
             {
-                // Assign with default role
                 await UserService.AssignUserToTeamAsync(
                     managingUser.UserID,
                     team.TeamID,
@@ -687,7 +684,6 @@
             }
             else
             {
-                // Remove from team
                 await UserService.RemoveUserFromTeamAsync(managingUser.UserID, team.TeamID);
             }
 
@@ -724,7 +720,7 @@
             // Must have at least one role
             if (roles.Count == 0)
             {
-                errorMessage = "User must have at least one role per team";
+                errorMessage = Localizer["MustHaveRole"];
                 return;
             }
 

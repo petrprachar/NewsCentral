@@ -1,34 +1,36 @@
-﻿@page "/presentations/create"
+@page "/presentations/create"
+@using Microsoft.Extensions.Localization
 @inject Services.PresentationService PresentationService
 @inject Services.TeamContextService TeamContext
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<CreatePresentation> Localizer
 
-<PageTitle>Create Presentation - NewsCentral</PageTitle>
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="page-container">
     <div class="page-header">
-        <h1>Create Presentation</h1>
+        <h1>@Localizer["PageTitle"]</h1>
     </div>
 
     @if (!TeamContext.HasTeamSelected())
     {
         <div class="alert alert-warning">
-            <p>Please select a team first before creating a presentation.</p>
-            <a href="/dashboard" class="btn btn-secondary">Go to Dashboard</a>
+            <p>@Localizer["SelectTeamFirst"]</p>
+            <a href="/dashboard" class="btn btn-secondary">@Localizer["GoToDashboard"]</a>
         </div>
     }
     else
     {
         <div class="create-form">
             <div class="form-section">
-                <h3>1. Upload Image</h3>
+                <h3>@Localizer["UploadImageSection"]</h3>
                 <div class="form-group">
-                    <label>Select Image:</label>
+                    <label>@Localizer["SelectImageLabel"]</label>
                     <InputFile OnChange="HandleImageSelected" accept="image/*" class="file-input" />
                     @if (!string.IsNullOrEmpty(selectedFileName))
                     {
-                        <p class="file-selected">✓ Selected: @selectedFileName</p>
+                        <p class="file-selected">@string.Format(Localizer["FileSelected"].Value, selectedFileName)</p>
                     }
                 </div>
 
@@ -41,29 +43,29 @@
             </div>
 
             <div class="form-section">
-                <h3>2. Presentation Details</h3>
-                
+                <h3>@Localizer["PresentationDetailsSection"]</h3>
+
                 <div class="form-group">
-                    <label>Name: *</label>
-                    <input type="text" @bind="presentationName" class="form-control" 
+                    <label>@Localizer["NameLabel"]</label>
+                    <input type="text" @bind="presentationName" class="form-control"
                            placeholder="e.g., Monthly Safety Update" />
                 </div>
 
                 <div class="form-group">
-                    <label>Description:</label>
+                    <label>@Localizer["DescriptionLabel"]</label>
                     <textarea @bind="presentationDescription" class="form-control" rows="3"
                               placeholder="Brief description of this presentation"></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label>More Info URL:</label>
-                    <input type="text" @bind="moreUrl" class="form-control" 
+                    <label>@Localizer["MoreInfoUrlLabel"]</label>
+                    <input type="text" @bind="moreUrl" class="form-control"
                            placeholder="https://company.com/safety (optional)" />
                 </div>
 
                 <div class="form-group">
-                    <label>Display Time (seconds):</label>
-                    <input type="number" @bind="displayTimeSeconds" class="form-control" 
+                    <label>@Localizer["DisplayTimeLabel"]</label>
+                    <input type="number" @bind="displayTimeSeconds" class="form-control"
                            min="5" max="300" />
                 </div>
             </div>
@@ -80,7 +82,7 @@
                         <strong>✓</strong> @successMessage
                     </div>
                     <button @onclick="ReturnToPresentations" class="btn btn-return">
-                        View Presentations
+                        @Localizer["ViewPresentations"]
                     </button>
                 </div>
             }
@@ -88,9 +90,9 @@
             @if (string.IsNullOrEmpty(successMessage))
             {
                 <div class="form-actions">
-                    <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
+                    <button @onclick="Cancel" class="btn btn-secondary">@Localizer["Cancel"]</button>
                     <button @onclick="SavePresentation" class="btn btn-primary" disabled="@isSaving">
-                        @(isSaving ? "Saving..." : "Create Presentation")
+                        @(isSaving ? Localizer["Saving"].Value : Localizer["CreatePresentationButton"].Value)
                     </button>
                 </div>
             }
@@ -279,11 +281,11 @@
     private string presentationDescription = string.Empty;
     private string moreUrl = string.Empty;
     private int displayTimeSeconds = 60;
-    
+
     private string selectedFileName = string.Empty;
     private byte[]? imageData = null;
     private string? imagePreview = null;
-    
+
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
     private bool isSaving = false;
@@ -322,14 +324,14 @@
             // Validate file type
             if (!file.ContentType.StartsWith("image/"))
             {
-                errorMessage = "Please select a valid image file";
+                errorMessage = Localizer["InvalidImageType"];
                 return;
             }
 
             // Validate file size (max 10MB)
             if (file.Size > 10 * 1024 * 1024)
             {
-                errorMessage = "Image file must be smaller than 10MB";
+                errorMessage = Localizer["ImageTooLarge"];
                 return;
             }
 
@@ -344,7 +346,7 @@
             // Validate image data
             if (imageData == null || imageData.Length == 0)
             {
-                errorMessage = "Failed to load image data";
+                errorMessage = Localizer["ImageLoadFailed"];
                 selectedFileName = string.Empty;
                 imageData = null;
                 imagePreview = null;
@@ -378,13 +380,13 @@
         // Validation
         if (string.IsNullOrWhiteSpace(presentationName))
         {
-            errorMessage = "Presentation name is required";
+            errorMessage = Localizer["NameRequired"];
             return;
         }
 
         if (imageData == null || string.IsNullOrEmpty(selectedFileName))
         {
-            errorMessage = "Please select an image";
+            errorMessage = Localizer["PleaseSelectImage"];
             return;
         }
 
@@ -397,7 +399,7 @@
 
             if (string.IsNullOrEmpty(teamId) || string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected";
+                errorMessage = Localizer["NoTeamSelected"];
                 return;
             }
 

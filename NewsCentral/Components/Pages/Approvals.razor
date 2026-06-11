@@ -1,30 +1,32 @@
-﻿@page "/approvals"
+@page "/approvals"
+@using Microsoft.Extensions.Localization
 @inject Services.AssignmentService AssignmentService
 @inject Services.PresentationService PresentationService
 @inject Services.ScheduleService ScheduleService
 @inject Services.TeamService TeamService
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<Approvals> Localizer
 @using NewsCentral.Components.Shared
 @using NewsCentral.Models
 
-<PageTitle>Pending Approvals - NewsCentral</PageTitle>
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="page-container">
     <div class="page-header">
-        <h1>Pending Approvals</h1>
-        <p class="subtitle">Assignments awaiting your approval</p>
+        <h1>@Localizer["PageTitle"]</h1>
+        <p class="subtitle">@Localizer["Subtitle"]</p>
     </div>
 
     @if (isLoading)
     {
-        <div class="loading">Loading pending approvals...</div>
+        <div class="loading">@Localizer["Loading"]</div>
     }
     else if (pendingApprovals.Count == 0)
     {
         <div class="empty-state">
-            <h3>No Pending Approvals</h3>
-            <p>You don't have any assignments waiting for approval</p>
+            <h3>@Localizer["NoPendingApprovals"]</h3>
+            <p>@Localizer["NoAssignmentsMessage"]</p>
         </div>
     }
     else
@@ -48,22 +50,22 @@
                             }
 
                             <p class="meta">
-                                From: <strong>@approval.SourceTeamName</strong>
-                                → To: <strong>@approval.TargetTeamName</strong>
+                                @Localizer["From"]: <strong>@approval.SourceTeamName</strong>
+                                → @Localizer["To"]: <strong>@approval.TargetTeamName</strong>
                             </p>
                         </div>
                         <div class="status-badge pending">
-                            Pending Approval
+                            @Localizer["PendingApprovalBadge"]
                         </div>
                     </div>
 
                     <div class="approval-body">
                         <p class="description">@approval.PresentationDescription</p>
-                        
+
                         <div class="schedule-info">
-                            <strong>Schedule:</strong><br/>
+                            <strong>@Localizer["ScheduleLabel"]</strong><br/>
                             @approval.ScheduleStart.ToString("MMM dd, yyyy") - @approval.ScheduleEnd.ToString("MMM dd, yyyy")<br/>
-                            Days: @FormatDaysOfWeek(approval.DaysOfWeek)
+                            @Localizer["DaysLabel"]: @FormatDaysOfWeek(approval.DaysOfWeek)
                         </div>
 
                         @if (!string.IsNullOrEmpty(approval.PosterPreview))
@@ -76,10 +78,10 @@
 
                     <div class="approval-actions">
                         <button @onclick="() => ShowRejectDialog(approval)" class="btn btn-danger">
-                            ✗ Reject
+                            ✗ @Localizer["Reject"]
                         </button>
                         <button @onclick="() => ApproveAssignment(approval)" class="btn btn-success">
-                            ✓ Approve
+                            ✓ @Localizer["Approve"]
                         </button>
                     </div>
                 </div>
@@ -92,15 +94,15 @@
 {
     <div class="modal-overlay" @onclick="CloseRejectDialog">
         <div class="modal-content" @onclick:stopPropagation="true">
-            <h2>Reject Assignment</h2>
-            
-            <p>Are you sure you want to reject this assignment?</p>
+            <h2>@Localizer["RejectAssignmentTitle"]</h2>
+
+            <p>@Localizer["RejectConfirmQuestion"]</p>
             <p><strong>@rejectingApproval?.PresentationName</strong></p>
 
             <div class="form-group">
-                <label>Rejection Reason: *</label>
-                <textarea @bind="rejectionReason" class="form-control" rows="3" 
-                          placeholder="Please provide a reason for rejection..."></textarea>
+                <label>@Localizer["RejectionReasonLabel"]</label>
+                <textarea @bind="rejectionReason" class="form-control" rows="3"
+                          placeholder="@Localizer["RejectionReasonPlaceholder"]"></textarea>
             </div>
 
             @if (!string.IsNullOrEmpty(errorMessage))
@@ -109,9 +111,9 @@
             }
 
             <div class="modal-actions">
-                <button @onclick="CloseRejectDialog" class="btn btn-secondary">Cancel</button>
+                <button @onclick="CloseRejectDialog" class="btn btn-secondary">@Localizer["Cancel"]</button>
                 <button @onclick="ConfirmReject" class="btn btn-danger" disabled="@isProcessing">
-                    @(isProcessing ? "Rejecting..." : "Reject")
+                    @(isProcessing ? Localizer["Rejecting"].Value : Localizer["RejectButton"].Value)
                 </button>
             </div>
         </div>
@@ -386,7 +388,7 @@
             {
                 // Load presentation details
                 var presentation = await PresentationService.GetPresentationAsync(
-                    assignment.SourceTeam, 
+                    assignment.SourceTeam,
                     assignment.PresentationID);
 
                 if (presentation is null) continue;
@@ -471,7 +473,7 @@
     {
         if (string.IsNullOrWhiteSpace(rejectionReason))
         {
-            errorMessage = "Please provide a reason for rejection";
+            errorMessage = Localizer["ReasonRequired"];
             return;
         }
 
@@ -504,7 +506,7 @@
 
     private string FormatDaysOfWeek(string daysOfWeek)
     {
-        if (string.IsNullOrEmpty(daysOfWeek)) return "None";
+        if (string.IsNullOrEmpty(daysOfWeek)) return Localizer["None"];
 
         var days = daysOfWeek.Split(',').Select(int.Parse).ToList();
         var dayNames = new List<string>();
@@ -513,13 +515,13 @@
         {
             dayNames.Add(day switch
             {
-                1 => "Mon",
-                2 => "Tue",
-                3 => "Wed",
-                4 => "Thu",
-                5 => "Fri",
-                6 => "Sat",
-                7 => "Sun",
+                1 => Localizer["Mon"],
+                2 => Localizer["Tue"],
+                3 => Localizer["Wed"],
+                4 => Localizer["Thu"],
+                5 => Localizer["Fri"],
+                6 => Localizer["Sat"],
+                7 => Localizer["Sun"],
                 _ => ""
             });
         }

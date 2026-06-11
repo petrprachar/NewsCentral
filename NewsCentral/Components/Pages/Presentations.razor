@@ -1,4 +1,5 @@
-﻿@page "/presentations"
+@page "/presentations"
+@using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Services
 @using NewsCentral.Components.Shared
@@ -7,13 +8,14 @@
 @inject AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject TeamService TeamService
+@inject IStringLocalizer<Presentations> Localizer
 
 <div class="presentations-container">
     <div class="page-header">
-        <h2>Presentations</h2>
+        <h2>@Localizer["PageTitle"]</h2>
         @if (!string.IsNullOrEmpty(currentTeamName))
         {
-            <p class="team-name">Team: @currentTeamName</p>
+            <p class="team-name">@Localizer["TeamPrefix"] @currentTeamName</p>
         }
     </div>
 
@@ -33,22 +35,22 @@
 
     <div class="actions-bar">
         <button @onclick="CreateNewPresentation" class="btn btn-primary">
-            + Create Presentation
+            @Localizer["CreatePresentation"]
         </button>
     </div>
 
     @if (isLoading)
     {
         <div class="loading">
-            <p>Loading presentations...</p>
+            <p>@Localizer["LoadingPresentations"]</p>
         </div>
     }
     else if (presentations == null || presentations.Count == 0)
     {
         <div class="empty-state">
-            <p>No presentations found for this team.</p>
+            <p>@Localizer["NoPresentationsFound"]</p>
             <button @onclick="CreateNewPresentation" class="btn btn-primary">
-                Create Your First Presentation
+                @Localizer["CreateFirstPresentation"]
             </button>
         </div>
     }
@@ -84,31 +86,31 @@
                         }
 
                         <div class="card-meta">
-                            <span class="created-by">Created by: @GetCreatorName(presentation.CreatedBy)</span>
+                            <span class="created-by">@Localizer["CreatedBy"] @GetCreatorName(presentation.CreatedBy)</span>
                         </div>
 
                         <div class="card-footer">
-                            <span class="card-date">Created: @presentation.DateCreated.ToString("yyyy-MM-dd")</span>
-                            <span class="card-version">Version: @presentation.Version</span>
+                            <span class="card-date">@Localizer["Created"] @presentation.DateCreated.ToString("yyyy-MM-dd")</span>
+                            <span class="card-version">@Localizer["Version"] @presentation.Version</span>
                         </div>
                     </div>
 
                     <div class="card-actions">
                         <button @onclick="() => EditPresentation(presentation.PresentationID)"
                                 class="btn btn-secondary">
-                            Edit
+                            @Localizer["Edit"]
                         </button>
 
                         <button @onclick="() => CreateAssignment(presentation.PresentationID)"
                                 class="btn btn-primary">
-                            Create Assignment
+                            @Localizer["CreateAssignment"]
                         </button>
 
                         @if (CanDelete(presentation))
                         {
                             <button @onclick="() => ShowDeleteConfirmation(presentation)"
                                     class="btn btn-danger">
-                                Delete
+                                @Localizer["Delete"]
                             </button>
                         }
                     </div>
@@ -120,10 +122,10 @@
 
 <!-- NEW: Confirmation Dialog -->
 <ConfirmDialog IsVisible="@showDeleteConfirm"
-               Title="Delete Presentation"
+               Title="@Localizer["DeletePresentation"]"
                Message="@deleteConfirmMessage"
-               ConfirmText="Delete"
-               CancelText="Cancel"
+               ConfirmText="@Localizer["Delete"]"
+               CancelText="@Localizer["Cancel"]"
                DialogType="danger"
                OnConfirm="ConfirmDeletePresentation"
                OnCancel="CancelDeletePresentation" />
@@ -369,7 +371,7 @@
 
             if (string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected";
+                errorMessage = Localizer["NoTeamSelected"];
                 return;
             }
 
@@ -417,12 +419,12 @@
     {
         if (!CanDelete(presentation))
         {
-            errorMessage = "You don't have permission to delete this presentation";
+            errorMessage = Localizer["NoPermissionDelete"];
             return;
         }
 
         presentationToDelete = presentation;
-        deleteConfirmMessage = $"Are you sure you want to delete the presentation '{presentation.Name}'? This action cannot be undone.";
+        deleteConfirmMessage = string.Format(Localizer["DeleteConfirmMessage"].Value, presentation.Name);
         showDeleteConfirm = true;
     }
 
@@ -437,7 +439,7 @@
 
             if (string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected. Cannot delete presentation.";
+                errorMessage = Localizer["NoTeamCannotDelete"];
                 showDeleteConfirm = false;
                 presentationToDelete = null;
                 return;
@@ -445,7 +447,7 @@
 
             await PresentationService.DeletePresentationAsync(teamFolderName, presentationToDelete.PresentationID);
 
-            successMessage = "Presentation deleted successfully";
+            successMessage = Localizer["DeleteSuccess"];
             showDeleteConfirm = false;
             presentationToDelete = null;
 
@@ -491,9 +493,8 @@
         var currentUser = AuthService.GetCurrentUser();
 
         if (currentUser?.UserID == userId)
-            return "You";
+            return Localizer["CreatedByYou"];
 
-        // You could look up the actual user name here if needed
-        return "Team Member";
+        return Localizer["CreatedByTeamMember"];
     }
 }

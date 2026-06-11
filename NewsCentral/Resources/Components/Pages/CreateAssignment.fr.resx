@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Créer une planification et une affectation</value></data>
+  <data name="Loading" xml:space="preserve"><value>Chargement...</value></data>
+  <data name="PresentationNotFound" xml:space="preserve"><value>Présentation introuvable</value></data>
+  <data name="BackToPresentations" xml:space="preserve"><value>Retour aux présentations</value></data>
+  <data name="PresentationSection" xml:space="preserve"><value>Présentation</value></data>
+  <data name="WallpaperLogonScreenHint" xml:space="preserve"><value>Le fond d'écran et l'écran de connexion ne sont pas actifs en mode bureau virtuel</value></data>
+  <data name="ScheduleSection" xml:space="preserve"><value>1. Planification</value></data>
+  <data name="StartDate" xml:space="preserve"><value>Date de début : *</value></data>
+  <data name="EndDate" xml:space="preserve"><value>Date de fin : *</value></data>
+  <data name="DisplayMode" xml:space="preserve"><value>Mode d'affichage :</value></data>
+  <data name="ShowOnce" xml:space="preserve"><value>Afficher une fois</value></data>
+  <data name="ShowOnceDescription" xml:space="preserve"><value>afficher une fois par jour calendaire</value></data>
+  <data name="ShowNew" xml:space="preserve"><value>Afficher le nouveau</value></data>
+  <data name="ShowNewDescription" xml:space="preserve"><value>afficher une fois par jour et à nouveau à l'arrivée de nouveau contenu</value></data>
+  <data name="NotAvailableWithVirtualDesktop" xml:space="preserve"><value>Non disponible avec le bureau virtuel</value></data>
+  <data name="TargetTeamsSection" xml:space="preserve"><value>2. Équipes cibles</value></data>
+  <data name="CurrentTeamLabel" xml:space="preserve"><value>Équipe actuelle (auto-affectation) :</value></data>
+  <data name="CurrentTeamSuffix" xml:space="preserve"><value>(Actuelle)</value></data>
+  <data name="NoOtherTeams" xml:space="preserve"><value>Aucune autre équipe disponible pour l'affectation</value></data>
+  <data name="OtherTeamsLabel" xml:space="preserve"><value>Autres équipes :</value></data>
+  <data name="OptionsSection" xml:space="preserve"><value>3. Options</value></data>
+  <data name="RequireApproval" xml:space="preserve"><value>Exiger l'approbation des approbateurs de l'équipe cible</value></data>
+  <data name="RequireApprovalHint" xml:space="preserve"><value>Si non coché, les affectations seront automatiquement approuvées</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Annuler</value></data>
+  <data name="Creating" xml:space="preserve"><value>Création en cours...</value></data>
+  <data name="CreateAssignments" xml:space="preserve"><value>Créer des affectations</value></data>
+  <data name="EndDateAfterStart" xml:space="preserve"><value>La date de fin doit être postérieure à la date de début</value></data>
+  <data name="SelectDayOfWeek" xml:space="preserve"><value>Veuillez sélectionner au moins un jour de la semaine</value></data>
+  <data name="SelectTargetTeam" xml:space="preserve"><value>Veuillez sélectionner au moins une équipe cible</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>Aucune équipe sélectionnée</value></data>
+  <data name="PresentationNotLoaded" xml:space="preserve"><value>Présentation non chargée</value></data>
+  <data name="AssignmentsCreated" xml:space="preserve"><value>Planification et {0} affectation(s) créées avec succès !</value></data>
+  <data name="PendingApprovalSuffix" xml:space="preserve"><value>Les affectations sont en attente d'approbation.</value></data>
+  <data name="AutoApprovedSuffix" xml:space="preserve"><value>Les affectations sont automatiquement approuvées.</value></data>
+</root>

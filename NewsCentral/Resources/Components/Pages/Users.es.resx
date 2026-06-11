@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Gestión de usuarios</value></data>
+  <data name="CreateUser" xml:space="preserve"><value>+ Crear usuario</value></data>
+  <data name="Loading" xml:space="preserve"><value>Cargando usuarios...</value></data>
+  <data name="SystemAdmin" xml:space="preserve"><value>Administrador del sistema</value></data>
+  <data name="Inactive" xml:space="preserve"><value>Inactivo</value></data>
+  <data name="Email" xml:space="preserve"><value>Correo electrónico:</value></data>
+  <data name="Upn" xml:space="preserve"><value>UPN:</value></data>
+  <data name="Created" xml:space="preserve"><value>Creado:</value></data>
+  <data name="LastLogin" xml:space="preserve"><value>Último inicio de sesión:</value></data>
+  <data name="NotSet" xml:space="preserve"><value>No establecido</value></data>
+  <data name="TeamsAndRoles" xml:space="preserve"><value>Equipos y roles:</value></data>
+  <data name="NotAssignedToTeams" xml:space="preserve"><value>No asignado a ningún equipo</value></data>
+  <data name="Edit" xml:space="preserve"><value>Editar</value></data>
+  <data name="ManageTeams" xml:space="preserve"><value>Gestionar equipos</value></data>
+  <data name="Delete" xml:space="preserve"><value>Eliminar</value></data>
+  <data name="CreateUserTitle" xml:space="preserve"><value>Crear usuario</value></data>
+  <data name="EditUserTitle" xml:space="preserve"><value>Editar usuario</value></data>
+  <data name="UsernameLabel" xml:space="preserve"><value>Nombre de usuario: *</value></data>
+  <data name="UsernameHint" xml:space="preserve"><value>Utilizado para iniciar sesión</value></data>
+  <data name="DisplayNameLabel" xml:space="preserve"><value>Nombre para mostrar: *</value></data>
+  <data name="EmailLabel" xml:space="preserve"><value>Correo electrónico:</value></data>
+  <data name="EmailHint" xml:space="preserve"><value>Opcional</value></data>
+  <data name="UpnLabel" xml:space="preserve"><value>UPN (Azure AD):</value></data>
+  <data name="UpnHint" xml:space="preserve"><value>usuario@dominio.com — para inicio de sesión automático de Azure AD</value></data>
+  <data name="PasswordLabel" xml:space="preserve"><value>Contraseña: *</value></data>
+  <data name="SystemAdminLabel" xml:space="preserve"><value>Administrador del sistema</value></data>
+  <data name="ActiveLabel" xml:space="preserve"><value>Activo</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancelar</value></data>
+  <data name="Saving" xml:space="preserve"><value>Guardando...</value></data>
+  <data name="Save" xml:space="preserve"><value>Guardar</value></data>
+  <data name="ManageTeamsTitle" xml:space="preserve"><value>Gestionar equipos para {0}</value></data>
+  <data name="ContentAuthor" xml:space="preserve"><value>Autor de contenido</value></data>
+  <data name="ContentApprover" xml:space="preserve"><value>Aprobador de contenido</value></data>
+  <data name="TeamAdmin" xml:space="preserve"><value>Administrador de equipo</value></data>
+  <data name="Close" xml:space="preserve"><value>Cerrar</value></data>
+  <data name="DeleteUser" xml:space="preserve"><value>Eliminar usuario</value></data>
+  <data name="DeleteUserConfirm" xml:space="preserve"><value>¿Está seguro de que desea eliminar '{0}'? Esta acción no se puede deshacer.</value></data>
+  <data name="MustHaveRole" xml:space="preserve"><value>El usuario debe tener al menos un rol en el equipo</value></data>
+  <data name="UsernameDisplayNameRequired" xml:space="preserve"><value>El nombre de usuario y el nombre para mostrar son obligatorios</value></data>
+  <data name="PasswordRequired" xml:space="preserve"><value>La contraseña es obligatoria para los nuevos usuarios</value></data>
+</root>

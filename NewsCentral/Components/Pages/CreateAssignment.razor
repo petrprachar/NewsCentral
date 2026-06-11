@@ -1,4 +1,5 @@
-﻿@page "/presentations/{presentationId}/assign"
+@page "/presentations/{presentationId}/assign"
+@using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Components.Shared
 @inject Services.PresentationService PresentationService
@@ -8,30 +9,31 @@
 @inject Services.TeamContextService TeamContext
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<CreateAssignment> Localizer
 
-<PageTitle>Create Schedule & Assignment - NewsCentral</PageTitle>
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="page-container">
     <div class="page-header">
-        <h1>Create Schedule & Assignment</h1>
+        <h1>@Localizer["PageTitle"]</h1>
     </div>
 
     @if (isLoading)
     {
-        <div class="loading">Loading...</div>
+        <div class="loading">@Localizer["Loading"]</div>
     }
     else if (presentation == null)
     {
         <div class="alert alert-danger">
-            <p>Presentation not found</p>
-            <a href="/presentations" class="btn btn-secondary">Back to Presentations</a>
+            <p>@Localizer["PresentationNotFound"]</p>
+            <a href="/presentations" class="btn btn-secondary">@Localizer["BackToPresentations"]</a>
         </div>
     }
     else
     {
         <div class="assign-form">
             <div class="form-section">
-                <h3>Presentation</h3>
+                <h3>@Localizer["PresentationSection"]</h3>
                 <div class="presentation-info">
                     <strong>@presentation.Name</strong>
                     <p>@presentation.Description</p>
@@ -45,22 +47,22 @@
                         </div>
                         @if (presentation.UseVirtualDesktop && (presentation.IsWallpaper || presentation.IsLogonScreen))
                         {
-                            <small class="mode-hint">Wallpaper and Logon Screen are not active in Virtual Desktop mode</small>
+                            <small class="mode-hint">@Localizer["WallpaperLogonScreenHint"]</small>
                         }
                     }
                 </div>
             </div>
 
             <div class="form-section">
-                <h3>1. Schedule</h3>
+                <h3>@Localizer["ScheduleSection"]</h3>
 
                 <div class="form-group">
-                    <label>Start Date: *</label>
+                    <label>@Localizer["StartDate"]</label>
                     <input type="date" @bind="scheduleStartDate" class="form-control" />
                 </div>
 
                 <div class="form-group">
-                    <label>End Date: *</label>
+                    <label>@Localizer["EndDate"]</label>
                     <input type="date" @bind="scheduleEndDate" class="form-control" />
                 </div>
 
@@ -78,13 +80,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="section-label">Display Mode:</label>
+                    <label class="section-label">@Localizer["DisplayMode"]</label>
                     <div class="radio-group">
                         <label class="radio-label">
                             <input type="radio" name="showMode"
                                    checked="@(scheduleShowMode == Schedule.DisplayMode.ShowOnce)"
                                    @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowOnce)" />
-                            <span><strong>Show Once</strong> — show once per calendar day</span>
+                            <span><strong>@Localizer["ShowOnce"]</strong> — @Localizer["ShowOnceDescription"]</span>
                         </label>
                         <label class="radio-label @(presentation!.UseVirtualDesktop ? "radio-label-disabled" : "")">
                             <input type="radio" name="showMode"
@@ -92,12 +94,12 @@
                                    checked="@(scheduleShowMode == Schedule.DisplayMode.ShowNew)"
                                    @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowNew)" />
                             <span>
-                                <strong>Show New</strong> — show once per day, and again when new content arrives
+                                <strong>@Localizer["ShowNew"]</strong> — @Localizer["ShowNewDescription"]
                                 @if (presentation.UseVirtualDesktop)
                                 {
                                     <br />
-                            
-                                    <small class="mode-hint">Not available with Virtual Desktop</small>
+
+                                    <small class="mode-hint">@Localizer["NotAvailableWithVirtualDesktop"]</small>
                                 }
                             </span>
                         </label>
@@ -106,18 +108,18 @@
             </div>
 
             <div class="form-section">
-                <h3>2. Target Teams</h3>
+                <h3>@Localizer["TargetTeamsSection"]</h3>
 
                 @if (currentTeam is not null)
                 {
                     <div class="current-team-section">
-                        <label class="section-label">Current Team (Self-Assignment):</label>
+                        <label class="section-label">@Localizer["CurrentTeamLabel"]</label>
                         <div class="team-checkbox current">
                             <label>
                                 <input type="checkbox"
                                        checked="@selectedTeams.Contains(currentTeam.TeamID)"
                                        @onchange="@(e => ToggleTeam(currentTeam.TeamID, (bool)e.Value!))" />
-                                <strong>@currentTeam.Name</strong> (Current)
+                                <strong>@currentTeam.Name</strong> (@Localizer["CurrentTeamSuffix"])
                             </label>
                             <small>@currentTeam.Description</small>
                         </div>
@@ -126,11 +128,11 @@
 
                 @if (availableTeams.Count == 0)
                 {
-                    <p class="no-teams">No other teams available for assignment</p>
+                    <p class="no-teams">@Localizer["NoOtherTeams"]</p>
                 }
                 else
                 {
-                    <label class="section-label">Other Teams:</label>
+                    <label class="section-label">@Localizer["OtherTeamsLabel"]</label>
                     <div class="teams-list">
                         @foreach (var team in availableTeams)
                         {
@@ -151,14 +153,14 @@
             </div>
 
             <div class="form-section">
-                <h3>3. Options</h3>
+                <h3>@Localizer["OptionsSection"]</h3>
 
                 <div class="form-group">
                     <label>
                         <input type="checkbox" @bind="requiresApproval" />
-                        Require approval from target team approvers
+                        @Localizer["RequireApproval"]
                     </label>
-                    <small class="hint">If unchecked, assignments will be automatically approved</small>
+                    <small class="hint">@Localizer["RequireApprovalHint"]</small>
                 </div>
             </div>
 
@@ -174,7 +176,7 @@
                         <strong>✓</strong> @successMessage
                     </div>
                     <button @onclick="ReturnToPresentations" class="btn btn-return">
-                        Back to Presentations
+                        @Localizer["BackToPresentations"]
                     </button>
                 </div>
             }
@@ -182,9 +184,9 @@
             @if (string.IsNullOrEmpty(successMessage))
             {
                 <div class="form-actions">
-                    <button @onclick="Cancel" class="btn btn-secondary">Cancel</button>
+                    <button @onclick="Cancel" class="btn btn-secondary">@Localizer["Cancel"]</button>
                     <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@isCreating">
-                        @(isCreating ? "Creating..." : "Create Assignments")
+                        @(isCreating ? Localizer["Creating"].Value : Localizer["CreateAssignments"].Value)
                     </button>
                 </div>
             }
@@ -632,20 +634,20 @@
         // Validation
         if (scheduleEndDate <= scheduleStartDate)
         {
-            errorMessage = "End date must be after start date";
+            errorMessage = Localizer["EndDateAfterStart"];
             return;
         }
 
         var selectedDays = GetSelectedDays();
         if (selectedDays.Count == 0)
         {
-            errorMessage = "Please select at least one day of the week";
+            errorMessage = Localizer["SelectDayOfWeek"];
             return;
         }
 
         if (selectedTeams.Count == 0)
         {
-            errorMessage = "Please select at least one target team";
+            errorMessage = Localizer["SelectTargetTeam"];
             return;
         }
 
@@ -656,13 +658,13 @@
             var teamFolderName = TeamContext.GetCurrentTeamFolderName();
             if (string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected";
+                errorMessage = Localizer["NoTeamSelected"];
                 return;
             }
 
             if (presentation is null)
             {
-                errorMessage = "Presentation not loaded";
+                errorMessage = Localizer["PresentationNotLoaded"];
                 return;
             }
 
@@ -694,22 +696,22 @@
                     targetTeam.FolderName,
                     requiresApproval,
                     presentation.IsNewsOfWeek,
-                    presentation.IsWallpaper, 
+                    presentation.IsWallpaper,
                     presentation.IsLogonScreen
                 );
 
                 createdCount++;
             }
 
-            successMessage = $"Schedule and {createdCount} assignment(s) created successfully!";
+            successMessage = string.Format(Localizer["AssignmentsCreated"].Value, createdCount);
 
             if (requiresApproval)
             {
-                successMessage += " Assignments are now pending approval.";
+                successMessage += " " + Localizer["PendingApprovalSuffix"];
             }
             else
             {
-                successMessage += " Assignments are automatically approved.";
+                successMessage += " " + Localizer["AutoApprovedSuffix"];
             }
 
             StateHasChanged();

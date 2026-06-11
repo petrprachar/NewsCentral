@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Loading" xml:space="preserve"><value>Loading presentation...</value></data>
+  <data name="PresentationNotFound" xml:space="preserve"><value>Presentation not found</value></data>
+  <data name="ReturnToPresentations" xml:space="preserve"><value>Return to Presentations</value></data>
+  <data name="PageTitle" xml:space="preserve"><value>Edit Presentation</value></data>
+  <data name="BasicDetails" xml:space="preserve"><value>Basic Details</value></data>
+  <data name="NameLabel" xml:space="preserve"><value>Name: *</value></data>
+  <data name="DescriptionLabel" xml:space="preserve"><value>Description:</value></data>
+  <data name="MoreInfoUrlLabel" xml:space="preserve"><value>More Info URL:</value></data>
+  <data name="DisplayTypes" xml:space="preserve"><value>Display Types:</value></data>
+  <data name="NewsOfTheWeek" xml:space="preserve"><value>News of the Week</value></data>
+  <data name="Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
+  <data name="LogonScreen" xml:space="preserve"><value>Logon screen</value></data>
+  <data name="VirtualDesktop" xml:space="preserve"><value>Virtual Desktop:</value></data>
+  <data name="UseVirtualDesktopLabel" xml:space="preserve"><value>Show on virtual desktop (ShowOnce mode only)</value></data>
+  <data name="BackgroundColor" xml:space="preserve"><value>Background color:</value></data>
+  <data name="OriginalImage" xml:space="preserve"><value>Original Image</value></data>
+  <data name="SupportPosterCreation" xml:space="preserve"><value>Support Poster creation</value></data>
+  <data name="PosterText" xml:space="preserve"><value>Poster Text</value></data>
+  <data name="HeadlineLabel" xml:space="preserve"><value>Headline: *</value></data>
+  <data name="BodyTextLabel" xml:space="preserve"><value>Body Text: *</value></data>
+  <data name="CallToActionLabel" xml:space="preserve"><value>Call to Action:</value></data>
+  <data name="PosterPreview" xml:space="preserve"><value>Poster Preview</value></data>
+  <data name="Generating" xml:space="preserve"><value>Generating...</value></data>
+  <data name="PreviewPoster" xml:space="preserve"><value>Preview Poster</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Saving" xml:space="preserve"><value>Saving...</value></data>
+  <data name="SaveWithPosterText" xml:space="preserve"><value>Save with poster text</value></data>
+  <data name="Save" xml:space="preserve"><value>Save</value></data>
+  <data name="PreviewReady" xml:space="preserve"><value>Preview ready. Click 'Generate &amp; Save' to create the final version.</value></data>
+  <data name="HeadlineRequired" xml:space="preserve"><value>Headline text is required</value></data>
+  <data name="BodyTextRequired" xml:space="preserve"><value>Body text is required</value></data>
+  <data name="NameRequired" xml:space="preserve"><value>Presentation name is required</value></data>
+  <data name="HeadlineRequiredForPoster" xml:space="preserve"><value>Headline text is required for poster generation</value></data>
+  <data name="BodyTextRequiredForPoster" xml:space="preserve"><value>Body text is required for poster generation</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>No team selected</value></data>
+  <data name="UpdatedSuccessfully" xml:space="preserve"><value>Presentation updated successfully!</value></data>
+  <data name="UpdatedWithPosterSuccessfully" xml:space="preserve"><value>Presentation updated with poster text saved successfully!</value></data>
+</root>

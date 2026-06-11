@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Presentations</value></data>
+  <data name="TeamPrefix" xml:space="preserve"><value>Team:</value></data>
+  <data name="CreatePresentation" xml:space="preserve"><value>+ Create Presentation</value></data>
+  <data name="LoadingPresentations" xml:space="preserve"><value>Loading presentations...</value></data>
+  <data name="NoPresentationsFound" xml:space="preserve"><value>No presentations found for this team.</value></data>
+  <data name="CreateFirstPresentation" xml:space="preserve"><value>Create Your First Presentation</value></data>
+  <data name="CreatedBy" xml:space="preserve"><value>Created by:</value></data>
+  <data name="Created" xml:space="preserve"><value>Created:</value></data>
+  <data name="Version" xml:space="preserve"><value>Version:</value></data>
+  <data name="Edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="CreateAssignment" xml:space="preserve"><value>Create Assignment</value></data>
+  <data name="Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="DeletePresentation" xml:space="preserve"><value>Delete Presentation</value></data>
+  <data name="DeleteConfirmMessage" xml:space="preserve"><value>Are you sure you want to delete the presentation '{0}'? This action cannot be undone.</value></data>
+  <data name="DeleteSuccess" xml:space="preserve"><value>Presentation deleted successfully</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>No team selected</value></data>
+  <data name="NoTeamCannotDelete" xml:space="preserve"><value>No team selected. Cannot delete presentation.</value></data>
+  <data name="NoPermissionDelete" xml:space="preserve"><value>You don't have permission to delete this presentation</value></data>
+  <data name="CreatedByYou" xml:space="preserve"><value>You</value></data>
+  <data name="CreatedByTeamMember" xml:space="preserve"><value>Team Member</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+</root>

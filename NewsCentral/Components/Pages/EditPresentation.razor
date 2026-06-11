@@ -1,31 +1,35 @@
-﻿@page "/presentations/edit/{presentationId}"
+@page "/presentations/edit/{presentationId}"
+@using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Services
 @inject PresentationService PresentationService
 @inject TeamContextService TeamContext
 @inject AuthenticationService AuthService
 @inject NavigationManager Navigation
+@inject IStringLocalizer<EditPresentation> Localizer
 @using NewsCentral.Repositories
 @using System.IO
+
+<PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
 <div class="edit-presentation-container">
     @if (isLoading)
     {
         <div class="loading">
-            <p>Loading presentation...</p>
+            <p>@Localizer["Loading"]</p>
         </div>
     }
     else if (presentation == null)
     {
         <div class="error-state">
-            <h3>Presentation not found</h3>
-            <button @onclick="ReturnToPresentations" class="btn btn-primary">Return to Presentations</button>
+            <h3>@Localizer["PresentationNotFound"]</h3>
+            <button @onclick="ReturnToPresentations" class="btn btn-primary">@Localizer["ReturnToPresentations"]</button>
         </div>
     }
     else
     {
         <div class="page-header">
-            <h2>Edit Presentation</h2>
+            <h2>@Localizer["PageTitle"]</h2>
         </div>
 
         @if (!string.IsNullOrEmpty(errorMessage))
@@ -44,54 +48,54 @@
 
         <!-- Basic Details Section -->
         <div class="form-section">
-            <h3>Basic Details</h3>
+            <h3>@Localizer["BasicDetails"]</h3>
 
             <div class="form-group">
-                <label>Name: *</label>
+                <label>@Localizer["NameLabel"]</label>
                 <input type="text" @bind="presentationName" class="form-control" placeholder="Presentation name" />
             </div>
 
             <div class="form-group">
-                <label>Description:</label>
+                <label>@Localizer["DescriptionLabel"]</label>
                 <textarea @bind="presentationDescription" class="form-control" rows="3" placeholder="Brief description"></textarea>
             </div>
 
             <div class="form-group">
-                <label>More Info URL:</label>
+                <label>@Localizer["MoreInfoUrlLabel"]</label>
                 <input type="text" @bind="moreUrl" class="form-control" placeholder="https://example.com/more-info" />
             </div>
 
             <!-- Display Type Checkboxes -->
             <div class="form-group">
-                <label class="section-label">Display Types:</label>
+                <label class="section-label">@Localizer["DisplayTypes"]</label>
                 <div class="checkbox-group">
                     <label class="checkbox-label">
                         <input type="checkbox" @bind="isNewsOfWeek" />
-                        <span>News of the Week</span>
+                        <span>@Localizer["NewsOfTheWeek"]</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" @bind="isWallpaper" />
-                        <span>Wallpaper</span>
+                        <span>@Localizer["Wallpaper"]</span>
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" @bind="isLogonScreen" />
-                        <span>Logon screen</span>
+                        <span>@Localizer["LogonScreen"]</span>
                     </label>
                 </div>
             </div>
 
             <!-- Virtual Desktop -->
             <div class="form-group">
-                <label class="section-label">Virtual Desktop:</label>
+                <label class="section-label">@Localizer["VirtualDesktop"]</label>
                 <div class="checkbox-group">
                     <label class="checkbox-label">
                         <input type="checkbox" @bind="useVirtualDesktop" />
-                        <span>Show on virtual desktop (ShowOnce mode only)</span>
+                        <span>@Localizer["UseVirtualDesktopLabel"]</span>
                     </label>
                     @if (useVirtualDesktop)
                     {
                         <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
-                            <label style="margin:0;font-weight:normal;">Background color:</label>
+                            <label style="margin:0;font-weight:normal;">@Localizer["BackgroundColor"]</label>
                             <input type="color" @bind="virtualDesktopBackgroundColor" style="width:48px;height:32px;padding:2px;border:1px solid #ddd;border-radius:4px;cursor:pointer;" />
                             <span style="font-size:12px;color:#666;">@virtualDesktopBackgroundColor</span>
                         </div>
@@ -102,7 +106,7 @@
 
         <!-- Original Image Preview -->
         <div class="form-section">
-            <h3>Original Image</h3>
+            <h3>@Localizer["OriginalImage"]</h3>
 
             @if (!string.IsNullOrEmpty(originalImagePreview))
             {
@@ -112,12 +116,12 @@
             }
         </div>
 
-        <!-- NEW: Support Poster Creation Toggle -->
+        <!-- Support Poster Creation Toggle -->
         <div class="form-section">
             <div class="form-group">
                 <label class="checkbox-label">
                     <input type="checkbox" @bind="supportPosterCreation" />
-                    <span>Support Poster creation</span>
+                    <span>@Localizer["SupportPosterCreation"]</span>
                 </label>
             </div>
         </div>
@@ -126,31 +130,31 @@
         @if (supportPosterCreation)
         {
             <div class="form-section">
-                <h3>Poster Text</h3>
+                <h3>@Localizer["PosterText"]</h3>
 
                 <div class="form-group">
-                    <label>Headline: *</label>
+                    <label>@Localizer["HeadlineLabel"]</label>
                     <input type="text" @bind="headlineText" class="form-control" placeholder="Main headline" />
                 </div>
 
                 <div class="form-group">
-                    <label>Body Text: *</label>
+                    <label>@Localizer["BodyTextLabel"]</label>
                     <textarea @bind="bodyText" class="form-control" rows="3" placeholder="Description text"></textarea>
                 </div>
 
                 <div class="form-group">
-                    <label>Call to Action:</label>
+                    <label>@Localizer["CallToActionLabel"]</label>
                     <input type="text" @bind="ctaText" class="form-control" placeholder="Learn More" />
                 </div>
             </div>
 
             <!-- Poster Preview Section - Conditionally Visible -->
             <div class="form-section">
-                <h3>Poster Preview</h3>
+                <h3>@Localizer["PosterPreview"]</h3>
 
                 <div class="form-group">
                     <button @onclick="GeneratePosterPreview" class="btn btn-secondary" disabled="@isGenerating" type="button">
-                        @(isGenerating ? "Generating..." : "🖼️ Preview Poster")
+                        @(isGenerating ? Localizer["Generating"].Value : "🖼️ " + Localizer["PreviewPoster"].Value)
                     </button>
                 </div>
 
@@ -165,18 +169,18 @@
 
         <!-- Action Buttons -->
         <div class="form-actions">
-            <button @onclick="Cancel" class="btn btn-secondary" type="button">Cancel</button>
+            <button @onclick="Cancel" class="btn btn-secondary" type="button">@Localizer["Cancel"]</button>
 
             @if (supportPosterCreation)
             {
                 <button @onclick="SaveAndGeneratePoster" class="btn btn-primary" disabled="@isSaving" type="button">
-                    @(isSaving ? "Saving..." : "💾 Save with poster text")
+                    @(isSaving ? Localizer["Saving"].Value : "💾 " + Localizer["SaveWithPosterText"].Value)
                 </button>
             }
             else
             {
                 <button @onclick="SaveWithoutPoster" class="btn btn-primary" disabled="@isSaving" type="button">
-                    @(isSaving ? "Saving..." : "💾 Save")
+                    @(isSaving ? Localizer["Saving"].Value : "💾 " + Localizer["Save"].Value)
                 </button>
             }
         </div>
@@ -450,10 +454,8 @@
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
 
-    // NEW: Poster creation support
     private bool supportPosterCreation = false;
 
-    // NEW: Display type flags (will be passed to Create Assignment)
     private bool isNewsOfWeek = true;
     private bool isWallpaper = false;
     private bool isLogonScreen = false;
@@ -549,13 +551,13 @@
 
         if (string.IsNullOrWhiteSpace(headlineText))
         {
-            errorMessage = "Headline text is required";
+            errorMessage = Localizer["HeadlineRequired"];
             return;
         }
 
         if (string.IsNullOrWhiteSpace(bodyText))
         {
-            errorMessage = "Body text is required";
+            errorMessage = Localizer["BodyTextRequired"];
             return;
         }
 
@@ -563,16 +565,14 @@
 
         try
         {
-            // This is just a preview - we'll generate the real one on save
-            // For now, show the same as what will be generated
             posterPreview = "Generating preview...";
             StateHasChanged();
 
-            await Task.Delay(500); // Simulate generation
+            await Task.Delay(500);
 
-            posterPreview = originalImagePreview; // Temporary - will be replaced with actual poster on save
+            posterPreview = originalImagePreview;
 
-            errorMessage = "Preview ready. Click 'Generate & Save' to create the final version.";
+            errorMessage = Localizer["PreviewReady"];
         }
         catch (Exception ex)
         {
@@ -590,10 +590,9 @@
         errorMessage = string.Empty;
         successMessage = string.Empty;
 
-        // Validation
         if (string.IsNullOrWhiteSpace(presentationName))
         {
-            errorMessage = "Presentation name is required";
+            errorMessage = Localizer["NameRequired"];
             return;
         }
 
@@ -604,11 +603,10 @@
             var teamFolderName = TeamContext.GetCurrentTeamFolderName();
             if (string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected";
+                errorMessage = Localizer["NoTeamSelected"];
                 return;
             }
 
-            // Call the comprehensive update method
             await PresentationService.UpdatePresentationFullAsync(
                 teamFolderName,
                 PresentationId,
@@ -621,7 +619,7 @@
                 useVirtualDesktop,
                 virtualDesktopBackgroundColor);
 
-            successMessage = "Presentation updated successfully!";
+            successMessage = Localizer["UpdatedSuccessfully"];
             StateHasChanged();
 
             await Task.Delay(1500);
@@ -643,22 +641,21 @@
         errorMessage = string.Empty;
         successMessage = string.Empty;
 
-        // Validation
         if (string.IsNullOrWhiteSpace(presentationName))
         {
-            errorMessage = "Presentation name is required";
+            errorMessage = Localizer["NameRequired"];
             return;
         }
 
         if (string.IsNullOrWhiteSpace(headlineText))
         {
-            errorMessage = "Headline text is required for poster generation";
+            errorMessage = Localizer["HeadlineRequiredForPoster"];
             return;
         }
 
         if (string.IsNullOrWhiteSpace(bodyText))
         {
-            errorMessage = "Body text is required for poster generation";
+            errorMessage = Localizer["BodyTextRequiredForPoster"];
             return;
         }
 
@@ -669,11 +666,10 @@
             var teamFolderName = TeamContext.GetCurrentTeamFolderName();
             if (string.IsNullOrEmpty(teamFolderName))
             {
-                errorMessage = "No team selected";
+                errorMessage = Localizer["NoTeamSelected"];
                 return;
             }
 
-            // First update basic details with display flags
             await PresentationService.UpdatePresentationFullAsync(
                 teamFolderName,
                 PresentationId,
@@ -686,7 +682,6 @@
                 useVirtualDesktop,
                 virtualDesktopBackgroundColor);
 
-            // Save with poster (stores original image as poster; AI text overlay planned for later phase)
             var updatedPresentation = await PresentationService.UpdatePresentationWithPosterAsync(
                 teamFolderName,
                 PresentationId,
@@ -694,10 +689,9 @@
                 isWallpaper,
                 isLogonScreen);
 
-            // Show generated poster
             posterPreview = $"data:image/jpeg;base64,{updatedPresentation.ContentImageBase64}";
 
-            successMessage = "Presentation updated with poster text saved successfully!";
+            successMessage = Localizer["UpdatedWithPosterSuccessfully"];
             StateHasChanged();
 
             await Task.Delay(1500);
@@ -715,15 +709,11 @@
 
     private void Cancel()
     {
-        // Navigation.NavigateTo("/presentations");
-        // After successful save, navigate back to presentations
         Navigation.NavigateTo($"/presentations?team={TeamContext.GetCurrentTeamFolderName()}");
     }
 
     private void ReturnToPresentations()
     {
-        // Navigation.NavigateTo("/presentations");
-        // After successful save, navigate back to presentations
         Navigation.NavigateTo($"/presentations?team={TeamContext.GetCurrentTeamFolderName()}");
     }
 }
