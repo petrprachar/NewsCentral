@@ -46,7 +46,7 @@
 | NewsCentral.Shared | C# / .NET 9 class library |
 | NewsService | C# / .NET 9 Windows Service (`Microsoft.NET.Sdk.Worker`) |
 | NewsViewer | C# / .NET 9 WinForms; NativeAOT migration path preserved |
-| Data files | JSON (`System.Text.Json`, `WriteIndented`, `CamelCase`, `CaseInsensitive`, `JsonStringEnumConverter`) |
+| Data files | JSON (`System.Text.Json`); see Critical Rules for the two option sets used across components |
 | Images | Base64-encoded and embedded in presentation JSON |
 | Azure auth | MSAL interactive (NewsCentral); machine certificate from local store (NewsService) |
 
@@ -54,7 +54,9 @@
 
 ## Critical Rules
 
-**JSON serialization** — all projects use identical options:
+**JSON serialization** — two option sets; use the right one for the context.
+
+*NewsService / NewsViewer* — general cache and telemetry I/O:
 ```csharp
 new JsonSerializerOptions {
     WriteIndented = true,
@@ -64,11 +66,22 @@ new JsonSerializerOptions {
 }
 ```
 
+*NewsCentral* — index file generation and signing (`JsonConfiguration.GetIndexJsonOptions()`):
+```csharp
+new JsonSerializerOptions {
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    Converters = { new JsonStringEnumConverter(), new SmartDateTimeConverter() }
+}
+```
+`SmartDateTimeConverter` writes UTC `DateTime` with a `Z` suffix and `Unspecified` (schedule times) without one, and truncates to whole seconds. **This truncation is what keeps the ECDSA signature byte-consistent with the persisted file** — without it, sub-second precision present in memory is stripped on write, causing every verifier to return `Invalid`. Verifiers (NewsService, NewsViewer) deserialize with standard ISO parsing, which faithfully round-trips whole-second timestamps.
+
 **Assignments are immutable after creation.** There is no edit path. To change a scheduled assignment, delete it and create a new one.
 
 **ShowNew + UseVirtualDesktop are mutually exclusive.** `ShowNewApplicationContext` creates a hidden timer window before `SwitchToNew()` is called, which causes `SetThreadDesktop` to fail. The `CreateAssignment` UI enforces this: ShowNew is disabled (greyed out with a hint) when the presentation has `UseVirtualDesktop = true`. Wallpaper and LogonScreen badges are also dimmed when `UseVirtualDesktop` is set.
 
-**Registry `teams\` naming** — value names must use the full generated folder name including the `team-` prefix (e.g. `team-cz-its`, not `CZ_ITS`).
+**Registry `teams\` naming** — value names must match the generated folder name exactly, i.e. the sanitized team name (e.g. `cz-its`, not `CZ_ITS`). Folder names carry no `team-` prefix.
 
 **NewsViewer startup** — `appsettings.json` is required (`optional: false`). Missing file = hard startup failure. `Main()` validates `Company`, `ApplicationName`, `CacheRootPath` and exits with `MessageBox` if any are empty.
 

@@ -442,9 +442,9 @@
 
         sanitized = System.Text.RegularExpressions.Regex.Replace(sanitized, @"[^a-z0-9\-]", "");
 
-        // Remove "team" from the name if it's already there
+        // Remove a redundant "team" token if the user typed it
         sanitized = sanitized.Replace("team-", "").Replace("-team", "");
 
-        return $"team-{sanitized}";
+        return sanitized;
     }
 }

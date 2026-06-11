@@ -11,7 +11,7 @@
 - `appsettings.json` must be declared in `NewsViewer.csproj` as `<Content Include="appsettings.json">` with `CopyToOutputDirectory = PreserveNewest` so it is deployed alongside the executable
 - `BuildConfiguration()` uses `optional: false` for both `AddJsonFile` calls — a missing `appsettings.json` is a hard startup failure
 - `Main()` validates `Company`, `ApplicationName`, and `CacheRootPath` after config load; if any are empty a `MessageBox` is shown and the process exits
-- Registry `teams\` value names must use the full generated folder name including the `team-` prefix (e.g. `team-cz-its`, not `CZ_ITS`)
+- Registry `teams\` value names must match the generated folder name exactly — the sanitized team name with no `team-` prefix (e.g. `cz-its`, not `CZ_ITS`)
 
 ## Display Mode
 

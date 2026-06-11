@@ -49,6 +49,10 @@ public class TeamService
 
         var folderName = GenerateFolderName(name);
 
+        if (string.IsNullOrWhiteSpace(folderName))
+            throw new InvalidOperationException(
+                "Team name must contain at least one letter or digit");
+
         var existing = await GetTeamByFolderNameAsync(folderName);
         if (existing != null)
             throw new InvalidOperationException(
@@ -145,7 +149,7 @@ public class TeamService
         sanitized = Regex.Replace(sanitized, @"[^a-z0-9\-]", "");
         sanitized = sanitized.Replace("team-", "").Replace("-team", "");
 
-        return $"team-{sanitized}";
+        return sanitized;
     }
 
     /// <summary>
