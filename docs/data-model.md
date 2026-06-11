@@ -344,7 +344,7 @@ Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implement
 {
   "SessionId": "guid",
   "PresentationId": "abc-123",
-  "TeamId": "team_xy",
+  "TeamId": "cz-its",
   "SessionStartTime": "2025-05-23T08:15:00Z",
   "SessionEndTime": "2025-05-23T08:15:34Z",
   "CloseReason": "Timeout",
@@ -360,10 +360,10 @@ Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implement
 
 ```
 %programdata%\NewsCentral\              ← machine-level; shared across all users
-├── team_xy\
+├── cz-its\
 │   ├── index.json                     TeamIndexFile
 │   └── images\generated\              downloaded presentation images
-├── team_xz\
+├── de-prod\
 │   └── ...
 ├── uploads\
 │   └── session-{guid}.json            written by NewsViewer, uploaded by NewsService

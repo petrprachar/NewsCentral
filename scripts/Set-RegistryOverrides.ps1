@@ -1,4 +1,14 @@
 #Requires -RunAsAdministrator
+# ============================================================================
+#  PARKED INDEFINITELY — NOT UNDER ACTIVE DEVELOPMENT
+#
+#  This script (Phase D per-team signing registry provisioning) is parked
+#  indefinitely. It is retained for reference only.
+#
+#  NOTE: the team names in the .EXAMPLE blocks below (e.g. team-cz-exp,
+#  team-de-prod) predate the removal of the `team-` folder-name prefix and
+#  are retained as-is. Current folder names carry no `team-` prefix.
+# ============================================================================
 <#
 .SYNOPSIS
     Configures registry overrides for a single NewsCentral component.

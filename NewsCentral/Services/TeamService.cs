@@ -147,7 +147,6 @@ public class TeamService
             .Replace("_", "-");
 
         sanitized = Regex.Replace(sanitized, @"[^a-z0-9\-]", "");
-        sanitized = sanitized.Replace("team-", "").Replace("-team", "");
 
         return sanitized;
     }
