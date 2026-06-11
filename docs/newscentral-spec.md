@@ -1,7 +1,7 @@
 # NewsCentral — Component Specification
 
 **Type:** .NET 9 MAUI Blazor Hybrid desktop application  
-**Status:** Active development. Admin page, assignments, publishing workflow, Azure blob distribution, and ShowMode/UseVirtualDesktop/VirtualDesktopBackgroundColor UI implemented.
+**Status:** Active development. Admin page, assignments, publishing workflow, Azure blob distribution, ShowMode/UseVirtualDesktop/VirtualDesktopBackgroundColor UI, and Phase B2 Key Management page implemented.
 
 ## Responsibilities
 
@@ -18,7 +18,7 @@
 | `PresentationService` | CRUD for presentations |
 | `AssignmentService` | Assignment lifecycle and approval workflow |
 | `PublishingService` | Publishes approved assignments to the repository |
-| `IndexGenerationService` | Generates and writes `index.json` for each team; signs the index via `EcdsaSignatureService` using the team's private key from `team-signing.json`; missing key → published unsigned with a warning |
+| `IndexGenerationService` | Generates and writes `index.json` for each team; signs the index via `EcdsaSignatureService` using the team's private key from `team-signing.json`; missing key → published unsigned with a warning. Public methods: `LoadTeamSigningKeysAsync`, `SaveTeamSigningKeysAsync` (used by `KeyManagement.razor`). |
 | `EcdsaSignatureService` | Signs `TeamIndexFile` with per-team ECDSA P-256; stateless singleton; index is normalized through `GetIndexJsonOptions` before signing |
 | `HmacService` | Registered singleton; no longer used for index signing in NewsCentral — session telemetry signing is done by NewsViewer |
 | `LocalStorageService` / `IStorageService` | File I/O abstraction |
@@ -33,6 +33,7 @@
 |---|---|---|
 | `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox (defaults to `true` for new presentations) and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
 | `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates (default start = today, all 7 days selected), select target teams, choose `ShowMode`, set approval requirement. ShowNew option is disabled (greyed out with hint) when the presentation has `UseVirtualDesktop = true`. Wallpaper and Logon Screen display-type badges are dimmed with a hint when `UseVirtualDesktop` is set, because those modes are incompatible with Virtual Desktop. |
+| `KeyManagement.razor` | `/key-management` | TeamAdmin-gated (SystemAdmin passes automatically). View current public key (full, copyable for GPO/registry deployment) and truncated private key hint. Generate a new ECDSA P-256 key pair (held in page state). Apply — sets `PublicKeyPrevious = old PublicKey` for rotation-window continuity and writes `team-signing.json` via `IStorageService` (never through `IBlobDistributionService`). Republish — separate deliberate action: re-signs and saves `index.json` via `GenerateAndSaveIndexAsync` (self-verify guard runs). Nav item hidden when no team is selected or user lacks TeamAdmin. Import-from-authority (paste/derive) deferred. |
 
 ## Storage Backend
 
