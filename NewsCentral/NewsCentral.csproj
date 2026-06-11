@@ -75,20 +75,6 @@
 		<!--<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.60" />-->
 	</ItemGroup>
 
-    <ItemGroup>
-      <Compile Update="Resources\Resources.Designer.cs">
-        <DesignTime>True</DesignTime>
-        <AutoGen>True</AutoGen>
-        <DependentUpon>Resources.resx</DependentUpon>
-      </Compile>
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Update="Resources\Resources.resx">
-        <Generator>PublicResXFileCodeGenerator</Generator>
-        <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-      </EmbeddedResource>
-    </ItemGroup>
 
     <ItemGroup>
       <PackageReference Update="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.60" />

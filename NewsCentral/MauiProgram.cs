@@ -194,22 +194,13 @@ public static class MauiProgram
             return new DataSeederService(storageService, appConfiguration, configuration);
         });
 
-        // Add localization
-        builder.Services.AddLocalization();
-
-        // Register string localizer
-        builder.Services.AddSingleton<IStringLocalizer>(sp =>
-        {
-            var factory = sp.GetRequiredService<IStringLocalizerFactory>();
-            return factory.Create(
-                "Resources.Resources",
-                typeof(MauiProgram).Assembly.GetName().Name!);
-        });
+        // Add localization — ResourcesPath tells the factory where to find per-type .resx files
+        builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
         // Set culture for testing
-        var culture = new CultureInfo("es");
-        CultureInfo.CurrentCulture = culture;
-        CultureInfo.CurrentUICulture = culture;
+        // var culture = new CultureInfo("es");
+        // CultureInfo.CurrentCulture = culture;
+        // CultureInfo.CurrentUICulture = culture;
 
         var app = builder.Build();
         return app;

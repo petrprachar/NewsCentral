@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Index-Verwaltung</value></data>
+  <data name="PageDescription" xml:space="preserve"><value>index.json-Dateien für Teams verwalten und neu generieren</value></data>
+  <data name="AccessDenied" xml:space="preserve"><value>Zugriff verweigert</value></data>
+  <data name="AccessDeniedMessage" xml:space="preserve"><value>Nur Systemadministratoren können auf diese Seite zugreifen.</value></data>
+  <data name="CurrentTeamSection" xml:space="preserve"><value>Index des aktuellen Teams</value></data>
+  <data name="CurrentTeam" xml:space="preserve"><value>Aktuelles Team</value></data>
+  <data name="IndexExists" xml:space="preserve"><value>Index vorhanden</value></data>
+  <data name="Yes" xml:space="preserve"><value>Ja</value></data>
+  <data name="No" xml:space="preserve"><value>Nein</value></data>
+  <data name="LastGenerated" xml:space="preserve"><value>Zuletzt generiert</value></data>
+  <data name="TotalAssignments" xml:space="preserve"><value>Zuweisungen gesamt</value></data>
+  <data name="ActiveAssignments" xml:space="preserve"><value>Aktiv</value></data>
+  <data name="UpcomingAssignments" xml:space="preserve"><value>Bevorstehend</value></data>
+  <data name="ExpiredAssignments" xml:space="preserve"><value>Abgelaufen</value></data>
+  <data name="Regenerating" xml:space="preserve"><value>Wird neu generiert...</value></data>
+  <data name="RegenerateCurrentTeam" xml:space="preserve"><value>Index des aktuellen Teams neu generieren</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>Kein Team ausgewählt. Bitte wählen Sie ein Team auf der Startseite aus.</value></data>
+  <data name="AllTeamsSection" xml:space="preserve"><value>Alle Team-Indizes</value></data>
+  <data name="AllTeamsDescription" xml:space="preserve"><value>Indexdateien für alle Teams neu generieren. Nützlich nach Massenänderungen oder zur Fehlersuche.</value></data>
+  <data name="Team" xml:space="preserve"><value>Team</value></data>
+  <data name="RegeneratingAll" xml:space="preserve"><value>Alle werden neu generiert...</value></data>
+  <data name="RegenerateAllTeams" xml:space="preserve"><value>Alle Team-Indizes neu generieren</value></data>
+  <data name="RegenerationSuccess" xml:space="preserve"><value>Index für {0} erfolgreich neu generiert!</value></data>
+  <data name="RegenerationAllSuccess" xml:space="preserve"><value>{0} von {1} Team-Indizes erfolgreich neu generiert!</value></data>
+  <data name="RegenerationError" xml:space="preserve"><value>Fehler: {0}</value></data>
+</root>

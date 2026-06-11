@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Key Management</value></data>
+  <data name="PageDescription" xml:space="preserve"><value>Generate, view, and rotate the signing key pair for the current team.</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>Select a team first.</value></data>
+  <data name="AccessDenied" xml:space="preserve"><value>Access Denied</value></data>
+  <data name="AccessDeniedMessage" xml:space="preserve"><value>You must be a Team Administrator for this team to manage signing keys.</value></data>
+  <data name="CurrentKeysSection" xml:space="preserve"><value>Current Keys</value></data>
+  <data name="CurrentTeam" xml:space="preserve"><value>Current Team</value></data>
+  <data name="NoKeyConfigured" xml:space="preserve"><value>No signing key configured for this team.</value></data>
+  <data name="CurrentPublicKey" xml:space="preserve"><value>Current Public Key</value></data>
+  <data name="CopyForGPO" xml:space="preserve"><value>Copy for GPO</value></data>
+  <data name="Copied" xml:space="preserve"><value>Copied to clipboard.</value></data>
+  <data name="CopyFailed" xml:space="preserve"><value>Copy failed — please copy the text manually.</value></data>
+  <data name="CurrentPrivateKey" xml:space="preserve"><value>Current Private Key</value></data>
+  <data name="PrivateKeyTruncatedHint" xml:space="preserve"><value>The private key is shown truncated and is never displayed in full.</value></data>
+  <data name="PreviousPublicKey" xml:space="preserve"><value>Previous Public Key</value></data>
+  <data name="GenerateSection" xml:space="preserve"><value>Generate New Key Pair</value></data>
+  <data name="GenerateDescription" xml:space="preserve"><value>Generate a new ECDSA key pair. It is held locally and is not saved until you apply it.</value></data>
+  <data name="GenerateNewKeyPair" xml:space="preserve"><value>Generate New Key Pair</value></data>
+  <data name="NotYetApplied" xml:space="preserve"><value>New key pair generated — not yet applied. Click Apply to save it.</value></data>
+  <data name="NotYetAppliedHint" xml:space="preserve"><value>Held in memory — not saved to disk until you click Apply.</value></data>
+  <data name="NewPublicKey" xml:space="preserve"><value>New Public Key</value></data>
+  <data name="NewPrivateKey" xml:space="preserve"><value>New Private Key</value></data>
+  <data name="Applying" xml:space="preserve"><value>Applying...</value></data>
+  <data name="Apply" xml:space="preserve"><value>Apply</value></data>
+  <data name="ApplySuccess" xml:space="preserve"><value>New key pair applied and saved.</value></data>
+  <data name="RotationReminder" xml:space="preserve"><value>Remember to deploy the new public key to clients before republishing.</value></data>
+  <data name="ApplyError" xml:space="preserve"><value>Failed to apply the new key pair</value></data>
+  <data name="RepublishSection" xml:space="preserve"><value>Republish</value></data>
+  <data name="RepublishReminder" xml:space="preserve"><value>Deploy the new public key to clients (and keep the previous one) before republishing, or clients will reject the index until they receive the new key.</value></data>
+  <data name="Republishing" xml:space="preserve"><value>Republishing...</value></data>
+  <data name="RepublishIndex" xml:space="preserve"><value>Republish Index</value></data>
+  <data name="RepublishSuccess" xml:space="preserve"><value>Index republished successfully for {0}.</value></data>
+  <data name="RepublishError" xml:space="preserve"><value>Failed to republish the index</value></data>
+  <data name="LoadError" xml:space="preserve"><value>Error loading signing keys</value></data>
+</root>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Schlüsselverwaltung</value></data>
+  <data name="PageDescription" xml:space="preserve"><value>Signaturschlüsselpaar des aktuellen Teams generieren, anzeigen und rotieren.</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>Wählen Sie zuerst ein Team aus.</value></data>
+  <data name="AccessDenied" xml:space="preserve"><value>Zugriff verweigert</value></data>
+  <data name="AccessDeniedMessage" xml:space="preserve"><value>Sie müssen Team-Administrator sein, um Signaturschlüssel verwalten zu können.</value></data>
+  <data name="CurrentKeysSection" xml:space="preserve"><value>Aktuelle Schlüssel</value></data>
+  <data name="CurrentTeam" xml:space="preserve"><value>Aktuelles Team</value></data>
+  <data name="NoKeyConfigured" xml:space="preserve"><value>Für dieses Team ist kein Signaturschlüssel konfiguriert.</value></data>
+  <data name="CurrentPublicKey" xml:space="preserve"><value>Aktueller öffentlicher Schlüssel</value></data>
+  <data name="CopyForGPO" xml:space="preserve"><value>Für GPO kopieren</value></data>
+  <data name="Copied" xml:space="preserve"><value>In die Zwischenablage kopiert.</value></data>
+  <data name="CopyFailed" xml:space="preserve"><value>Kopieren fehlgeschlagen — bitte kopieren Sie den Text manuell.</value></data>
+  <data name="CurrentPrivateKey" xml:space="preserve"><value>Aktueller privater Schlüssel</value></data>
+  <data name="PrivateKeyTruncatedHint" xml:space="preserve"><value>Der private Schlüssel wird gekürzt angezeigt und niemals vollständig dargestellt.</value></data>
+  <data name="PreviousPublicKey" xml:space="preserve"><value>Vorheriger öffentlicher Schlüssel</value></data>
+  <data name="GenerateSection" xml:space="preserve"><value>Neues Schlüsselpaar generieren</value></data>
+  <data name="GenerateDescription" xml:space="preserve"><value>Generieren Sie ein neues ECDSA-Schlüsselpaar. Es wird lokal gehalten und erst gespeichert, wenn Sie es anwenden.</value></data>
+  <data name="GenerateNewKeyPair" xml:space="preserve"><value>Neues Schlüsselpaar generieren</value></data>
+  <data name="NotYetApplied" xml:space="preserve"><value>Neues Schlüsselpaar generiert — noch nicht angewendet. Klicken Sie auf Anwenden, um es zu speichern.</value></data>
+  <data name="NotYetAppliedHint" xml:space="preserve"><value>Im Speicher gehalten — wird erst auf den Datenträger geschrieben, wenn Sie auf Anwenden klicken.</value></data>
+  <data name="NewPublicKey" xml:space="preserve"><value>Neuer öffentlicher Schlüssel</value></data>
+  <data name="NewPrivateKey" xml:space="preserve"><value>Neuer privater Schlüssel</value></data>
+  <data name="Applying" xml:space="preserve"><value>Wird angewendet...</value></data>
+  <data name="Apply" xml:space="preserve"><value>Anwenden</value></data>
+  <data name="ApplySuccess" xml:space="preserve"><value>Neues Schlüsselpaar angewendet und gespeichert.</value></data>
+  <data name="RotationReminder" xml:space="preserve"><value>Denken Sie daran, den neuen öffentlichen Schlüssel vor der Neuveröffentlichung auf die Clients zu verteilen.</value></data>
+  <data name="ApplyError" xml:space="preserve"><value>Fehler beim Anwenden des neuen Schlüsselpaars</value></data>
+  <data name="RepublishSection" xml:space="preserve"><value>Neu veröffentlichen</value></data>
+  <data name="RepublishReminder" xml:space="preserve"><value>Verteilen Sie den neuen öffentlichen Schlüssel (und behalten Sie den alten) auf die Clients, bevor Sie neu veröffentlichen, oder die Clients lehnen den Index ab, bis sie den neuen Schlüssel erhalten.</value></data>
+  <data name="Republishing" xml:space="preserve"><value>Wird neu veröffentlicht...</value></data>
+  <data name="RepublishIndex" xml:space="preserve"><value>Index neu veröffentlichen</value></data>
+  <data name="RepublishSuccess" xml:space="preserve"><value>Index für {0} erfolgreich neu veröffentlicht.</value></data>
+  <data name="RepublishError" xml:space="preserve"><value>Fehler beim Neu-Veröffentlichen des Index</value></data>
+  <data name="LoadError" xml:space="preserve"><value>Fehler beim Laden der Signaturschlüssel</value></data>
+</root>

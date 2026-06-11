@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Gestión de claves</value></data>
+  <data name="PageDescription" xml:space="preserve"><value>Genere, visualice y rote el par de claves de firma del equipo actual.</value></data>
+  <data name="NoTeamSelected" xml:space="preserve"><value>Seleccione primero un equipo.</value></data>
+  <data name="AccessDenied" xml:space="preserve"><value>Acceso denegado</value></data>
+  <data name="AccessDeniedMessage" xml:space="preserve"><value>Debe ser administrador del equipo para gestionar las claves de firma.</value></data>
+  <data name="CurrentKeysSection" xml:space="preserve"><value>Claves actuales</value></data>
+  <data name="CurrentTeam" xml:space="preserve"><value>Equipo actual</value></data>
+  <data name="NoKeyConfigured" xml:space="preserve"><value>No hay ninguna clave de firma configurada para este equipo.</value></data>
+  <data name="CurrentPublicKey" xml:space="preserve"><value>Clave pública actual</value></data>
+  <data name="CopyForGPO" xml:space="preserve"><value>Copiar para GPO</value></data>
+  <data name="Copied" xml:space="preserve"><value>Copiado al portapapeles.</value></data>
+  <data name="CopyFailed" xml:space="preserve"><value>Error al copiar — copie el texto manualmente.</value></data>
+  <data name="CurrentPrivateKey" xml:space="preserve"><value>Clave privada actual</value></data>
+  <data name="PrivateKeyTruncatedHint" xml:space="preserve"><value>La clave privada se muestra truncada y nunca se muestra completa.</value></data>
+  <data name="PreviousPublicKey" xml:space="preserve"><value>Clave pública anterior</value></data>
+  <data name="GenerateSection" xml:space="preserve"><value>Generar nuevo par de claves</value></data>
+  <data name="GenerateDescription" xml:space="preserve"><value>Genere un nuevo par de claves ECDSA. Se conserva localmente y no se guarda hasta que lo aplique.</value></data>
+  <data name="GenerateNewKeyPair" xml:space="preserve"><value>Generar nuevo par de claves</value></data>
+  <data name="NotYetApplied" xml:space="preserve"><value>Par de claves generado — aún no aplicado. Haga clic en Aplicar para guardarlo.</value></data>
+  <data name="NotYetAppliedHint" xml:space="preserve"><value>Retenido en memoria — no se guarda en disco hasta que haga clic en Aplicar.</value></data>
+  <data name="NewPublicKey" xml:space="preserve"><value>Nueva clave pública</value></data>
+  <data name="NewPrivateKey" xml:space="preserve"><value>Nueva clave privada</value></data>
+  <data name="Applying" xml:space="preserve"><value>Aplicando...</value></data>
+  <data name="Apply" xml:space="preserve"><value>Aplicar</value></data>
+  <data name="ApplySuccess" xml:space="preserve"><value>Nuevo par de claves aplicado y guardado.</value></data>
+  <data name="RotationReminder" xml:space="preserve"><value>Recuerde implementar la nueva clave pública en los clientes antes de volver a publicar.</value></data>
+  <data name="ApplyError" xml:space="preserve"><value>Error al aplicar el nuevo par de claves</value></data>
+  <data name="RepublishSection" xml:space="preserve"><value>Volver a publicar</value></data>
+  <data name="RepublishReminder" xml:space="preserve"><value>Implemente la nueva clave pública en los clientes (y conserve la anterior) antes de volver a publicar, o los clientes rechazarán el índice hasta recibir la nueva clave.</value></data>
+  <data name="Republishing" xml:space="preserve"><value>Volviendo a publicar...</value></data>
+  <data name="RepublishIndex" xml:space="preserve"><value>Volver a publicar el índice</value></data>
+  <data name="RepublishSuccess" xml:space="preserve"><value>Índice vuelto a publicar correctamente para {0}.</value></data>
+  <data name="RepublishError" xml:space="preserve"><value>Error al volver a publicar el índice</value></data>
+  <data name="LoadError" xml:space="preserve"><value>Error al cargar las claves de firma</value></data>
+</root>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Settings" xml:space="preserve"><value>Configuración</value></data>
+  <data name="ManageYourSettings" xml:space="preserve"><value>Gestiona tu cuenta y preferencias</value></data>
+  <data name="UserProfile" xml:space="preserve"><value>Perfil de usuario</value></data>
+  <data name="Username" xml:space="preserve"><value>Nombre de usuario</value></data>
+  <data name="DisplayName" xml:space="preserve"><value>Nombre para mostrar</value></data>
+  <data name="Email" xml:space="preserve"><value>Correo electrónico</value></data>
+  <data name="UserID" xml:space="preserve"><value>ID de usuario</value></data>
+  <data name="LastLogin" xml:space="preserve"><value>Último inicio de sesión</value></data>
+  <data name="ChangePassword" xml:space="preserve"><value>Cambiar contraseña</value></data>
+  <data name="CurrentPassword" xml:space="preserve"><value>Contraseña actual</value></data>
+  <data name="NewPassword" xml:space="preserve"><value>Nueva contraseña</value></data>
+  <data name="ConfirmPassword" xml:space="preserve"><value>Confirmar contraseña</value></data>
+  <data name="Language" xml:space="preserve"><value>Idioma</value></data>
+  <data name="LanguageChangeRequiresReload" xml:space="preserve"><value>Cambiar el idioma recargará la página</value></data>
+  <data name="AdminSettings" xml:space="preserve"><value>Configuración de administrador</value></data>
+  <data name="ManageUsers" xml:space="preserve"><value>Gestionar usuarios</value></data>
+  <data name="ManageTeams" xml:space="preserve"><value>Gestionar equipos</value></data>
+  <data name="IndexManagement" xml:space="preserve"><value>Gestión de índices</value></data>
+  <data name="CurrentPasswordRequired" xml:space="preserve"><value>La contraseña actual es obligatoria</value></data>
+  <data name="PasswordTooShort" xml:space="preserve"><value>La contraseña debe tener al menos 6 caracteres</value></data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve"><value>Las contraseñas no coinciden</value></data>
+  <data name="PasswordChangedSuccess" xml:space="preserve"><value>¡Contraseña cambiada correctamente!</value></data>
+</root>
