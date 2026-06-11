@@ -87,17 +87,18 @@ public sealed class SyncService(
         var remoteIndex = JsonSerializer.Deserialize<TeamIndexFile>(remoteJson, Json);
         if (remoteIndex is null) return;
 
-        var keys      = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolder);
-        var sigResult = ecdsa.Verify(remoteIndex, keys);
-        if (sigResult == VerifyResult.Invalid)
+        var keys          = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolder);
+        var result        = ecdsa.Verify(remoteIndex, keys);
+        var requireSigned = configuration.GetValue<bool>("Signing:RequireSignedIndex");
+        if (SignatureGate.ShouldReject(result, requireSigned, out var reason))
         {
-            logger.LogError(
-                "Team {Team}: index.json ECDSA signature invalid — sync aborted. " +
-                "Content may have been tampered with.", teamFolder);
+            logger.LogError("Team {Team}: index rejected — {Reason}", teamFolder, reason);
             return;
         }
-        if (sigResult == VerifyResult.Unsigned)
-            logger.LogWarning("Team {Team}: index.json carries no ECDSA signature", teamFolder);
+        if (result == VerifyResult.Unsigned)
+            logger.LogWarning("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+        else
+            logger.LogInformation("Team {Team}: index accepted — {Reason}", teamFolder, reason);
 
         var cachedIndex = await cache.ReadJsonAsync<TeamIndexFile>($"{teamFolder}/index.json");
 

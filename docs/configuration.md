@@ -38,6 +38,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 ├── Hmac\
 │       SecretKey   REG_SZ    (Base64-encoded 32-byte key; empty = HMAC disabled)
 ├── Signing\
+│       RequireSignedIndex  REG_SZ    "true" or "false"  (default false; when true, Unsigned/Disabled indexes are rejected)
 │       <teamFolderName>\
 │           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
 │           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
@@ -57,6 +58,7 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 ├── Hmac\
 │       SecretKey   REG_SZ
 ├── Signing\
+│       RequireSignedIndex  REG_SZ    "true" or "false"  (default false; when true, Unsigned/Disabled indexes are rejected)
 │       <teamFolderName>\
 │           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
 │           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
@@ -99,7 +101,7 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 
 **`teams\` sub-hive:** team folder names are the value *names* (not the value data). Value names must use the full generated folder name including the `team-` prefix (e.g. `team-cz-its`, not `CZ_ITS`). The provider exposes them as `teams:0`, `teams:1`, … so `IConfiguration.GetSection("teams").GetChildren()` returns one entry per team. Use `TeamConfigurationReader.GetTeams(configuration)` to read them.
 
-**`Signing\` sub-hive:** each team has its own subkey holding `PublicKey` and (optionally) `PublicKeyPrevious` as `REG_SZ` values containing Base64-encoded SubjectPublicKeyInfo. `RegistryConfigurationProvider` surfaces them via its recursive `WalkKey` traversal as `Signing:{teamFolderName}:PublicKey` and `Signing:{teamFolderName}:PublicKeyPrevious`. Use `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` to read them; the returned array is passed directly to `EcdsaSignatureService.Verify`. NewsService and NewsViewer each maintain their own separate `Signing\` subtrees.
+**`Signing\` sub-hive:** contains `RequireSignedIndex` (REG_SZ `"true"`/`"false"`, default `"false"`) plus one subkey per team. Each team subkey holds `PublicKey` and (optionally) `PublicKeyPrevious` as `REG_SZ` values containing Base64-encoded SubjectPublicKeyInfo. `RegistryConfigurationProvider` surfaces all values via its recursive `WalkKey` traversal: `Signing:RequireSignedIndex`, `Signing:{teamFolderName}:PublicKey`, and `Signing:{teamFolderName}:PublicKeyPrevious`. Use `SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)` to read the key list; use `configuration.GetValue<bool>("Signing:RequireSignedIndex")` to read the flag. When `RequireSignedIndex` is `true`, `SignatureGate.ShouldReject` rejects Unsigned and Disabled indexes in addition to Invalid — enabling fail-closed enforcement. NewsService and NewsViewer each maintain their own separate `Signing\` subtrees.
 
 ## appsettings.json — NewsCentral
 
@@ -159,6 +161,9 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   },
   "Hmac": {
     "SecretKey": ""
+  },
+  "Signing": {
+    "RequireSignedIndex": false
   }
 }
 ```
@@ -174,6 +179,9 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   "BypassImageIntegrityCheck": false,
   "Hmac": {
     "SecretKey": ""
+  },
+  "Signing": {
+    "RequireSignedIndex": false
   }
 }
 ```

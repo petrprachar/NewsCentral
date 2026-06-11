@@ -5,6 +5,7 @@ using NewsCentral.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using NewsCentral.Configuration;
 
@@ -105,11 +106,28 @@ public class IndexGenerationService
         index = JsonSerializer.Deserialize<TeamIndexFile>(
             JsonSerializer.Serialize(index, indexJsonOptions), indexJsonOptions)!;
 
-        var privateKey = await LoadTeamPrivateKeyAsync(teamFolderName);
-        if (!string.IsNullOrEmpty(privateKey))
+        var signingKeys = await LoadTeamSigningKeysAsync(teamFolderName);
+        if (!string.IsNullOrEmpty(signingKeys?.PrivateKey))
         {
-            index.Signature = _ecdsa.Sign(index, privateKey);
+            index.Signature = _ecdsa.Sign(index, signingKeys.PrivateKey);
             System.Diagnostics.Debug.WriteLine($"✓ index.json signed (ECDSA) for {teamFolderName}");
+
+            // Simulate client deserialization before any distribution to catch
+            // canonical/persisted-form drift (e.g., SmartDateTimeConverter changes).
+            if (!string.IsNullOrEmpty(index.Signature))
+            {
+                var written = JsonSerializer.Serialize(index, JsonConfiguration.GetIndexJsonOptions());
+                var clientReadOpts = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new JsonStringEnumConverter() }
+                };
+                var reloaded = JsonSerializer.Deserialize<TeamIndexFile>(written, clientReadOpts)!;
+                if (_ecdsa.Verify(reloaded, signingKeys.PublicKey) != VerifyResult.Valid)
+                    throw new InvalidOperationException(
+                        $"Self-verification failed for {teamFolderName}: the published index would be " +
+                        $"rejected by clients (canonical/persisted-form mismatch). Publish aborted.");
+            }
         }
         else
         {
@@ -416,11 +434,11 @@ public class IndexGenerationService
     // ── Signing ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Reads team-signing.json from the authoring tier and returns the private key.
-    /// Returns null if the file is absent, unreadable, or contains no private key.
+    /// Reads team-signing.json from the authoring tier.
+    /// Returns null if the file is absent, unreadable, or empty.
     /// team-signing.json is intentionally never passed to IBlobDistributionService.
     /// </summary>
-    private async Task<string?> LoadTeamPrivateKeyAsync(string teamFolderName)
+    private async Task<TeamSigningKeys?> LoadTeamSigningKeysAsync(string teamFolderName)
     {
         var path = $"{teamFolderName}/team-signing.json";
         try
@@ -428,9 +446,8 @@ public class IndexGenerationService
             var json = await _storage.ReadTextAsync(path);
             if (json == null) return null;
 
-            var keys = JsonSerializer.Deserialize<TeamSigningKeys>(
+            return JsonSerializer.Deserialize<TeamSigningKeys>(
                 json, JsonConfiguration.GetIndexJsonOptions());
-            return string.IsNullOrEmpty(keys?.PrivateKey) ? null : keys.PrivateKey;
         }
         catch (Exception ex)
         {

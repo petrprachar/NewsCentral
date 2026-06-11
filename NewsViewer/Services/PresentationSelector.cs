@@ -55,23 +55,15 @@ public sealed class PresentationSelector
 
             if (index?.PublishedAssignments is null) continue;
 
-            var keys      = SigningKeyConfigurationReader.GetPublicKeys(_configuration, team);
-            var sigResult = _ecdsa.Verify(index, keys);
-            if (sigResult == VerifyResult.Invalid)
+            var keys          = SigningKeyConfigurationReader.GetPublicKeys(_configuration, team);
+            var result        = _ecdsa.Verify(index, keys);
+            var requireSigned = _configuration.GetValue<bool>("Signing:RequireSignedIndex");
+            if (SignatureGate.ShouldReject(result, requireSigned, out var reason))
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ECDSA] {team}: index signature invalid — team skipped");
+                System.Diagnostics.Debug.WriteLine($"[Signing] {team}: index rejected — {reason}");
                 continue;
             }
-            if (sigResult == VerifyResult.Unsigned)
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ECDSA] {team}: index.json carries no ECDSA signature");
-            else if (sigResult == VerifyResult.Valid)
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ECDSA] {team}: index signature valid");
-            else if (sigResult == VerifyResult.Disabled)
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ECDSA] {team}: no public key configured — verification disabled");
+            System.Diagnostics.Debug.WriteLine($"[Signing] {team}: index accepted — {reason}");
 
             foreach (var a in index.PublishedAssignments)
             {
