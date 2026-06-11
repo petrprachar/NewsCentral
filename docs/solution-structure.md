@@ -5,7 +5,7 @@
 ```
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
-├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core (9 facts, all passing)
+├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate (28 facts, all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)
@@ -39,7 +39,7 @@ NewsCentral.Shared\
 │   └── IndexFile\
 │       ├── TeamIndexFile.cs           root structure for index.json; implements ISignable
 │       ├── PublishedAssignmentIndex.cs one entry per published assignment
-│       ├── ContentInfo.cs             image path, hash, size, URL
+│       ├── ContentInfo.cs             image path, hash, size, last-modified, URL
 │       ├── DisplayTypeInfo.cs         IsNewsOfWeek, IsWallpaper, IsLogonScreen
 │       └── IndexStatistics.cs         summary counts
 └── Security\
@@ -47,6 +47,7 @@ NewsCentral.Shared\
     ├── HmacOptions.cs                 POCO: SecretKey (Base64 string)
     ├── HmacService.cs                 Sign<T>, Verify<T>, VerifyResult enum
     ├── EcdsaSignatureService.cs       stateless ECDSA P-256/SHA-256 Sign<T>/Verify<T>; IEEE P1363; key-list rotation
+    ├── SignatureGate.cs               ShouldReject(result, requireSignedIndex, out reason) — centralizes accept/reject for index verification
     └── SigningKeyTool.cs              GenerateKeyPair, DerivePublicKey, Truncate — key-management helpers
 ```
 
@@ -78,7 +79,7 @@ NewsService\
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
 │   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
 │   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
-│   └── SyncService.cs             orchestrates the poll cycle; HMAC-verifies index.json before caching
+│   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
 ├── Worker.cs                      BackgroundService host; reads interval from configuration
 ├── Program.cs                     DI wiring; registers HmacService; adds registry override source; storage mode resolved from merged config
@@ -95,7 +96,7 @@ NewsViewer\
 │   └── ViewerState.cs                viewerstate.json structure
 │   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)
 ├── Services\
-│   ├── PresentationSelector.cs       reads index.json per team, HMAC-verifies, filters active, picks most recent, verifies image SHA-256
+│   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate, filters active, picks most recent, verifies image SHA-256
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
 │   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
@@ -114,7 +115,9 @@ NewsViewer\
 
 ```
 NewsCentral.Shared.Tests\
-└── EcdsaRoundTripTests.cs    round-trip: GenerateKeyPair → Sign → Verify (Valid / Invalid / Unsigned / Disabled / rotation fallback)
+├── EcdsaRoundTripTests.cs                  9 facts: GenerateKeyPair → Sign → Verify (Valid / Invalid / Unsigned / Disabled / rotation fallback / tamper detection / PEM input / bad-key rejection)
+├── SigningKeyConfigurationReaderTests.cs   5 facts: GetPublicKeys contract (both keys, empty filter, null filter, no-config, team scoping)
+└── SignatureGateTests.cs                  14 facts: ShouldReject full matrix (VerifyResult × requireSignedIndex) + reason-string assertions
 ```
 
 ## JSON Serialization Convention
