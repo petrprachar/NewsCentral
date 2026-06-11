@@ -1,6 +1,7 @@
 ﻿@using NewsCentral.Services
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
+@inject TeamContextService TeamContext
 @inject IStringLocalizer<NavMenu> Localizer
 @implements IDisposable
 
@@ -68,6 +69,15 @@
                 </div>
             }
 
+            @if (!string.IsNullOrEmpty(currentTeamId) && AuthService.HasRole(currentTeamId, "TeamAdmin"))
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="key-management">
+                        <span class="bi bi-key me-2" aria-hidden="true"></span> @Localizer["KeyManagement"]
+                    </NavLink>
+                </div>
+            }
+
             <hr class="nav-divider" />
 
             <div class="nav-item px-3">
@@ -81,11 +91,14 @@
 
 @code {
     private NewsCentral.Models.User? currentUser;
+    private string? currentTeamId;
 
     protected override void OnInitialized()
     {
-        currentUser = AuthService.GetCurrentUser();
+        currentUser   = AuthService.GetCurrentUser();
+        currentTeamId = TeamContext.GetCurrentTeamId();
         AuthService.OnAuthenticationStateChanged += HandleAuthenticationStateChanged;
+        TeamContext.OnTeamChanged                += HandleTeamChanged;
     }
 
     private void HandleAuthenticationStateChanged()
@@ -94,8 +107,15 @@
         InvokeAsync(StateHasChanged);
     }
 
+    private void HandleTeamChanged()
+    {
+        currentTeamId = TeamContext.GetCurrentTeamId();
+        InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         AuthService.OnAuthenticationStateChanged -= HandleAuthenticationStateChanged;
+        TeamContext.OnTeamChanged                -= HandleTeamChanged;
     }
 }

@@ -438,7 +438,7 @@ public class IndexGenerationService
     /// Returns null if the file is absent, unreadable, or empty.
     /// team-signing.json is intentionally never passed to IBlobDistributionService.
     /// </summary>
-    private async Task<TeamSigningKeys?> LoadTeamSigningKeysAsync(string teamFolderName)
+    public async Task<TeamSigningKeys?> LoadTeamSigningKeysAsync(string teamFolderName)
     {
         var path = $"{teamFolderName}/team-signing.json";
         try
@@ -455,6 +455,18 @@ public class IndexGenerationService
                 $"Failed to load team-signing.json for {teamFolderName}: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Writes team-signing.json to the authoring tier only.
+    /// Must never be called with IBlobDistributionService.
+    /// Serialized with camelCase (GetIndexJsonOptions) so it round-trips with LoadTeamSigningKeysAsync.
+    /// </summary>
+    public async Task SaveTeamSigningKeysAsync(string teamFolderName, TeamSigningKeys keys)
+    {
+        var path = $"{teamFolderName}/team-signing.json";
+        var json = JsonSerializer.Serialize(keys, JsonConfiguration.GetIndexJsonOptions());
+        await _storage.WriteTextAsync(path, json);
     }
 
     // ── Hashing ──────────────────────────────────────────────────────────────
