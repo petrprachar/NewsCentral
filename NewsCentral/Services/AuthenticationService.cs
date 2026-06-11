@@ -225,4 +225,20 @@ public class AuthenticationService
 
         return teamRole?.Roles.Any(r => roles.Contains(r)) ?? false;
     }
+
+    /// <summary>
+    /// True if the current user is a SystemAdmin, or holds the TeamAdmin role
+    /// in at least one team. Used to gate access to the Users page, where a
+    /// TeamAdmin may manage users and assign roles within the team(s) they admin.
+    /// </summary>
+    public bool IsTeamAdminOfAnyTeam()
+    {
+        if (_currentUser == null)
+            return false;
+
+        if (_currentUser.IsSystemAdmin)
+            return true;
+
+        return _currentUser.TeamRoles.Any(tr => tr.Roles.Contains("TeamAdmin"));
+    }
 }

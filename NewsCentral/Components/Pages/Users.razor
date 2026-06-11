@@ -92,7 +92,7 @@
                     <div class="user-actions">
                         <button @onclick="() => EditUser(user)" class="btn btn-secondary">@Localizer["Edit"]</button>
                         <button @onclick="() => ManageTeams(user)" class="btn btn-primary">@Localizer["ManageTeams"]</button>
-                        @if (user.UserID != AuthService.GetCurrentUser()?.UserID)
+                        @if (AuthService.IsSystemAdmin() && user.UserID != AuthService.GetCurrentUser()?.UserID)
                         {
                             <button @onclick="() => DeleteUser(user)" class="btn btn-danger">@Localizer["Delete"]</button>
                         }
@@ -165,12 +165,15 @@
                     <input type="password" @bind="password" class="form-control" />
                 </div>
 
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" @bind="isSystemAdmin" />
-                        @Localizer["SystemAdminLabel"]
-                    </label>
-                </div>
+                @if (AuthService.IsSystemAdmin())
+                {
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" @bind="isSystemAdmin" />
+                            @Localizer["SystemAdminLabel"]
+                        </label>
+                    </div>
+                }
             }
             else
             {
@@ -207,12 +210,15 @@
             {
                 var userTeamRole = managingUser?.TeamRoles.FirstOrDefault(tr => tr.TeamID == team.TeamID);
                 var isAssigned = userTeamRole != null;
+                var canManage = CanAdministerTeam(team.TeamID);
+                var isSysAdmin = AuthService.IsSystemAdmin();
 
                 <div class="team-assignment">
                     <div class="team-assignment-header">
                         <label>
                             <input type="checkbox"
                                    checked="@isAssigned"
+                                   disabled="@(!canManage)"
                                    @onchange="e => ToggleTeamAssignment(team, (bool)e.Value!)" />
                             <strong>@team.Name</strong>
                         </label>
@@ -224,18 +230,21 @@
                             <label>
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("ContentAuthor")"
+                                       disabled="@(!canManage)"
                                        @onchange="@(e => ToggleRole(team, "ContentAuthor", (bool)e.Value!))" />
                                 @Localizer["ContentAuthor"]
                             </label>
                             <label>
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("ContentApprover")"
+                                       disabled="@(!canManage)"
                                        @onchange="@(e => ToggleRole(team, "ContentApprover", (bool)e.Value!))" />
                                 @Localizer["ContentApprover"]
                             </label>
                             <label>
                                 <input type="checkbox"
                                        checked="@userTeamRole.Roles.Contains("TeamAdmin")"
+                                       disabled="@(!isSysAdmin)"
                                        @onchange="@(e => ToggleRole(team, "TeamAdmin", (bool)e.Value!))" />
                                 @Localizer["TeamAdmin"]
                             </label>
@@ -545,7 +554,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        if (!AuthService.IsSystemAdmin())
+        if (!AuthService.IsSystemAdmin() && !AuthService.IsTeamAdminOfAnyTeam())
         {
             Navigation.NavigateTo("/dashboard");
             return;
@@ -553,6 +562,11 @@
 
         await LoadData();
     }
+
+    // SystemAdmin may administer every team; a TeamAdmin only the team(s) where
+    // they hold the TeamAdmin role. Controls which role checkboxes are editable.
+    private bool CanAdministerTeam(string teamId) =>
+        AuthService.HasRole(teamId, "TeamAdmin");
 
     private async Task LoadData()
     {

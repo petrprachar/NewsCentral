@@ -41,20 +41,23 @@
                 </NavLink>
             </div>
 
-            @* SystemAdmin Section *@
-            @if (currentUser.IsSystemAdmin)
+            @* Admin Section — visible to SystemAdmin and to TeamAdmins (Users only) *@
+            @if (currentUser.IsSystemAdmin || AuthService.IsTeamAdminOfAnyTeam())
             {
                 <hr class="nav-divider" />
-                
+
                 <div class="nav-section-header px-3">
                     <small class="text-muted">@Localizer["AdminSection"]</small>
                 </div>
 
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="teams">
-                        <span class="bi bi-diagram-3 me-2" aria-hidden="true"></span> @Localizer["Teams"]
-                    </NavLink>
-                </div>
+                @if (currentUser.IsSystemAdmin)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="teams">
+                            <span class="bi bi-diagram-3 me-2" aria-hidden="true"></span> @Localizer["Teams"]
+                        </NavLink>
+                    </div>
+                }
 
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="users">
@@ -62,11 +65,14 @@
                     </NavLink>
                 </div>
 
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="index-management">
-                        <span class="bi bi-database me-2" aria-hidden="true"></span> @Localizer["IndexManagement"]
-                    </NavLink>
-                </div>
+                @if (currentUser.IsSystemAdmin)
+                {
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="index-management">
+                            <span class="bi bi-database me-2" aria-hidden="true"></span> @Localizer["IndexManagement"]
+                        </NavLink>
+                    </div>
+                }
             }
 
             @if (!string.IsNullOrEmpty(currentTeamId) && AuthService.HasRole(currentTeamId, "TeamAdmin"))

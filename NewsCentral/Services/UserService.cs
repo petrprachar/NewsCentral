@@ -26,6 +26,18 @@ public class UserService
         _userRepo = new JsonFileRepository<UsersCollection>(_storage, "config", "");
     }
 
+    // ── Authorization helpers ─────────────────────────────────────────────────
+
+    // True if the user is a SystemAdmin or holds TeamAdmin in at least one team.
+    private static bool IsTeamAdminOfAnyTeam(User user) =>
+        user.IsSystemAdmin || user.TeamRoles.Any(tr => tr.Roles.Contains("TeamAdmin"));
+
+    // True if the user may administer the given team: SystemAdmin (any team) or
+    // TeamAdmin of that specific team.
+    private static bool CurrentUserAdministersTeam(User user, string teamId) =>
+        user.IsSystemAdmin ||
+        user.TeamRoles.Any(tr => tr.TeamID == teamId && tr.Roles.Contains("TeamAdmin"));
+
     // ── Queries ──────────────────────────────────────────────────────────────
 
     public async Task<List<User>> GetAllUsersAsync()
@@ -98,8 +110,11 @@ public class UserService
         string password, bool isSystemAdmin = false)
     {
         var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null || !currentUser.IsSystemAdmin)
-            throw new UnauthorizedAccessException("Only SystemAdmin can create users");
+        if (currentUser == null || (!currentUser.IsSystemAdmin && !IsTeamAdminOfAnyTeam(currentUser)))
+            throw new UnauthorizedAccessException("Only SystemAdmin or TeamAdmin can create users");
+
+        if (isSystemAdmin && !currentUser.IsSystemAdmin)
+            throw new UnauthorizedAccessException("Only SystemAdmin can create SystemAdmin users");
 
         var existing = await GetUserByUsernameAsync(username);
         if (existing != null)
@@ -133,14 +148,17 @@ public class UserService
         string userId, string email, string displayName, bool isActive)
     {
         var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null || !currentUser.IsSystemAdmin)
-            throw new UnauthorizedAccessException("Only SystemAdmin can update users");
+        if (currentUser == null || (!currentUser.IsSystemAdmin && !IsTeamAdminOfAnyTeam(currentUser)))
+            throw new UnauthorizedAccessException("Only SystemAdmin or TeamAdmin can update users");
 
         var usersCollection = await _userRepo.GetByIdAsync("users")
             ?? throw new InvalidOperationException("Users collection not found");
 
         var user = usersCollection.Users.FirstOrDefault(u => u.UserID == userId)
             ?? throw new InvalidOperationException($"User {userId} not found");
+
+        if (user.IsSystemAdmin && !currentUser.IsSystemAdmin)
+            throw new UnauthorizedAccessException("Only SystemAdmin can modify a SystemAdmin user");
 
         user.Email       = email;
         user.DisplayName = displayName;
@@ -203,8 +221,11 @@ public class UserService
         string userId, string teamId, string teamFolderName, List<string> roles)
     {
         var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null || !currentUser.IsSystemAdmin)
-            throw new UnauthorizedAccessException("Only SystemAdmin can assign users to teams");
+        if (currentUser == null || !CurrentUserAdministersTeam(currentUser, teamId))
+            throw new UnauthorizedAccessException("You don't have permission to assign users to this team");
+
+        if (!currentUser.IsSystemAdmin && roles.Contains("TeamAdmin"))
+            throw new UnauthorizedAccessException("Only SystemAdmin can grant TeamAdmin role");
 
         var usersCollection = await _userRepo.GetByIdAsync("users");
         if (usersCollection == null) return false;
@@ -230,14 +251,18 @@ public class UserService
     public async Task<bool> RemoveUserFromTeamAsync(string userId, string teamId)
     {
         var currentUser = _authService.GetCurrentUser();
-        if (currentUser == null || !currentUser.IsSystemAdmin)
-            throw new UnauthorizedAccessException("Only SystemAdmin can remove users from teams");
+        if (currentUser == null || !CurrentUserAdministersTeam(currentUser, teamId))
+            throw new UnauthorizedAccessException("You don't have permission to remove users from this team");
 
         var usersCollection = await _userRepo.GetByIdAsync("users");
         if (usersCollection == null) return false;
 
         var user = usersCollection.Users.FirstOrDefault(u => u.UserID == userId);
         if (user == null) return false;
+
+        var existingRole = user.TeamRoles.FirstOrDefault(tr => tr.TeamID == teamId);
+        if (!currentUser.IsSystemAdmin && existingRole != null && existingRole.Roles.Contains("TeamAdmin"))
+            throw new UnauthorizedAccessException("Only SystemAdmin can remove a TeamAdmin from a team");
 
         var removed = user.TeamRoles.RemoveAll(tr => tr.TeamID == teamId);
         if (removed == 0) return false;
@@ -266,6 +291,9 @@ public class UserService
 
         if (!currentUser.IsSystemAdmin)
         {
+            if (!CurrentUserAdministersTeam(currentUser, teamId))
+                throw new UnauthorizedAccessException("You don't have permission to modify roles for this team");
+
             if (roles.Contains("TeamAdmin") && !teamRole.Roles.Contains("TeamAdmin"))
                 throw new UnauthorizedAccessException("Only SystemAdmin can grant TeamAdmin role");
 
