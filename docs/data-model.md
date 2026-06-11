@@ -247,7 +247,7 @@ public class TeamIndexFile : ISignable
     public string IndexHash { get; set; }               // SHA256 of content for change detection
     public List<PublishedAssignmentIndex> PublishedAssignments { get; set; }
     public IndexStatistics Statistics { get; set; }
-    public string? Signature { get; set; }              // HMAC-SHA256 today; ECDSA P-256 per-team migration planned
+    public string? Signature { get; set; }              // ECDSA P-256 per-team (Phases B1+C complete)
 }
 
 public class PublishedAssignmentIndex
@@ -256,6 +256,7 @@ public class PublishedAssignmentIndex
     public string PresentationId { get; set; }
     public string ScheduleId { get; set; }
     public string PresentationName { get; set; }
+    public string PresentationDescription { get; set; }
     public int PresentationVersion { get; set; }
     public DateTime PresentationLastModified { get; set; }
     public DateTime ScheduleStart { get; set; }         // Client local time (no Z suffix)
@@ -266,6 +267,7 @@ public class PublishedAssignmentIndex
     public DisplayTypeInfo DisplayTypes { get; set; }
     public ContentInfo Content { get; set; }
     public string SourceTeamFolderName { get; set; }
+    public string SourceTeamName { get; set; }
 
     public string? PosterText { get; set; }             // From Presentation.PosterText
     public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
@@ -280,6 +282,7 @@ public class ContentInfo
     public string? ImageUrl { get; set; }               // Azure Blob URL
     public string ImageHash { get; set; }               // SHA256 for cache invalidation
     public long ImageSizeBytes { get; set; }
+    public DateTime ImageLastModified { get; set; }     // From Presentation.LastModified
     public string MoreInfoUrl { get; set; }
 }
 

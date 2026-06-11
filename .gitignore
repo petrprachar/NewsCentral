@@ -368,3 +368,6 @@ FodyWeavers.xsd
 # Per-team ECDSA signing key material (contains private keys — authoring tier only)
 team-signing.json
 **/team-signing.json
+
+# Exported test project archive (source is tracked as a directory)
+NewsCentral.Shared.Tests.zip
