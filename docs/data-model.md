@@ -336,6 +336,27 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 }
 ```
 
+## ResolvedTeams (resolved-teams.json)
+
+Model: `NewsCentral.Models.ResolvedTeamsFile` (in `NewsCentral.Shared`). Written by NewsService to `{CacheRootPath}\resolved-teams.json` each poll cycle; read by NewsViewer, which **unions** these entries with the registry static team list.
+
+Lists **only** dynamic teams resolved from the device's Entra `extensionAttributes` (see `EntraTeamNameResolver`). It is a **local-tier file**, **unsigned**, and protected by cache ACLs. It carries no signature fields because dynamic-team `index.json` verification uses a public key **delivered with the team content** (key-with-content model) — the full key-delivery and verification mechanics land in Phases 2–3.
+
+```json
+{
+  "GeneratedUtc": "2026-06-12T08:12:00Z",
+  "Teams": [
+    {
+      "TeamFolderName": "cz-prague-its",
+      "LastConfirmedUtc": "2026-06-12T08:12:00Z",
+      "State": "Active"
+    }
+  ]
+}
+```
+
+`State` values: `Active`, `Grace`. Serializes with the existing camelCase + `JsonStringEnumConverter` options used across NewsService/NewsViewer; no new serializer options are introduced.
+
 ## Session Telemetry (NewsViewer → uploads folder)
 
 Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implements `ISignable`). Shared so both NewsViewer (writer) and NewsService (verifier) can deserialize and verify without model duplication.
