@@ -41,8 +41,7 @@ static class Program
         if (IsRemoteOrVirtualSession()) return;
 
         var hmac     = new HmacService(config.Hmac);           // telemetry only — unchanged
-        var ecdsa    = new EcdsaSignatureService();
-        var selector = new PresentationSelector(config.CacheRootPath, ecdsa, configuration, config.BypassImageIntegrityCheck);
+        var selector = new PresentationSelector(config.CacheRootPath, configuration, config.BypassImageIntegrityCheck);
         var (assignment, imagePath) = selector.SelectActive(teams);
         if (assignment is null || imagePath is null) return;
 

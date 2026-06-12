@@ -19,7 +19,6 @@ public sealed class SyncService(
     CacheManager cache,
     WallpaperService wallpaper,
     TelemetryUploader telemetry,
-    EcdsaSignatureService ecdsa,
     EntraTeamResolutionService entra,
     IConfiguration configuration,
     ILogger<SyncService> logger)
@@ -32,9 +31,14 @@ public sealed class SyncService(
         string syncSource = "None";
 
         // Entra device team resolution — time-boxed and failure-isolated so a Graph problem
-        // never stalls or fails blob sync. Phase 2 only writes resolved-teams.json; SyncService
-        // still iterates only the static (registry/appsettings) teams below.
+        // never stalls or fails blob sync. Runs FIRST so resolved-teams.json reflects this cycle
+        // before the effective team set is computed below.
         await RefreshEntraTeamsAsync(ct);
+
+        // Effective teams = static (registry/appsettings) ∪ dynamic (Entra-resolved). Per-team
+        // verification routes through SignatureGate.VerifyWithPrecedence (registry key wins →
+        // delivered key for dynamic teams → unsigned), so dynamic-only branching never leaks here.
+        var (effectiveTeams, dynamicTeams) = ResolveEffectiveTeams(teams, cache.Root);
 
         try
         {
@@ -44,11 +48,11 @@ public sealed class SyncService(
             }
             else
             {
-                online = await SyncAllTeamsAsync(teams, ct);
+                online = await SyncAllTeamsAsync(effectiveTeams, dynamicTeams, ct);
                 syncSource = repository.SyncSource;
             }
 
-            await ApplyWallpaperAndLockscreenAsync(teams);
+            await ApplyWallpaperAndLockscreenAsync(effectiveTeams);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -83,15 +87,29 @@ public sealed class SyncService(
         }
     }
 
+    /// <summary>
+    /// Combines the static team list with the dynamic (Entra-resolved) team set read from
+    /// resolved-teams.json. Returned as the de-duplicated effective list plus the dynamic set
+    /// (so callers can ask isDynamic per team). Pure aside from the resolved-teams.json read.
+    /// </summary>
+    internal static (List<string> Effective, HashSet<string> Dynamic) ResolveEffectiveTeams(
+        string[] staticTeams, string cacheRootPath)
+    {
+        var dynamicTeams = ResolvedTeamsReader.ReadDynamicTeamFolders(cacheRootPath);
+        var effective    = EffectiveTeams.Union(staticTeams, dynamicTeams);
+        return (effective, dynamicTeams);
+    }
+
     // ── Step 1 — team sync ───────────────────────────────────────────────────
 
-    private async Task<bool> SyncAllTeamsAsync(string[] teams, CancellationToken ct)
+    private async Task<bool> SyncAllTeamsAsync(
+        IReadOnlyList<string> teams, HashSet<string> dynamicTeams, CancellationToken ct)
     {
         bool allOk = true;
         foreach (var teamFolder in teams)
         {
             ct.ThrowIfCancellationRequested();
-            try { await SyncTeamAsync(teamFolder, ct); }
+            try { await SyncTeamAsync(teamFolder, dynamicTeams.Contains(teamFolder), ct); }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Failed to sync team {Team}", teamFolder);
@@ -101,7 +119,7 @@ public sealed class SyncService(
         return allOk;
     }
 
-    private async Task SyncTeamAsync(string teamFolder, CancellationToken ct)
+    private async Task SyncTeamAsync(string teamFolder, bool isDynamic, CancellationToken ct)
     {
         var remoteJson = await repository.ReadTextAsync($"{teamFolder}/index.json", ct);
         if (remoteJson is null)
@@ -114,7 +132,7 @@ public sealed class SyncService(
         if (remoteIndex is null) return;
 
         var keys          = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolder);
-        var result        = ecdsa.Verify(remoteIndex, keys);
+        var result        = SignatureGate.VerifyWithPrecedence(remoteIndex, keys, isDynamic);
         var requireSigned = configuration.GetValue<bool>("Signing:RequireSignedIndex");
         if (SignatureGate.ShouldReject(result, requireSigned, out var reason))
         {
@@ -175,7 +193,7 @@ public sealed class SyncService(
 
     // ── Step 2 — wallpaper / lock screen ─────────────────────────────────────
 
-    private async Task ApplyWallpaperAndLockscreenAsync(string[] teams)
+    private async Task ApplyWallpaperAndLockscreenAsync(IReadOnlyList<string> teams)
     {
         var state = await cache.ReadJsonAsync<ServiceState>("servicestate.json") ?? new();
 

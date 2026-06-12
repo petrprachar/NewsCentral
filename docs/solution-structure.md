@@ -7,8 +7,8 @@ NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
 ├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers (72 facts, all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
-├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution phases 1–2.5)
-├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator (offline seams; 16 facts, all passing)
+├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
+├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union (offline seams; 19 facts, all passing)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)
 ```
 

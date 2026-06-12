@@ -10,18 +10,15 @@ namespace NewsViewer.Services;
 public sealed class PresentationSelector
 {
     private readonly string _cacheRootPath;
-    private readonly EcdsaSignatureService _ecdsa;
     private readonly IConfiguration _configuration;
     private readonly bool _bypassImageIntegrityCheck;
 
     public PresentationSelector(
         string cacheRootPath,
-        EcdsaSignatureService ecdsa,
         IConfiguration configuration,
         bool bypassImageIntegrityCheck = false)
     {
         _cacheRootPath             = cacheRootPath;
-        _ecdsa                     = ecdsa;
         _configuration             = configuration;
         _bypassImageIntegrityCheck = bypassImageIntegrityCheck;
     }
@@ -38,9 +35,16 @@ public sealed class PresentationSelector
             ? "7"
             : ((int)now.DayOfWeek).ToString();
 
+        // Effective teams = static (registry/appsettings) ∪ dynamic (Entra-resolved, read-only here;
+        // NewsViewer never writes resolved-teams.json). Per-team verification routes through
+        // SignatureGate.VerifyWithPrecedence so registry-wins / delivered-key / anti-downgrade are
+        // handled centrally — no precedence branching at this call site.
+        var dynamicTeams   = ResolvedTeamsReader.ReadDynamicTeamFolders(_cacheRootPath);
+        var effectiveTeams = EffectiveTeams.Union(teams, dynamicTeams);
+
         PublishedAssignmentIndex? best = null;
 
-        foreach (var team in teams)
+        foreach (var team in effectiveTeams)
         {
             var indexPath = Path.Combine(_cacheRootPath, team, "index.json");
             if (!File.Exists(indexPath)) continue;
@@ -56,7 +60,7 @@ public sealed class PresentationSelector
             if (index?.PublishedAssignments is null) continue;
 
             var keys          = SigningKeyConfigurationReader.GetPublicKeys(_configuration, team);
-            var result        = _ecdsa.Verify(index, keys);
+            var result        = SignatureGate.VerifyWithPrecedence(index, keys, dynamicTeams.Contains(team));
             var requireSigned = _configuration.GetValue<bool>("Signing:RequireSignedIndex");
             if (SignatureGate.ShouldReject(result, requireSigned, out var reason))
             {
