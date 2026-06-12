@@ -20,6 +20,7 @@ public sealed class SyncService(
     WallpaperService wallpaper,
     TelemetryUploader telemetry,
     EcdsaSignatureService ecdsa,
+    EntraTeamResolutionService entra,
     IConfiguration configuration,
     ILogger<SyncService> logger)
 {
@@ -29,6 +30,11 @@ public sealed class SyncService(
     {
         bool online = false;
         string syncSource = "None";
+
+        // Entra device team resolution — time-boxed and failure-isolated so a Graph problem
+        // never stalls or fails blob sync. Phase 2 only writes resolved-teams.json; SyncService
+        // still iterates only the static (registry/appsettings) teams below.
+        await RefreshEntraTeamsAsync(ct);
 
         try
         {
@@ -55,6 +61,26 @@ public sealed class SyncService(
         }
 
         await telemetry.ProcessAsync(ct);
+    }
+
+    // ── Step 0 — Entra dynamic-team resolution (time-boxed, isolated) ─────────
+
+    private async Task RefreshEntraTeamsAsync(CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(TimeSpan.FromSeconds(20));
+        try
+        {
+            await entra.RefreshAsync(cts.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;   // service shutdown
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Entra team resolution failed — continuing with static teams.");
+        }
     }
 
     // ── Step 1 — team sync ───────────────────────────────────────────────────

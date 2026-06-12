@@ -21,7 +21,6 @@ builder.Services.AddSingleton(config);
 // ── Repository reader — mode resolved from merged configuration ───────────────
 if (config.Repository.StorageMode.Equals("Azure", StringComparison.OrdinalIgnoreCase))
 {
-    builder.Services.AddSingleton(config.AzureBlob);
     builder.Services.AddSingleton<IRepositoryReader, AzureBlobRepositoryReader>();
 }
 else
@@ -31,6 +30,17 @@ else
             config.Repository.SharePath,
             sp.GetRequiredService<ILogger<LocalShareRepositoryReader>>()));
 }
+
+// AzureBlob section is needed by the blob reader and by the Entra Graph client (which reuses
+// the same credential even when StorageMode=Share), so register it unconditionally.
+builder.Services.AddSingleton(config.AzureBlob);
+
+// ── Entra device team resolution (Phase 2 — produces resolved-teams.json) ─────
+// GraphServiceClient/credential are built lazily inside EntraDeviceClient, so nothing is
+// constructed when Entra is disabled or AzureBlob creds are absent.
+builder.Services.AddSingleton<DeviceIdentityProvider>();
+builder.Services.AddSingleton<EntraDeviceClient>();
+builder.Services.AddSingleton<EntraTeamResolutionService>();
 
 // ── Signing services ─────────────────────────────────────────────────────────
 builder.Services.AddSingleton(new HmacService(config.Hmac));   // telemetry (unchanged)

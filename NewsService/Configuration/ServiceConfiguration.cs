@@ -10,6 +10,16 @@ public class ServiceConfiguration
     public RepositorySection Repository { get; set; } = new();
     public AzureBlobSection AzureBlob { get; set; } = new();
     public HmacOptions Hmac { get; set; } = new();
+    public EntraOptions Entra { get; set; } = new();
+}
+
+public class EntraOptions
+{
+    public bool Enabled { get; set; } = false;
+    public int GracePeriodMinutes { get; set; } = 240;
+
+    /// <summary>Selector (extensionAttribute1 value) → rule (e.g. "FAT" → "extensionAttribute2-extensionAttribute5").</summary>
+    public Dictionary<string, string> Mappings { get; set; } = new();
 }
 
 public class ServiceSection

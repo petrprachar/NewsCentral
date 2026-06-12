@@ -1,9 +1,6 @@
 using Azure;
-using Azure.Core;
-using Azure.Identity;
 using Azure.Storage.Blobs;
 using NewsService.Configuration;
-using System.Security.Cryptography.X509Certificates;
 
 namespace NewsService.Services;
 
@@ -33,7 +30,7 @@ public sealed class AzureBlobRepositoryReader : IRepositoryReader
         if (string.IsNullOrWhiteSpace(config.ContainerName))
             throw new InvalidOperationException("AzureBlob:ContainerName must be set.");
 
-        var credential  = BuildCredential(config);
+        var credential  = AzureCredentialFactory.Create(config);
         var serviceUri  = new Uri($"https://{config.AccountName}.blob.core.windows.net");
         var service     = new BlobServiceClient(serviceUri, credential);
         _container      = service.GetBlobContainerClient(config.ContainerName);
@@ -83,37 +80,4 @@ public sealed class AzureBlobRepositoryReader : IRepositoryReader
         }
     }
 
-    // ── Credential factory ───────────────────────────────────────────────────
-
-    private static TokenCredential BuildCredential(AzureBlobSection cfg)
-    {
-        if (cfg.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(cfg.TenantId) ||
-                string.IsNullOrWhiteSpace(cfg.ClientId) ||
-                string.IsNullOrWhiteSpace(cfg.ClientSecret))
-                throw new InvalidOperationException(
-                    "AzureBlob:AuthMode=ClientSecret requires TenantId, ClientId, and ClientSecret.");
-
-            return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret);
-        }
-
-        // Default: Certificate
-        if (string.IsNullOrWhiteSpace(cfg.TenantId) ||
-            string.IsNullOrWhiteSpace(cfg.ClientId) ||
-            string.IsNullOrWhiteSpace(cfg.CertificateThumbprint))
-            throw new InvalidOperationException(
-                "AzureBlob:AuthMode=Certificate requires TenantId, ClientId, and CertificateThumbprint.");
-
-        using var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
-        store.Open(OpenFlags.ReadOnly);
-        var certs = store.Certificates.Find(
-            X509FindType.FindByThumbprint, cfg.CertificateThumbprint, validOnly: false);
-
-        if (certs.Count == 0)
-            throw new InvalidOperationException(
-                $"Certificate with thumbprint '{cfg.CertificateThumbprint}' not found in LocalMachine\\My.");
-
-        return new ClientCertificateCredential(cfg.TenantId, cfg.ClientId, certs[0]);
-    }
 }

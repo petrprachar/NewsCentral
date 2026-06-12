@@ -43,6 +43,14 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
 │           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
 │       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
+├── Entra\
+│       Enabled              REG_SZ    "true" or "false"  (default false; gates the whole feature)
+│       GracePeriodMinutes   DWORD     (retention window for the last resolved team while Graph is unreachable; default 240)
+│       Mappings\
+│           FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
+│           VDE   REG_SZ   "extensionAttribute3"
+│           VDL   REG_SZ   "extensionAttribute6-extensionAttribute2"
+│       (selector → rule; surfaced as Entra:Enabled / Entra:GracePeriodMinutes / Entra:Mappings:FAT via the recursive walk)
 └── teams\
         (one REG_SZ value per team; value name = team folder name; data = "")
         e.g.  cz-its   REG_SZ   ""
@@ -164,6 +172,11 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   },
   "Signing": {
     "RequireSignedIndex": false
+  },
+  "Entra": {
+    "Enabled": false,
+    "GracePeriodMinutes": 240,
+    "Mappings": {}
   }
 }
 ```
@@ -200,3 +213,43 @@ NewsService runs as an unattended Windows Service with no interactive user. It a
 **ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing.
 
 NewsCentral does **not** use these modes. It authenticates via an interactive MSAL user session.
+
+## Entra device team resolution (NewsService)
+
+NewsService can resolve **one dynamic team** per machine from the machine's own Entra (Azure AD) device object each poll cycle, unioned with the static team list. The feature is gated by `Entra:Enabled` (default `false`). Phase 2 only **produces** `{CacheRootPath}\resolved-teams.json`; consuming it (dynamic-team content sync and NewsViewer display) is Phase 3.
+
+**appsettings.json (NewsService):**
+
+```json
+"Entra": {
+  "Enabled": false,
+  "GracePeriodMinutes": 240,
+  "Mappings": {
+    "FAT": "extensionAttribute2-extensionAttribute5-extensionAttribute4",
+    "VDE": "extensionAttribute3",
+    "VDL": "extensionAttribute6-extensionAttribute2"
+  }
+}
+```
+
+**Registry layout** (override; surfaced via the recursive walk in `RegistryConfigurationProvider`):
+
+```
+HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
+    Enabled              REG_SZ   "true" / "false"
+    GracePeriodMinutes   DWORD
+    Mappings\
+        FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
+        VDE   REG_SZ   "extensionAttribute3"
+        VDL   REG_SZ   "extensionAttribute6-extensionAttribute2"
+```
+
+`Entra:Mappings:FAT` etc. bind into `EntraOptions.Mappings` automatically — no provider change.
+
+**Rule format:** `extensionAttribute1` on the device is the **selector** and must equal a mapping key (ordinal, case-sensitive — e.g. `FAT`/`VDE`/`VDL`). Its mapped rule is a `'-'`-joined, ordered list of attribute names drawn from `extensionAttribute2`..`extensionAttribute15` (attribute 1 may not appear in a rule; 0 and 16+ are invalid). NewsService reads each referenced attribute, joins the values in **rule order** with `-`, and canonicalizes (lower-case; space/underscore → `-`; strip anything outside `[a-z0-9-]`) into a team folder name — byte-for-byte identical to an authored folder built from the same tokens. Any empty referenced attribute aborts resolution for that cycle.
+
+**Grace:** when the device/Graph is **unreachable** (auth/network/timeout), the last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer (device read OK, but no/invalid mapping, or device object not found) removes the entry **immediately** — grace covers transient failures only.
+
+**Credential reuse:** the Microsoft Graph device read uses the **same `AzureBlob` credential and the same single app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**. Graph rides the same default .NET HTTP stack as blob — no app-specific proxy configuration.
+
+**Required Graph permission (operational prerequisite, not provisioned by code):** the existing app registration must be granted Microsoft Graph **application** permission `Device.Read.All` with admin consent. No new app registration is created.
