@@ -18,6 +18,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsViewer", "NewsViewer\Ne
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsCentral.Shared.Tests", "NewsCentral.Shared.Tests\NewsCentral.Shared.Tests.csproj", "{D2646CA1-564E-47B0-9CE2-E680458C9EBB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NewsService.Tests", "NewsService.Tests\NewsService.Tests.csproj", "{0A92F100-EDA2-4812-8766-27681BAA459F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -88,6 +90,18 @@ Global
 		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x64.Build.0 = Release|Any CPU
 		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x86.ActiveCfg = Release|Any CPU
 		{D2646CA1-564E-47B0-9CE2-E680458C9EBB}.Release|x86.Build.0 = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|x64.Build.0 = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Debug|x86.Build.0 = Debug|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|x64.ActiveCfg = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|x64.Build.0 = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|x86.ActiveCfg = Release|Any CPU
+		{0A92F100-EDA2-4812-8766-27681BAA459F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -38,8 +38,8 @@ builder.Services.AddSingleton(config.AzureBlob);
 // ── Entra device team resolution (Phase 2 — produces resolved-teams.json) ─────
 // GraphServiceClient/credential are built lazily inside EntraDeviceClient, so nothing is
 // constructed when Entra is disabled or AzureBlob creds are absent.
-builder.Services.AddSingleton<DeviceIdentityProvider>();
-builder.Services.AddSingleton<EntraDeviceClient>();
+builder.Services.AddSingleton<IDeviceIdentityProvider, DeviceIdentityProvider>();
+builder.Services.AddSingleton<IEntraDeviceClient, EntraDeviceClient>();
 builder.Services.AddSingleton<EntraTeamResolutionService>();
 
 // ── Signing services ─────────────────────────────────────────────────────────

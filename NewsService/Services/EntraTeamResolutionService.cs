@@ -16,8 +16,8 @@ namespace NewsService.Services;
 /// </summary>
 public sealed class EntraTeamResolutionService(
     ServiceConfiguration config,
-    DeviceIdentityProvider deviceIdentity,
-    EntraDeviceClient deviceClient,
+    IDeviceIdentityProvider deviceIdentity,
+    IEntraDeviceClient deviceClient,
     ILogger<EntraTeamResolutionService> logger)
 {
     private const string ResolvedTeamsFileName = "resolved-teams.json";

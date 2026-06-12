@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Graph.Models.ODataErrors;
@@ -32,7 +33,7 @@ public enum EntraFetchOutcome { Found, NotFound, Unreachable }
 /// </summary>
 public sealed class EntraDeviceClient(
     AzureBlobSection azureBlob,
-    ILogger<EntraDeviceClient> logger)
+    ILogger<EntraDeviceClient> logger) : IEntraDeviceClient
 {
     private static readonly string[] GraphScopes = ["https://graph.microsoft.com/.default"];
 
@@ -58,7 +59,7 @@ public sealed class EntraDeviceClient(
                 return EntraDeviceFetch.NotFound;
             }
 
-            return EntraDeviceFetch.Found(MapAttributes(device));
+            return EntraDeviceFetch.Found(ExtractAttributes(device));
         }
         catch (ODataError ex) when (ex.ResponseStatusCode == 404)
         {
@@ -78,33 +79,28 @@ public sealed class EntraDeviceClient(
     }
 
     /// <summary>
-    /// Maps the device's extensionAttributes (ExtensionAttribute1..15) into the
-    /// "extensionAttribute1".."extensionAttribute15" dictionary the resolver expects.
+    /// Extracts the device's extensionAttributes into the dictionary the resolver expects.
     ///
-    /// The v1.0 Graph SDK Device model does not surface extensionAttributes as a typed
-    /// property, so when <c>$select=extensionAttributes</c> is requested the value arrives in
-    /// <see cref="Device.AdditionalData"/> as a Kiota <see cref="UntypedObject"/> whose keys are
-    /// already "extensionAttribute1".."extensionAttribute15". All 15 slots are pre-seeded null so
-    /// absent attributes resolve to null.
+    /// Decision (intentional, v1.0 stable — beta SDK avoided for production): the v1.0 Graph
+    /// Device model has no typed extensionAttributes property, so on <c>$select=extensionAttributes</c>
+    /// the value arrives in <see cref="Device.AdditionalData"/> as a Kiota <see cref="UntypedObject"/>.
+    /// Reading AdditionalData is Microsoft's documented v1.0 pattern. The UntypedObject→JsonElement
+    /// projection below is the ONE line not exercised by offline tests; everything downstream is the
+    /// pure, unit-tested <see cref="EntraExtensionAttributeMapper"/>.
     /// </summary>
-    private static Dictionary<string, string?> MapAttributes(Device device)
+    private static Dictionary<string, string?> ExtractAttributes(Device device)
     {
-        var result = new Dictionary<string, string?>(15);
-        for (var i = 1; i <= 15; i++)
-            result[$"extensionAttribute{i}"] = null;
-
         if (device.AdditionalData is null ||
             !device.AdditionalData.TryGetValue("extensionAttributes", out var raw) ||
             raw is not UntypedObject obj)
         {
-            return result;
+            return EntraExtensionAttributeMapper.Map(default);   // no attributes → 15 nulls
         }
 
-        foreach (var (key, node) in obj.GetValue())
-        {
-            result[key] = node is UntypedString s ? s.GetValue() : null;
-        }
+        // ── ISOLATED SDK→JSON bridge (the only offline-unverifiable line) ──
+        var element = JsonSerializer.SerializeToElement(
+            obj.GetValue().ToDictionary(kv => kv.Key, kv => kv.Value is UntypedString s ? s.GetValue() : null));
 
-        return result;
+        return EntraExtensionAttributeMapper.Map(element);
     }
 }

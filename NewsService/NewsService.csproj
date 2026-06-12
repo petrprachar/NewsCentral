@@ -24,4 +24,8 @@
     <ProjectReference Include="..\NewsCentral.Shared\NewsCentral.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="NewsService.Tests" />
+  </ItemGroup>
+
 </Project>

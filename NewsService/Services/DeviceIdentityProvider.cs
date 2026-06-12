@@ -11,6 +11,7 @@ namespace NewsService.Services;
 /// Fallback: parsing <c>dsregcmd /status</c>. Returns null when neither yields a value.
 /// </summary>
 public sealed class DeviceIdentityProvider(ILogger<DeviceIdentityProvider> logger)
+    : IDeviceIdentityProvider
 {
     private const string JoinInfoKey =
         @"SYSTEM\CurrentControlSet\Control\CloudDomainJoin\JoinInfo";
