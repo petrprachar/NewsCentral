@@ -216,7 +216,7 @@ NewsCentral does **not** use these modes. It authenticates via an interactive MS
 
 ## Entra device team resolution (NewsService)
 
-NewsService can resolve **one dynamic team** per machine from the machine's own Entra (Azure AD) device object each poll cycle, unioned with the static team list. The feature is gated by `Entra:Enabled` (default `false`). Phase 2 only **produces** `{CacheRootPath}\resolved-teams.json`; consuming it (dynamic-team content sync and NewsViewer display) is Phase 3.
+NewsService can resolve **one dynamic team** per machine from the machine's own Entra (Azure AD) device object each poll cycle, writing `{CacheRootPath}\resolved-teams.json`; NewsService and NewsViewer union it with the static team list and consume it (key-with-content verification — see `docs/security.md`). The feature is gated by `Entra:Enabled` (default `false`).
 
 **appsettings.json (NewsService):**
 

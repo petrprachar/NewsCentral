@@ -349,7 +349,7 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 
 Model: `NewsCentral.Models.ResolvedTeamsFile` (in `NewsCentral.Shared`). Written by NewsService to `{CacheRootPath}\resolved-teams.json` each poll cycle; read by NewsViewer, which **unions** these entries with the registry static team list.
 
-Lists **only** dynamic teams resolved from the device's Entra `extensionAttributes` (see `EntraTeamNameResolver`). It is a **local-tier file**, **unsigned**, and protected by cache ACLs. It carries no signature fields because dynamic-team `index.json` verification uses a public key **delivered with the team content** (key-with-content model) — the full key-delivery and verification mechanics land in Phases 2–3.
+Lists **only** dynamic teams resolved from the device's Entra `extensionAttributes` (see `EntraTeamNameResolver`). It is a **local-tier file**, **unsigned**, and protected by cache ACLs. It carries no signature fields because dynamic-team `index.json` verification uses a public key **delivered with the team content** (key-with-content model — `TeamIndexFile.SigningPublicKey`, verified via `SignatureGate.VerifyWithPrecedence`; see `docs/security.md`).
 
 ```json
 {
