@@ -1,3 +1,5 @@
+using NewsCentral.Models.IndexFile;
+
 namespace NewsCentral.Security;
 
 /// <summary>
@@ -8,6 +10,42 @@ namespace NewsCentral.Security;
 /// </summary>
 public static class SignatureGate
 {
+    private static readonly EcdsaSignatureService Ecdsa = new();
+
+    /// <summary>
+    /// Verifies a team's <paramref name="index"/> with key precedence:
+    /// <list type="number">
+    ///   <item>A configured registry public key always WINS (dual-key rotation supported);
+    ///         a delivered <see cref="TeamIndexFile.SigningPublicKey"/> is ignored when a
+    ///         registry key is present — this is the anti-downgrade guarantee.</item>
+    ///   <item>Otherwise, for a dynamic (Entra-resolved) team only, the delivered key is used:
+    ///         present → verified against it; absent → <see cref="VerifyResult.Unsigned"/>.</item>
+    ///   <item>Otherwise (static team, no registry key) → <see cref="VerifyResult.Disabled"/>,
+    ///         preserving existing semantics. The delivered key is NEVER consulted for a static
+    ///         team, so it cannot be used to downgrade a statically-trusted team.</item>
+    /// </list>
+    /// </summary>
+    public static VerifyResult VerifyWithPrecedence(
+        TeamIndexFile index, IReadOnlyList<string?> registryPublicKeys, bool isDynamicTeam)
+    {
+        if (registryPublicKeys is not null &&
+            registryPublicKeys.Any(k => !string.IsNullOrWhiteSpace(k)))
+        {
+            // Registry key wins — delivered key never consulted (anti-downgrade).
+            return Ecdsa.Verify(index, registryPublicKeys.ToArray());
+        }
+
+        if (isDynamicTeam)
+        {
+            return string.IsNullOrWhiteSpace(index.SigningPublicKey)
+                ? VerifyResult.Unsigned
+                : Ecdsa.Verify(index, index.SigningPublicKey);
+        }
+
+        // Static team with no registry key — delivered key is intentionally NOT consulted.
+        return VerifyResult.Disabled;
+    }
+
     /// <summary>
     /// Returns true when the team's content must be rejected.
     /// <paramref name="reason"/> is always set to a human-readable explanation suitable

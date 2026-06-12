@@ -90,4 +90,29 @@ Default `false` preserves the Phase C pass-through behavior — only `Invalid` i
 
 **Canonical serialization and `SmartDateTimeConverter`:** `IndexGenerationService` serializes `index.json` via `JsonConfiguration.GetIndexJsonOptions()`, which includes `SmartDateTimeConverter`. This converter truncates `DateTime` values to whole-second precision before writing (UTC → `2026-05-17T14:22:00Z`; Unspecified schedule times → `2026-05-18T09:00:00`). Before signing, the index is round-tripped through these options so the payload covered by the ECDSA signature is byte-for-byte identical to what lands on disk. Verifiers (NewsService, NewsViewer) use their own `JsonDefaults.Options` (no `SmartDateTimeConverter`) and standard ISO parsing — which faithfully round-trips whole-second timestamps — so the deserialized values match the signed form. Changing the serializer options on either side without re-signing will cause all verifiers to return `Invalid`.
 
+## Dynamic-team key delivery — key-with-content (Phase 3a — implemented and tested)
+
+Entra-resolved **dynamic teams** are not provisioned with a registry public key, so their `index.json` carries its own verification key: `TeamIndexFile.SigningPublicKey` (Base64 SubjectPublicKeyInfo — the same form as the registry `PublicKey`). NewsCentral emits it at publish for **all** teams (`IndexGenerationService`, after signing); a static-consuming machine ignores it via precedence, a dynamic-consuming machine verifies against it. Phase 3a adds the schema, the authoring emission, the shared precedence logic, and shared readers — all unit-tested. It does **not** wire NewsService sync or NewsViewer consumption (that is Phase 3b); nothing consumes dynamic teams yet.
+
+**Excluded from the signed payload:** `SigningPublicKey` is excluded from the canonical signing input using the exact same null-and-restore mechanism that excludes `Signature` (`EcdsaSignatureService.Canonicalize`, gated by `IDeliveredKeyCarrier`), combined with `[JsonIgnore(WhenWritingNull)]` on the property. So the signature does not cover the key, and a null value leaves the canonical bytes **bit-identical** to the pre-3a form — every existing static-team signature still verifies (regression-gated by `IndexDeliveredKeyTests`).
+
+**Precedence — `SignatureGate.VerifyWithPrecedence(index, registryPublicKeys, isDynamicTeam)`:**
+
+| Condition | Key used | Result source |
+|---|---|---|
+| Registry public key configured | Registry key(s), dual-key rotation | `EcdsaSignatureService.Verify` — **registry always wins** |
+| No registry key, dynamic team, `SigningPublicKey` present | Delivered key | `EcdsaSignatureService.Verify` against the delivered key |
+| No registry key, dynamic team, `SigningPublicKey` absent | — | `Unsigned` |
+| No registry key, **static** team | — | `Disabled` (delivered key **never** consulted) |
+
+`ShouldReject(result, requireSignedIndex)` is unchanged; callers do `VerifyWithPrecedence → ShouldReject`.
+
+**Anti-downgrade guarantees:** (1) the delivered key is **never** used for a static team, so an attacker cannot attach a key to downgrade a statically-trusted team; (2) a present registry key **always** overrides the delivered key, so a delivered key cannot displace a pinned registry key. Both are covered by the C3 matrix in `SignatureGatePrecedenceTests`.
+
+**Rotation-free for dynamic teams:** because the key travels with the content and matches that content's signature, dynamic-team readers need no dual-key/`PublicKeyPrevious` rotation handling — a new key simply ships with the next index.
+
+**Trust note:** authenticity for dynamic teams rests on **distribution-tier RBAC** (only authorized publishers can write a team's `index.json` + its `SigningPublicKey`). The model is **not** protective against an attacker who can write the distribution channel or holds local admin on the consuming machine (such an attacker could supply both a forged key and a matching signature). The `%programdata%` cache leg — protected today by cache ACLs — is where a future anchored-root/pinned-trust upgrade would harden the chain. Static teams remain anchored to registry-pinned keys and are unaffected.
+
+**Shared helpers (Phase 3a):** `ResolvedTeamsReader.ReadDynamicTeamFolders(cacheRootPath)` (absent/unreadable/malformed → empty set, ordinal-ignore-case) and `EffectiveTeams.Union(staticTeams, dynamicTeams)` (de-duplicated, ordinal-ignore-case) — both in `NewsCentral.Shared/Configuration/`, ready for 3b wiring.
+
 Session telemetry (`session-*.json`) remains on HMAC-SHA256 throughout all phases.

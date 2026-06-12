@@ -112,6 +112,16 @@ public class IndexGenerationService
             index.Signature = _ecdsa.Sign(index, signingKeys.PrivateKey);
             System.Diagnostics.Debug.WriteLine($"✓ index.json signed (ECDSA) for {teamFolderName}");
 
+            // Embed the team's CURRENT public key so it travels with the content
+            // (key-with-content model). Emitted for ALL teams: a static-consuming machine
+            // ignores it via SignatureGate precedence (registry key wins), while a
+            // dynamic-consuming machine has no registry key and verifies against this one.
+            // SigningPublicKey is excluded from the canonical signed payload, so setting it
+            // after signing does not affect the signature; and because the key travels with
+            // the content and matches the signature, dynamic-team readers need no dual-key
+            // or rotation handling.
+            index.SigningPublicKey = signingKeys.PublicKey;
+
             // Simulate client deserialization before any distribution to catch
             // canonical/persisted-form drift (e.g., SmartDateTimeConverter changes).
             if (!string.IsNullOrEmpty(index.Signature))

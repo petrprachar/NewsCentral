@@ -238,7 +238,7 @@ Trust assumption: team content authors are trusted, and their processes are gran
 The `index.json` written to each team folder by NewsCentral and consumed by NewsService and NewsViewer.
 
 ```csharp
-public class TeamIndexFile : ISignable
+public class TeamIndexFile : ISignable, IDeliveredKeyCarrier
 {
     public string TeamFolderName { get; set; }
     public string TeamName { get; set; }
@@ -248,6 +248,15 @@ public class TeamIndexFile : ISignable
     public List<PublishedAssignmentIndex> PublishedAssignments { get; set; }
     public IndexStatistics Statistics { get; set; }
     public string? Signature { get; set; }              // ECDSA P-256 per-team (Phases B1+C complete)
+
+    // Phase 3a — key-with-content: the team's public key (Base64 SubjectPublicKeyInfo, the same
+    // form as the registry PublicKey) travels with the index for dynamic (Entra-resolved) teams.
+    // [JsonIgnore(WhenWritingNull)] + null-and-restore in EcdsaSignatureService.Canonicalize
+    // EXCLUDE it from the canonical signing input exactly like Signature, so the signature does
+    // not cover this field and a null value leaves the canonical bytes bit-identical to the
+    // pre-key form (every existing static-team signature still verifies).
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SigningPublicKey { get; set; }
 }
 
 public class PublishedAssignmentIndex

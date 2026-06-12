@@ -67,14 +67,26 @@ public sealed class EcdsaSignatureService
         return VerifyResult.Invalid;
     }
 
-    // Temporarily clears Signature so it is excluded from the signed payload.
-    // Mirrors HmacService.Canonicalize exactly.
+    // Temporarily clears Signature — and, for key-carrying entities, the delivered
+    // SigningPublicKey — so neither is included in the signed payload. Mirrors
+    // HmacService.Canonicalize exactly; the delivered key is excluded the same way the
+    // signature is. With SigningPublicKey nulled and [JsonIgnore(WhenWritingNull)] on the
+    // property, the canonical bytes are bit-identical whether or not a key is carried.
     private static string Canonicalize<T>(T entity) where T : ISignable
     {
-        var saved = entity.Signature;
+        var savedSig = entity.Signature;
         entity.Signature = null;
+
+        var keyCarrier = entity as IDeliveredKeyCarrier;
+        var savedKey = keyCarrier?.SigningPublicKey;
+        if (keyCarrier is not null) keyCarrier.SigningPublicKey = null;
+
         try { return JsonSerializer.Serialize(entity, CanonicalOptions); }
-        finally { entity.Signature = saved; }
+        finally
+        {
+            entity.Signature = savedSig;
+            if (keyCarrier is not null) keyCarrier.SigningPublicKey = savedKey;
+        }
     }
 
     // Non-indented, camelCase, enum-as-string — must match across all components.
