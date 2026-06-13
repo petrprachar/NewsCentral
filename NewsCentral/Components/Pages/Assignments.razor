@@ -53,6 +53,10 @@
                 <div class="assignment-card pending-card">
                     <div class="card-content">
                         <div class="card-header-section">
+                            @if (PresentationThumb(presentation) is string thumb)
+                            {
+                                <img class="presentation-thumb" src="@thumb" alt="@presentation?.Name" />
+                            }
                             <div class="presentation-info">
                                 <h3>@presentation?.Name</h3>
                                 <p class="target-team">To: <strong>@assignment.TargetTeam</strong></p>
@@ -134,6 +138,10 @@
                 <div class="assignment-card approved-card">
                     <div class="card-content">
                         <div class="card-header-section">
+                            @if (PresentationThumb(presentation) is string thumb)
+                            {
+                                <img class="presentation-thumb" src="@thumb" alt="@presentation?.Name" />
+                            }
                             <div class="presentation-info">
                                 <h3>@presentation?.Name</h3>
                                 <p class="target-team">
@@ -237,6 +245,10 @@
                 <div class="assignment-card published-card">
                     <div class="card-content">
                         <div class="card-header-section">
+                            @if (PresentationThumb(presentation) is string thumb)
+                            {
+                                <img class="presentation-thumb" src="@thumb" alt="@presentation?.Name" />
+                            }
                             <div class="presentation-info">
                                 <h3>@presentation?.Name</h3>
                                 <p class="target-team">
@@ -407,6 +419,17 @@
     justify-content: space-between;
     align-items: start;
     margin-bottom: 15px;
+}
+
+.presentation-thumb {
+    width: 120px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    margin-right: 18px;
+    flex-shrink: 0;
+    background: #f5f5f5;
 }
 
 .presentation-info {
@@ -584,6 +607,20 @@
     private List<Assignment> assignments = new();
     private List<Presentation> presentations = new();
     private List<Schedule> schedules = new();
+
+    private static string? PresentationThumb(Presentation? p)
+    {
+        if (p is null || string.IsNullOrEmpty(p.ContentImageBase64)) return null;
+        var ext = System.IO.Path.GetExtension(p.ImageName ?? p.ImageOriginalName ?? "").ToLowerInvariant();
+        var mime = ext switch
+        {
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "image/jpeg"
+        };
+        return $"data:{mime};base64,{p.ContentImageBase64}";
+    }
 
     private List<Assignment> pendingAssignments => assignments
         .Where(a => a.Status == AssignmentStatus.PendingApproval)

@@ -117,14 +117,17 @@
         </div>
 
         <!-- Support Poster Creation Toggle -->
-        <div class="form-section">
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" @bind="supportPosterCreation" />
-                    <span>@Localizer["SupportPosterCreation"]</span>
-                </label>
+        @if (false)
+        {
+            <div class="form-section">
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" @bind="supportPosterCreation" />
+                        <span>@Localizer["SupportPosterCreation"]</span>
+                    </label>
+                </div>
             </div>
-        </div>
+        }
 
         <!-- Poster Text Section - Conditionally Visible -->
         @if (supportPosterCreation)
@@ -534,6 +537,9 @@
             {
                 posterPreview = $"data:image/jpeg;base64,{presentation.ContentImageBase64}";
             }
+
+            // Poster creation is hidden/disabled — force off regardless of any persisted value
+            supportPosterCreation = false;
         }
         catch (Exception ex)
         {
