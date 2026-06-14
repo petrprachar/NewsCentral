@@ -51,6 +51,8 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │           VDE   REG_SZ   "extensionAttribute3"
 │           VDL   REG_SZ   "extensionAttribute6-extensionAttribute2"
 │       (selector → rule; surfaced as Entra:Enabled / Entra:GracePeriodMinutes / Entra:Mappings:FAT via the recursive walk)
+├── Delivery\
+│       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
 └── teams\
         (one REG_SZ value per team; value name = team folder name; data = "")
         e.g.  cz-its   REG_SZ   ""
@@ -177,9 +179,14 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
     "Enabled": false,
     "GracePeriodMinutes": 240,
     "Mappings": {}
+  },
+  "Delivery": {
+    "DefaultLockScreenPath": ""
   }
 }
 ```
+
+`Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default: the last-applied lock screen is left in place (sticky). NewsService-only; not shared with other components.
 
 ## appsettings.json — NewsViewer
 

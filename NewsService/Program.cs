@@ -50,7 +50,7 @@ builder.Services.AddSingleton<EcdsaSignatureService>();         // index.json ve
 builder.Services.AddSingleton(_ => new CacheManager(
     config.Service.CacheRootPath, JsonDefaults.Options));
 
-builder.Services.AddSingleton<WallpaperService>();
+builder.Services.AddSingleton<LockScreenService>();
 builder.Services.AddSingleton<TelemetryUploader>();
 builder.Services.AddSingleton<SyncService>();
 

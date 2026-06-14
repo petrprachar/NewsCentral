@@ -340,10 +340,11 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 
 ```json
 {
-  "LastWallpaperPresentationId": "abc-123",
   "LastLockscreenPresentationId": "def-456"
 }
 ```
+
+`LastLockscreenPresentationId` tracks the last-applied lock screen for apply-on-change; it also carries the `__DEFAULT__` sentinel when the configured default lock-screen image (not published content) is the last thing applied. Wallpaper tracking was removed — NewsService applies the lock screen only.
 
 ## ResolvedTeams (resolved-teams.json)
 

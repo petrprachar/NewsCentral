@@ -11,6 +11,17 @@ public class ServiceConfiguration
     public AzureBlobSection AzureBlob { get; set; } = new();
     public HmacOptions Hmac { get; set; } = new();
     public EntraOptions Entra { get; set; } = new();
+    public DeliverySection Delivery { get; set; } = new();
+}
+
+public class DeliverySection
+{
+    /// <summary>
+    /// Absolute, machine-readable path (SYSTEM-readable in the pre-logon context) to a default
+    /// lock-screen image applied when no lock-screen content is active. Empty = no default
+    /// (the last-applied lock screen is left in place — sticky).
+    /// </summary>
+    public string DefaultLockScreenPath { get; set; } = string.Empty;
 }
 
 public class EntraOptions

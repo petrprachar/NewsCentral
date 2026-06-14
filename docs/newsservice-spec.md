@@ -33,10 +33,16 @@ Executed by `Worker` on every interval tick:
 - If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images
 - Writes the new `index.json` to cache only after all images are safely written
 
-**Step 2 — Wallpaper / lock screen**
+**Step 2 — Lock screen** (lock-screen only — wallpaper ownership moved to NewsViewer in a later phase)
 - Filters each team's cached index to *active* assignments: `ScheduleStart ≤ now ≤ ScheduleEnd` and today's day number (1=Mon … 7=Sun) is in `DaysOfWeek`
-- Selects the most recently modified active assignment with `IsWallpaper = true` / `IsLogonScreen = true`
-- Skips if `PresentationId` matches the last-applied ID in `servicestate.json`
+- Selects the most recently modified active assignment with `IsLogonScreen = true` (the **winner**)
+- Apply-on-change decision (`SyncService.DecideLockScreen`, pure + unit-tested), gated on `state.LastLockscreenPresentationId`:
+  - Winner exists and its `PresentationId` differs from the last-applied id → apply the winner's cached image; record its id
+  - No winner and `Delivery:DefaultLockScreenPath` is configured and the file exists and the last-applied id is not `__DEFAULT__` → apply the default image; record the `__DEFAULT__` sentinel
+  - No winner and no default configured → do nothing (last-applied lock screen stays — sticky)
+  - No winner, default configured but file missing → warning logged, no change
+  - Winner exists and its id already matches state → no-op (CSP keys never re-asserted)
+- The `__DEFAULT__` sentinel is overridden the next time content wins, giving clean winner → default → winner transitions
 
 **Step 3 — status.json**
 - Writes `LastSyncTime`, `IsOnline`, `SyncSource` (`Share` / `Azure` / `None`) to cache root
@@ -59,12 +65,15 @@ Executed by `Worker` on every interval tick:
 
 When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{imagePath}.hash` containing `sha256:{hex}`. On the next cycle, `ReadStoredHash` reads this file instead of re-hashing the image, making per-image change detection O(1).
 
-## Wallpaper — `WallpaperService`
+## Lock screen — `LockScreenService`
+
+NewsService applies the **lock screen only**. Desktop wallpaper is not handled here — wallpaper ownership moves to NewsViewer in a later phase, and no `IDesktopWallpaper`/COM code remains in NewsService.
 
 | Target | API | Session constraint |
 |---|---|---|
-| Desktop wallpaper | `IDesktopWallpaper` COM (`C2CF3110…`) — `SetWallpaper(null, path)` applies to all monitors | Requires desktop access; logs a warning and skips in session 0. Configure the service to run as the interactive user or trigger via Task Scheduler in the user session. |
-| Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. Enterprise/MDM-grade mechanism used by Intune. |
+| Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. NewsService runs as LocalSystem. Enterprise/MDM-grade mechanism used by Intune. |
+
+A configurable **default lock-screen image** is applied when no lock-screen content is active. It is set via `Delivery:DefaultLockScreenPath` (absolute, SYSTEM-readable path; default `""` = no default). Empty leaves the last-applied lock screen in place (sticky). See Step 2 of the poll cycle for the apply-on-change decision and the `__DEFAULT__` sentinel.
 
 ## Azure Authentication
 

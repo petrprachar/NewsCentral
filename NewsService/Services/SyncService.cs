@@ -10,14 +10,18 @@ namespace NewsService.Services;
 /// <summary>
 /// Orchestrates one complete poll cycle:
 ///   1. For each team: compare remote index hash vs cached hash; sync changed images.
-///   2. Apply wallpaper / lock screen for the most-recently-modified active presentation.
+///   2. Apply the lock screen for the most-recently-modified active logon-screen presentation,
+///      or a configurable default image when no lock-screen content is active.
 ///   3. Write status.json.
 ///   4. Upload session telemetry from the uploads folder.
+///
+/// Desktop wallpaper is intentionally not applied here — wallpaper ownership moves to NewsViewer
+/// in a later phase. NewsService is a lock-screen-only SYSTEM responsibility.
 /// </summary>
 public sealed class SyncService(
     IRepositoryReader repository,
     CacheManager cache,
-    WallpaperService wallpaper,
+    LockScreenService lockScreen,
     TelemetryUploader telemetry,
     EntraTeamResolutionService entra,
     IConfiguration configuration,
@@ -52,7 +56,7 @@ public sealed class SyncService(
                 syncSource = repository.SyncSource;
             }
 
-            await ApplyWallpaperAndLockscreenAsync(effectiveTeams);
+            await ApplyLockScreenAsync(effectiveTeams);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -191,16 +195,52 @@ public sealed class SyncService(
         logger.LogDebug("Image synced: {Path} ({Bytes} bytes)", relativePath, bytes.Length);
     }
 
-    // ── Step 2 — wallpaper / lock screen ─────────────────────────────────────
+    // ── Step 2 — lock screen ─────────────────────────────────────────────────
 
-    private async Task ApplyWallpaperAndLockscreenAsync(IReadOnlyList<string> teams)
+    /// <summary>Sentinel stored in <c>LastLockscreenPresentationId</c> when the configured
+    /// default image (rather than published content) is the last thing applied.</summary>
+    internal const string DefaultLockScreenSentinel = "__DEFAULT__";
+
+    internal enum LockScreenAction { None, ApplyContent, ApplyDefault, DefaultMissing }
+
+    internal readonly record struct LockScreenDecision(LockScreenAction Action, string? NewStateId);
+
+    /// <summary>
+    /// Pure apply-on-change decision for the lock screen. Returns the action to take and the new
+    /// <c>LastLockscreenPresentationId</c> value (<c>null</c> = leave state unchanged). Never
+    /// re-asserts the CSP keys when the current state already matches.
+    /// </summary>
+    internal static LockScreenDecision DecideLockScreen(
+        string? winnerPresentationId,
+        string? lastAppliedId,
+        string? defaultLockScreenPath,
+        bool defaultFileExists)
+    {
+        if (winnerPresentationId is not null)
+        {
+            return winnerPresentationId != lastAppliedId
+                ? new(LockScreenAction.ApplyContent, winnerPresentationId)
+                : new(LockScreenAction.None, null);
+        }
+
+        // No active lock-screen content.
+        if (string.IsNullOrEmpty(defaultLockScreenPath))
+            return new(LockScreenAction.None, null);            // sticky — leave last applied
+
+        if (!defaultFileExists)
+            return new(LockScreenAction.DefaultMissing, null);  // warn, no change
+
+        return lastAppliedId != DefaultLockScreenSentinel
+            ? new(LockScreenAction.ApplyDefault, DefaultLockScreenSentinel)
+            : new(LockScreenAction.None, null);
+    }
+
+    private async Task ApplyLockScreenAsync(IReadOnlyList<string> teams)
     {
         var state = await cache.ReadJsonAsync<ServiceState>("servicestate.json") ?? new();
 
-        PublishedAssignmentIndex? wallpaperEntry   = null;
-        PublishedAssignmentIndex? lockscreenEntry  = null;
-        string? wallpaperTeam  = null;
-        string? lockscreenTeam = null;
+        PublishedAssignmentIndex? winner = null;
+        string? winnerTeam = null;
 
         foreach (var teamFolder in teams)
         {
@@ -209,39 +249,52 @@ public sealed class SyncService(
 
             foreach (var a in ActiveAssignments(index))
             {
-                if (a.DisplayTypes.IsWallpaper &&
-                    IsNewer(a, wallpaperEntry))
+                if (a.DisplayTypes.IsLogonScreen && IsNewer(a, winner))
                 {
-                    wallpaperEntry = a;
-                    wallpaperTeam  = teamFolder;
-                }
-
-                if (a.DisplayTypes.IsLogonScreen &&
-                    IsNewer(a, lockscreenEntry))
-                {
-                    lockscreenEntry = a;
-                    lockscreenTeam  = teamFolder;
+                    winner     = a;
+                    winnerTeam = teamFolder;
                 }
             }
         }
 
-        if (wallpaperEntry is not null &&
-            wallpaperEntry.PresentationId != state.LastWallpaperPresentationId)
+        var defaultPath = configuration.GetValue<string>("Delivery:DefaultLockScreenPath");
+        var decision = DecideLockScreen(
+            winner?.PresentationId,
+            state.LastLockscreenPresentationId,
+            defaultPath,
+            !string.IsNullOrEmpty(defaultPath) && File.Exists(defaultPath));
+
+        switch (decision.Action)
         {
-            var path = cache.Resolve(wallpaperEntry.Content.ImagePath);
-            wallpaper.SetWallpaper(path);
-            state.LastWallpaperPresentationId = wallpaperEntry.PresentationId;
+            case LockScreenAction.ApplyContent:
+                var contentPath = cache.Resolve(winner!.Content.ImagePath);
+                lockScreen.SetLockScreen(contentPath);
+                logger.LogInformation(
+                    "Lock screen applied: presentation {Presentation}, team {Team}, path {Path}",
+                    winner.PresentationId, winnerTeam, contentPath);
+                break;
+
+            case LockScreenAction.ApplyDefault:
+                lockScreen.SetLockScreen(defaultPath!);
+                logger.LogInformation("Lock screen applied (default): {Path}", defaultPath);
+                break;
+
+            case LockScreenAction.DefaultMissing:
+                logger.LogWarning(
+                    "Default lock-screen path configured but file not found: {Path}", defaultPath);
+                break;
+
+            case LockScreenAction.None:
+                logger.LogDebug(
+                    "Lock screen unchanged (no active content, no applicable default)");
+                break;
         }
 
-        if (lockscreenEntry is not null &&
-            lockscreenEntry.PresentationId != state.LastLockscreenPresentationId)
+        if (decision.NewStateId is not null)
         {
-            var path = cache.Resolve(lockscreenEntry.Content.ImagePath);
-            wallpaper.SetLockScreen(path);
-            state.LastLockscreenPresentationId = lockscreenEntry.PresentationId;
+            state.LastLockscreenPresentationId = decision.NewStateId;
+            await cache.WriteJsonAsync("servicestate.json", state);
         }
-
-        await cache.WriteJsonAsync("servicestate.json", state);
     }
 
     /// <summary>

@@ -78,7 +78,7 @@ NewsService\
 │   ├── LocalShareRepositoryReader.cs  file share implementation (primary)
 │   ├── AzureBlobRepositoryReader.cs   Azure implementation — Certificate / ClientSecret auth
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
-│   ├── WallpaperService.cs        IDesktopWallpaper COM + PersonalizationCSP registry
+│   ├── LockScreenService.cs       PersonalizationCSP registry (lock-screen only; SYSTEM context)
 │   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
 │   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
