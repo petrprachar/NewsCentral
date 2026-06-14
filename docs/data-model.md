@@ -336,15 +336,14 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
 }
 ```
 
-## servicestate.json (NewsService internal)
+## Lock-screen apply state (NewsService)
 
-```json
-{
-  "LastLockscreenPresentationId": "def-456"
-}
-```
-
-`LastLockscreenPresentationId` tracks the last-applied lock screen for apply-on-change; it also carries the `__DEFAULT__` sentinel when the configured default lock-screen image (not published content) is the last thing applied. Wallpaper tracking was removed — NewsService applies the lock screen only.
+There is no lock-screen state file. The lock-screen apply is **registry-driven**: the live
+`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP\LockScreenImagePath` value is the
+single source of truth. Each cycle NewsService compares the intended image against this value and
+writes only on a difference. `servicestate.json` (which previously tracked the last-applied
+wallpaper/lock screen) has been retired — the wallpaper split left it tracking nothing, and the
+registry comparison self-heals failed applies without a separate state record.
 
 ## ResolvedTeams (resolved-teams.json)
 
@@ -398,8 +397,7 @@ Model: `NewsCentral.Models.SessionTelemetry` (in `NewsCentral.Shared`; implement
 │   └── ...
 ├── uploads\
 │   └── session-{guid}.json            written by NewsViewer, uploaded by NewsService
-├── status.json                        sync state — written by NewsService
-└── servicestate.json                  wallpaper/lockscreen tracking — written by NewsService
+└── status.json                        sync state — written by NewsService
 
 %localappdata%\NewsCentral\             ← per-user; one copy per Windows user account
 └── viewerstate.json                   display tracking — written by NewsViewer

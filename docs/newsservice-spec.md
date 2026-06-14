@@ -36,13 +36,13 @@ Executed by `Worker` on every interval tick:
 **Step 2 — Lock screen** (lock-screen only — wallpaper ownership moved to NewsViewer in a later phase)
 - Filters each team's cached index to *active* assignments: `ScheduleStart ≤ now ≤ ScheduleEnd` and today's day number (1=Mon … 7=Sun) is in `DaysOfWeek`
 - Selects the most recently modified active assignment with `IsLogonScreen = true` (the **winner**)
-- Apply-on-change decision (`SyncService.DecideLockScreen`, pure + unit-tested), gated on `state.LastLockscreenPresentationId`:
-  - Winner exists and its `PresentationId` differs from the last-applied id → apply the winner's cached image; record its id
-  - No winner and `Delivery:DefaultLockScreenPath` is configured and the file exists and the last-applied id is not `__DEFAULT__` → apply the default image; record the `__DEFAULT__` sentinel
-  - No winner and no default configured → do nothing (last-applied lock screen stays — sticky)
-  - No winner, default configured but file missing → warning logged, no change
-  - Winner exists and its id already matches state → no-op (CSP keys never re-asserted)
-- The `__DEFAULT__` sentinel is overridden the next time content wins, giving clean winner → default → winner transitions
+- **Registry-driven, stateless apply** — the live `PersonalizationCSP\LockScreenImagePath` value is the single source of truth; there is no `servicestate.json`. Computes the **intended** path, then applies only when it differs from the current registry value:
+  - Winner exists → intended = the winner's cached image path
+  - No winner and `Delivery:DefaultLockScreenPath` is configured and the file exists → intended = the default path
+  - No winner and no usable default (unset, or configured-but-missing → warning logged) → intended = `null`
+  - `current = ILockScreenService.GetCurrentLockScreenPath()`; both sides normalized via `Path.GetFullPath` and compared `OrdinalIgnoreCase`
+  - `intended == null` → leave the current lock screen untouched (sticky); `intended == current` → skip; otherwise call `SetLockScreen(intended)` — log Information on success, Error on failure
+- A failed write is **not** recorded as applied: the live value still won't match the intended one, so the next cycle re-evaluates and retries naturally. This self-heals the drift class where a failed apply was previously recorded as success. The decision is unit-tested via `SyncService.ApplyIntendedLockScreen` with an `ILockScreenService` test double.
 
 **Step 3 — status.json**
 - Writes `LastSyncTime`, `IsOnline`, `SyncSource` (`Share` / `Azure` / `None`) to cache root
@@ -73,7 +73,9 @@ NewsService applies the **lock screen only**. Desktop wallpaper is not handled h
 |---|---|---|
 | Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. NewsService runs as LocalSystem. Enterprise/MDM-grade mechanism used by Intune. |
 
-A configurable **default lock-screen image** is applied when no lock-screen content is active. It is set via `Delivery:DefaultLockScreenPath` (absolute, SYSTEM-readable path; default `""` = no default). Empty leaves the last-applied lock screen in place (sticky). See Step 2 of the poll cycle for the apply-on-change decision and the `__DEFAULT__` sentinel.
+`ILockScreenService` exposes `bool SetLockScreen(string)` (writes the three CSP values; returns `false` on a missing image or a caught write failure) and `string? GetCurrentLockScreenPath()` (reads the live `LockScreenImagePath`, or `null` if absent/unreadable). SyncService owns the Information-level "applied" log; `SetLockScreen` logs its own write at Debug.
+
+A configurable **default lock-screen image** is applied when no lock-screen content is active. It is set via `Delivery:DefaultLockScreenPath` (absolute, SYSTEM-readable path; default `""` = no default). Empty leaves the current lock screen in place (sticky). See Step 2 of the poll cycle for the registry-gated apply.
 
 ## Azure Authentication
 

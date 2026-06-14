@@ -11,7 +11,10 @@ namespace NewsService.Services;
 /// Orchestrates one complete poll cycle:
 ///   1. For each team: compare remote index hash vs cached hash; sync changed images.
 ///   2. Apply the lock screen for the most-recently-modified active logon-screen presentation,
-///      or a configurable default image when no lock-screen content is active.
+///      or a configurable default image when no lock-screen content is active. The apply is
+///      driven by the live PersonalizationCSP value (the single source of truth) — it writes
+///      only when the intended image differs from the current registry value, so a failed write
+///      is never recorded as applied and the next cycle retries naturally.
 ///   3. Write status.json.
 ///   4. Upload session telemetry from the uploads folder.
 ///
@@ -21,7 +24,7 @@ namespace NewsService.Services;
 public sealed class SyncService(
     IRepositoryReader repository,
     CacheManager cache,
-    LockScreenService lockScreen,
+    ILockScreenService lockScreen,
     TelemetryUploader telemetry,
     EntraTeamResolutionService entra,
     IConfiguration configuration,
@@ -196,49 +199,14 @@ public sealed class SyncService(
     }
 
     // ── Step 2 — lock screen ─────────────────────────────────────────────────
-
-    /// <summary>Sentinel stored in <c>LastLockscreenPresentationId</c> when the configured
-    /// default image (rather than published content) is the last thing applied.</summary>
-    internal const string DefaultLockScreenSentinel = "__DEFAULT__";
-
-    internal enum LockScreenAction { None, ApplyContent, ApplyDefault, DefaultMissing }
-
-    internal readonly record struct LockScreenDecision(LockScreenAction Action, string? NewStateId);
-
-    /// <summary>
-    /// Pure apply-on-change decision for the lock screen. Returns the action to take and the new
-    /// <c>LastLockscreenPresentationId</c> value (<c>null</c> = leave state unchanged). Never
-    /// re-asserts the CSP keys when the current state already matches.
-    /// </summary>
-    internal static LockScreenDecision DecideLockScreen(
-        string? winnerPresentationId,
-        string? lastAppliedId,
-        string? defaultLockScreenPath,
-        bool defaultFileExists)
-    {
-        if (winnerPresentationId is not null)
-        {
-            return winnerPresentationId != lastAppliedId
-                ? new(LockScreenAction.ApplyContent, winnerPresentationId)
-                : new(LockScreenAction.None, null);
-        }
-
-        // No active lock-screen content.
-        if (string.IsNullOrEmpty(defaultLockScreenPath))
-            return new(LockScreenAction.None, null);            // sticky — leave last applied
-
-        if (!defaultFileExists)
-            return new(LockScreenAction.DefaultMissing, null);  // warn, no change
-
-        return lastAppliedId != DefaultLockScreenSentinel
-            ? new(LockScreenAction.ApplyDefault, DefaultLockScreenSentinel)
-            : new(LockScreenAction.None, null);
-    }
+    //
+    // Registry-driven and stateless: the live PersonalizationCSP value is the single source of
+    // truth. Each cycle computes the intended image, compares it against the current value, and
+    // writes only on a difference. There is no servicestate.json — a failed write simply fails
+    // to match next cycle and retries naturally.
 
     private async Task ApplyLockScreenAsync(IReadOnlyList<string> teams)
     {
-        var state = await cache.ReadJsonAsync<ServiceState>("servicestate.json") ?? new();
-
         PublishedAssignmentIndex? winner = null;
         string? winnerTeam = null;
 
@@ -257,43 +225,75 @@ public sealed class SyncService(
             }
         }
 
-        var defaultPath = configuration.GetValue<string>("Delivery:DefaultLockScreenPath");
-        var decision = DecideLockScreen(
-            winner?.PresentationId,
-            state.LastLockscreenPresentationId,
-            defaultPath,
-            !string.IsNullOrEmpty(defaultPath) && File.Exists(defaultPath));
-
-        switch (decision.Action)
+        // Compute the intended path and a human-readable source for logging.
+        string? intended;
+        string source;
+        if (winner is not null)
         {
-            case LockScreenAction.ApplyContent:
-                var contentPath = cache.Resolve(winner!.Content.ImagePath);
-                lockScreen.SetLockScreen(contentPath);
-                logger.LogInformation(
-                    "Lock screen applied: presentation {Presentation}, team {Team}, path {Path}",
-                    winner.PresentationId, winnerTeam, contentPath);
-                break;
-
-            case LockScreenAction.ApplyDefault:
-                lockScreen.SetLockScreen(defaultPath!);
-                logger.LogInformation("Lock screen applied (default): {Path}", defaultPath);
-                break;
-
-            case LockScreenAction.DefaultMissing:
-                logger.LogWarning(
-                    "Default lock-screen path configured but file not found: {Path}", defaultPath);
-                break;
-
-            case LockScreenAction.None:
-                logger.LogDebug(
-                    "Lock screen unchanged (no active content, no applicable default)");
-                break;
+            intended = cache.Resolve(winner.Content.ImagePath);
+            source   = $"presentation {winner.PresentationId}, team {winnerTeam}";
+        }
+        else
+        {
+            var defaultPath = configuration.GetValue<string>("Delivery:DefaultLockScreenPath");
+            if (!string.IsNullOrEmpty(defaultPath) && File.Exists(defaultPath))
+            {
+                intended = defaultPath;
+                source   = "default";
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(defaultPath))
+                    logger.LogWarning(
+                        "Default lock-screen path configured but file not found: {Path}", defaultPath);
+                intended = null;       // no content, no usable default → sticky
+                source   = string.Empty;
+            }
         }
 
-        if (decision.NewStateId is not null)
+        ApplyIntendedLockScreen(intended, source);
+    }
+
+    /// <summary>
+    /// Registry-gated apply. Compares <paramref name="intended"/> against the live
+    /// PersonalizationCSP value and writes only when they differ. A <c>null</c> intended path
+    /// leaves the current lock screen untouched (sticky). A failed write is logged as an error and
+    /// is <b>not</b> recorded as applied — the next cycle re-evaluates against the unchanged live
+    /// value and retries.
+    /// </summary>
+    internal void ApplyIntendedLockScreen(string? intended, string source)
+    {
+        if (intended is null)
         {
-            state.LastLockscreenPresentationId = decision.NewStateId;
-            await cache.WriteJsonAsync("servicestate.json", state);
+            logger.LogDebug(
+                "Lock screen left unchanged — no active content and no applicable default (sticky)");
+            return;
+        }
+
+        var current = lockScreen.GetCurrentLockScreenPath();
+        if (current is not null && PathsEqual(current, intended))
+        {
+            logger.LogDebug("Lock screen already current: {Path}", intended);
+            return;
+        }
+
+        if (lockScreen.SetLockScreen(intended))
+            logger.LogInformation("Lock screen applied: {Source} -> {Path}", source, intended);
+        else
+            logger.LogError("Lock screen apply failed: {Source} -> {Path}", source, intended);
+    }
+
+    /// <summary>Full-path, case-insensitive comparison of two file paths.</summary>
+    private static bool PathsEqual(string a, string b)
+    {
+        try
+        {
+            return string.Equals(
+                Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
         }
     }
 

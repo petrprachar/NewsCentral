@@ -8,7 +8,7 @@ NewsCentral.sln
 ├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers (72 facts, all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
-├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union (offline seams; 19 facts, all passing)
+├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; 26 facts, all passing)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)
 ```
 
@@ -71,14 +71,13 @@ NewsService\
 ├── Configuration\
 │   └── ServiceConfiguration.cs    typed POCOs bound from appsettings.json; includes HmacOptions
 ├── Models\
-│   ├── StatusFile.cs              status.json structure
-│   └── ServiceState.cs            servicestate.json structure
+│   └── StatusFile.cs              status.json structure
 ├── Services\
 │   ├── IRepositoryReader.cs       abstraction over Share / Azure repository
 │   ├── LocalShareRepositoryReader.cs  file share implementation (primary)
 │   ├── AzureBlobRepositoryReader.cs   Azure implementation — Certificate / ClientSecret auth
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
-│   ├── LockScreenService.cs       PersonalizationCSP registry (lock-screen only; SYSTEM context)
+│   ├── LockScreenService.cs       ILockScreenService — read/write PersonalizationCSP (lock-screen only; SYSTEM context)
 │   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
 │   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
