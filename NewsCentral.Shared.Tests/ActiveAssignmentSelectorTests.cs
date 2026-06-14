@@ -14,7 +14,7 @@ public sealed class ActiveAssignmentSelectorTests
     private static readonly DateTime Now = new(2026, 6, 15, 12, 0, 0);
 
     private static PublishedAssignmentIndex Make(
-        string id, DateTime lastModified, bool isWallpaper,
+        string id, DateTime lastModified, bool isWallpaper, bool isNewsOfWeek = false,
         DateTime? start = null, DateTime? end = null, string days = "1,2,3,4,5,6,7") => new()
     {
         PresentationId           = id,
@@ -22,7 +22,7 @@ public sealed class ActiveAssignmentSelectorTests
         ScheduleStart            = start ?? Now.AddDays(-1),
         ScheduleEnd              = end   ?? Now.AddDays(1),
         DaysOfWeek               = days,
-        DisplayTypes             = new DisplayTypeInfo { IsWallpaper = isWallpaper },
+        DisplayTypes             = new DisplayTypeInfo { IsWallpaper = isWallpaper, IsNewsOfWeek = isNewsOfWeek },
     };
 
     [Fact]
@@ -90,5 +90,40 @@ public sealed class ActiveAssignmentSelectorTests
     {
         var a = Make("a", Now, true, start: Now.AddDays(-2), end: Now.AddSeconds(-1));
         Assert.False(ActiveAssignmentSelector.IsActive(a, Now));
+    }
+
+    // ── Display (IsNewsOfWeek) vs wallpaper (IsWallpaper) predicate independence ──
+
+    [Fact]
+    public void NewsOfWeekPredicate_SkipsNonNewsOfWeek()
+    {
+        var a = Make("k03", Now, isWallpaper: true, isNewsOfWeek: false);   // wallpaper-only
+
+        Assert.Null(ActiveAssignmentSelector.PickNewestActive(
+            new[] { a }, Now, x => x.DisplayTypes.IsNewsOfWeek));
+    }
+
+    [Fact]
+    public void NewsOfWeekPredicate_SelectsNewsOfWeek()
+    {
+        var a = Make("now", Now, isWallpaper: false, isNewsOfWeek: true);
+
+        var result = ActiveAssignmentSelector.PickNewestActive(
+            new[] { a }, Now, x => x.DisplayTypes.IsNewsOfWeek);
+
+        Assert.Equal("now", result?.PresentationId);
+    }
+
+    [Fact]
+    public void WallpaperPredicate_SelectsK03_WhileNewsOfWeekSkipsIt()
+    {
+        // K03: IsWallpaper + IsLogonScreen, IsNewsOfWeek = false. The wallpaper selection picks it;
+        // the display (News-of-the-Week) selection must not — the two predicates are independent.
+        var k03 = Make("k03", Now, isWallpaper: true, isNewsOfWeek: false);
+
+        Assert.Equal("k03", ActiveAssignmentSelector.PickNewestActive(
+            new[] { k03 }, Now, x => x.DisplayTypes.IsWallpaper)?.PresentationId);
+        Assert.Null(ActiveAssignmentSelector.PickNewestActive(
+            new[] { k03 }, Now, x => x.DisplayTypes.IsNewsOfWeek));
     }
 }

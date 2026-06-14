@@ -24,12 +24,15 @@ public sealed class PresentationSelector
     }
 
     /// <summary>
-    /// Reads index.json for each configured team, filters to assignments that are
-    /// active right now, and returns the one with the most recent PresentationLastModified.
-    /// Returns null if no qualifying assignment is found or all indexes fail verification.
+    /// Reads index.json for each configured team, filters to News-of-the-Week assignments that are
+    /// active right now, and returns the one with the most recent PresentationLastModified. Only
+    /// <see cref="DisplayTypeInfo.IsNewsOfWeek"/> content is shown as a full-screen poster — a
+    /// wallpaper-only / lock-screen-only assignment is never displayed here (the wallpaper and lock
+    /// screen are applied by their own independent selections). Returns null if no qualifying
+    /// assignment is found or all indexes fail verification.
     /// </summary>
     public (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActive(string[] teams) =>
-        SelectActiveMatching(teams, _ => true);
+        SelectActiveMatching(teams, a => a.DisplayTypes.IsNewsOfWeek);
 
     /// <summary>
     /// Like <see cref="SelectActive"/> but restricted to assignments with
