@@ -28,21 +28,56 @@ public sealed class PresentationSelector
     /// active right now, and returns the one with the most recent PresentationLastModified.
     /// Returns null if no qualifying assignment is found or all indexes fail verification.
     /// </summary>
-    public (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActive(string[] teams)
-    {
-        var now = DateTime.Now;
-        var todayKey = now.DayOfWeek == DayOfWeek.Sunday
-            ? "7"
-            : ((int)now.DayOfWeek).ToString();
+    public (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActive(string[] teams) =>
+        SelectActiveMatching(teams, _ => true);
 
+    /// <summary>
+    /// Like <see cref="SelectActive"/> but restricted to assignments with
+    /// <see cref="DisplayTypeInfo.IsWallpaper"/> == true — the active desktop-wallpaper winner.
+    /// Uses the same signature-verified index read and active-window/day filter; never bypasses
+    /// verification. Returns (assignment, resolvedImagePath) or (null, null).
+    /// </summary>
+    public (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActiveWallpaper(string[] teams) =>
+        SelectActiveMatching(teams, a => a.DisplayTypes.IsWallpaper);
+
+    /// <summary>
+    /// Shared selection core: enumerate every signature-verified assignment across the effective
+    /// team set, pick the newest active one matching <paramref name="predicate"/>, then resolve and
+    /// integrity-check its image. Image verification failure returns (best, null) so the caller can
+    /// decline to act on unverified content.
+    /// </summary>
+    private (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActiveMatching(
+        string[] teams, Func<PublishedAssignmentIndex, bool> predicate)
+    {
+        var now  = DateTime.Now;
+        var best = ActiveAssignmentSelector.PickNewestActive(
+            EnumerateVerifiedAssignments(teams), now, predicate);
+
+        if (best is null) return (null, null);
+
+        var imagePath = Path.Combine(
+            _cacheRootPath,
+            best.Content.ImagePath.Replace('/', Path.DirectorySeparatorChar));
+
+        if (!_bypassImageIntegrityCheck && !VerifyImageHash(imagePath, best.Content.ImageHash))
+            return (best, null);
+
+        return (best, imagePath);
+    }
+
+    /// <summary>
+    /// Yields every assignment from each effective team's index.json that passes signature
+    /// verification (SignatureGate.VerifyWithPrecedence → ShouldReject). Rejected/unreadable
+    /// indexes are skipped. No active-window or display-type filtering is applied here.
+    /// </summary>
+    private IEnumerable<PublishedAssignmentIndex> EnumerateVerifiedAssignments(string[] teams)
+    {
         // Effective teams = static (registry/appsettings) ∪ dynamic (Entra-resolved, read-only here;
         // NewsViewer never writes resolved-teams.json). Per-team verification routes through
         // SignatureGate.VerifyWithPrecedence so registry-wins / delivered-key / anti-downgrade are
         // handled centrally — no precedence branching at this call site.
         var dynamicTeams   = ResolvedTeamsReader.ReadDynamicTeamFolders(_cacheRootPath);
         var effectiveTeams = EffectiveTeams.Union(teams, dynamicTeams);
-
-        PublishedAssignmentIndex? best = null;
 
         foreach (var team in effectiveTeams)
         {
@@ -70,25 +105,8 @@ public sealed class PresentationSelector
             System.Diagnostics.Debug.WriteLine($"[Signing] {team}: index accepted — {reason}");
 
             foreach (var a in index.PublishedAssignments)
-            {
-                if (a.ScheduleStart > now || a.ScheduleEnd < now) continue;
-                if (!a.DaysOfWeek.Split(',').Contains(todayKey)) continue;
-
-                if (best is null || a.PresentationLastModified > best.PresentationLastModified)
-                    best = a;
-            }
+                yield return a;
         }
-
-        if (best is null) return (null, null);
-
-        var imagePath = Path.Combine(
-            _cacheRootPath,
-            best.Content.ImagePath.Replace('/', Path.DirectorySeparatorChar));
-
-        if (!_bypassImageIntegrityCheck && !VerifyImageHash(imagePath, best.Content.ImageHash))
-            return (best, null);
-
-        return (best, imagePath);
     }
 
     private static bool VerifyImageHash(string imagePath, string? storedHash)

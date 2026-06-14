@@ -33,7 +33,7 @@ Executed by `Worker` on every interval tick:
 - If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images
 - Writes the new `index.json` to cache only after all images are safely written
 
-**Step 2 — Lock screen** (lock-screen only — wallpaper ownership moved to NewsViewer in a later phase)
+**Step 2 — Lock screen** (lock-screen only — desktop wallpaper is applied by NewsViewer in the user session)
 - Filters each team's cached index to *active* assignments: `ScheduleStart ≤ now ≤ ScheduleEnd` and today's day number (1=Mon … 7=Sun) is in `DaysOfWeek`
 - Selects the most recently modified active assignment with `IsLogonScreen = true` (the **winner**)
 - **Registry-driven, stateless apply** — the live `PersonalizationCSP\LockScreenImagePath` value is the single source of truth; there is no `servicestate.json`. Computes the **intended** path, then applies only when it differs from the current registry value:
@@ -67,7 +67,7 @@ When an image is written to cache, `CacheManager.WriteBytesAsync` also writes `{
 
 ## Lock screen — `LockScreenService`
 
-NewsService applies the **lock screen only**. Desktop wallpaper is not handled here — wallpaper ownership moves to NewsViewer in a later phase, and no `IDesktopWallpaper`/COM code remains in NewsService.
+NewsService applies the **lock screen only**. Desktop wallpaper is owned by NewsViewer (applied per-user via `SystemParametersInfo` + HKCU; see `docs/newsviewer-spec.md`), and no `IDesktopWallpaper`/COM code remains in NewsService.
 
 | Target | API | Session constraint |
 |---|---|---|

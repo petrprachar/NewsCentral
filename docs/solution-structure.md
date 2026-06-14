@@ -5,11 +5,11 @@
 ```
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
-├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers (72 facts, all passing)
+├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers + active-assignment selector (79 facts, all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
 ├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; 26 facts, all passing)
-└── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete)
+└── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete; desktop wallpaper application)
 ```
 
 ## Project References
@@ -42,6 +42,7 @@ NewsCentral.Shared\
 │       ├── PublishedAssignmentIndex.cs one entry per published assignment
 │       ├── ContentInfo.cs             image path, hash, size, last-modified, URL
 │       ├── DisplayTypeInfo.cs         IsNewsOfWeek, IsWallpaper, IsLogonScreen
+│       ├── ActiveAssignmentSelector.cs pure IsActive + PickNewestActive(predicate); shared by NewsViewer poster/wallpaper
 │       └── IndexStatistics.cs         summary counts
 └── Security\
     ├── ISignable.cs                   interface ISignable { string? Signature { get; set; } }
@@ -91,12 +92,13 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck, BypassImageIntegrityCheck, and HmacOptions
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck, BypassImageIntegrityCheck, HmacOptions, and DeliverySection (wallpaper)
 ├── Models\
 │   └── ViewerState.cs                viewerstate.json structure
 │   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)
 ├── Services\
-│   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate, filters active, picks most recent, verifies image SHA-256
+│   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate; SelectActive + SelectActiveWallpaper via shared ActiveAssignmentSelector; verifies image SHA-256
+│   ├── WallpaperService.cs           desktop wallpaper applier — SystemParametersInfo + HKCU (DllImport, no COM); style + uniform background colour
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
 │   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
@@ -107,7 +109,7 @@ NewsViewer\
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; constructs HmacService; passes BypassImageIntegrityCheck to PresentationSelector; startup checks; remote session guard; branches on ShowMode
+├── Program.cs                        entry point; startup checks; remote-session guard; poster branches on ShowMode; applies wallpaper as the terminal step (after poster/VD teardown)
 └── appsettings.json
 ```
 
@@ -117,7 +119,9 @@ NewsViewer\
 NewsCentral.Shared.Tests\
 ├── EcdsaRoundTripTests.cs                  9 facts: GenerateKeyPair → Sign → Verify (Valid / Invalid / Unsigned / Disabled / rotation fallback / tamper detection / PEM input / bad-key rejection)
 ├── SigningKeyConfigurationReaderTests.cs   5 facts: GetPublicKeys contract (both keys, empty filter, null filter, no-config, team scoping)
-└── SignatureGateTests.cs                  14 facts: ShouldReject full matrix (VerifyResult × requireSignedIndex) + reason-string assertions
+├── SignatureGateTests.cs                  14 facts: ShouldReject full matrix (VerifyResult × requireSignedIndex) + reason-string assertions
+├── ActiveAssignmentSelectorTests.cs        7 facts: IsActive window/day + PickNewestActive newest-by-PresentationLastModified with predicate (IsWallpaper)
+└── … (Entra resolver/merger, delivered-key precedence, shared readers, EffectiveTeams — 79 facts total, all passing)
 ```
 
 ## JSON Serialization Convention

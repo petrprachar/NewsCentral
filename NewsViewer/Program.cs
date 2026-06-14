@@ -37,19 +37,66 @@ static class Program
         var teams = TeamConfigurationReader.GetTeams(configuration);
         if (teams.Length == 0) return;
 
-        if (!HasQualifyingMonitor()) return;
+        // Remote/virtual sessions get neither the poster nor a wallpaper change. The wallpaper step
+        // otherwise runs on any local interactive session — it is NOT gated behind a qualifying monitor.
         if (IsRemoteOrVirtualSession()) return;
 
-        var hmac     = new HmacService(config.Hmac);           // telemetry only — unchanged
-        var selector = new PresentationSelector(config.CacheRootPath, configuration, config.BypassImageIntegrityCheck);
+        var selector = new PresentationSelector(
+            config.CacheRootPath, configuration, config.BypassImageIntegrityCheck);
+
+        // Terminal wallpaper step — re-asserted every run, stateless (no viewerstate). Selects the
+        // active IsWallpaper winner from the signature-verified cache; falls back to a configurable
+        // default; "no content + no default" leaves the current wallpaper untouched (sticky).
+        void ApplyWallpaper()
+        {
+            var (wp, wpPath) = selector.SelectActiveWallpaper(teams);
+
+            string? intended;
+            string  source;
+            if (wp is not null && wpPath is not null)   // wpPath null => unverified image; fall back
+            {
+                intended = wpPath;
+                source   = $"presentation {wp.PresentationId}, team {wp.SourceTeamFolderName}";
+            }
+            else
+            {
+                var def = config.Delivery.DefaultWallpaperPath;
+                if (!string.IsNullOrEmpty(def) && File.Exists(def)) { intended = def;  source = "default"; }
+                else                                                { intended = null; source = string.Empty; }
+            }
+
+            if (intended is null)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[Wallpaper] no active content and no usable default — leaving current (sticky)");
+                return;
+            }
+
+            var applier = new WallpaperService(
+                config.Delivery.WallpaperStyle, config.Delivery.WallpaperBackgroundColor);
+            if (applier.SetWallpaper(intended))
+                System.Diagnostics.Debug.WriteLine($"[Wallpaper] applied: {source} -> {intended}");
+            else
+                System.Diagnostics.Debug.WriteLine($"[Wallpaper] ERROR — apply failed: {source} -> {intended}");
+        }
+
+        // Resolve the active display (poster) assignment — may be absent.
         var (assignment, imagePath) = selector.SelectActive(teams);
-        if (assignment is null || imagePath is null) return;
+
+        // Poster requires an active assignment AND a Full-HD-or-better monitor. When neither poster
+        // can be shown, the wallpaper is still the terminal step before exit.
+        if (assignment is null || imagePath is null || !HasQualifyingMonitor())
+        {
+            ApplyWallpaper();
+            return;
+        }
 
         var userStatePath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "NewsCentral");
         Directory.CreateDirectory(userStatePath);
 
+        var hmac        = new HmacService(config.Hmac);        // telemetry only — unchanged
         var viewerState = new ViewerStateService(userStatePath);
         var telemetry   = new TelemetryWriter(config.CacheRootPath, hmac);
         bool bypass     = config.BypassShowOnceCheck;
@@ -66,12 +113,19 @@ static class Program
             if (!alreadyShown)
                 context.TryShowViewer();
 
+            // ShowNew runs on the current desktop, so apply wallpaper once here — immediately before
+            // the message pump blocks. Do NOT drive wallpaper from inside the resident context.
+            ApplyWallpaper();
             Application.Run(context);
             return;
         }
 
-        // ShowOnce: show once per day then exit
-        if (alreadyShown) return;
+        // ShowOnce: show once per day then exit. The wallpaper still re-asserts on an already-shown day.
+        if (alreadyShown)
+        {
+            ApplyWallpaper();
+            return;
+        }
 
         var isOnline = ReadOnlineStatus(config.CacheRootPath);
 
@@ -104,10 +158,14 @@ static class Program
             uiThread.SetApartmentState(ApartmentState.STA);
             uiThread.Start();
             uiThread.Join();
+
+            // Back on the main thread / original desktop after VD switch-back and teardown.
+            ApplyWallpaper();
         }
         else
         {
             Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline));
+            ApplyWallpaper();
         }
     }
 

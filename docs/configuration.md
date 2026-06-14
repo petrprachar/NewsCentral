@@ -73,6 +73,10 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │           PublicKey          REG_SZ   (Base64 SubjectPublicKeyInfo — ECDSA index verification)
 │           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
 │       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
+├── Delivery\
+│       DefaultWallpaperPath      REG_SZ   (absolute path to a default wallpaper; "" = leave current/sticky)
+│       WallpaperStyle            REG_SZ   (Fill | Fit | Stretch | Center | Tile; default Fit)
+│       WallpaperBackgroundColor  REG_SZ   ("R G B" desktop background for Fit letterbox bars; default "0 0 0")
 └── teams\
         (one REG_SZ value per team; value name = full folder name)
 ```
@@ -202,9 +206,16 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   },
   "Signing": {
     "RequireSignedIndex": false
+  },
+  "Delivery": {
+    "DefaultWallpaperPath": "",
+    "WallpaperStyle": "Fit",
+    "WallpaperBackgroundColor": "0 0 0"
   }
 }
 ```
+
+`Delivery` (NewsViewer) — desktop wallpaper applied in the user session via `SystemParametersInfo` + HKCU. `DefaultWallpaperPath` (absolute path; `""` = leave the current wallpaper, sticky) is applied when no active `IsWallpaper` content is present. `WallpaperStyle` is `Fill | Fit | Stretch | Center | Tile` (default `Fit`). `WallpaperBackgroundColor` is `"R G B"` for the Fit letterbox bars (default `"0 0 0"`). NewsViewer-only; the NewsService `Delivery` section is separate (`DefaultLockScreenPath`).
 
 ## Azure Authentication Modes — NewsService only
 

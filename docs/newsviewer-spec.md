@@ -1,7 +1,7 @@
 # NewsViewer — Component Specification
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass. NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
+**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass. Desktop wallpaper application added (user-session, `SystemParametersInfo` + HKCU; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
 ## Launch Conditions
 
@@ -25,9 +25,10 @@
 - Reads `index.json` from all team cache folders matching the `teams` registry configuration
 - **ECDSA verification** — calls `EcdsaSignatureService.Verify(index, keys)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` / `Disabled` / `Valid` → all logged distinctly, team accepted. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
 - Selects the most recent active presentation by `PresentationLastModified` timestamp
-- **Image integrity verification** — after the winning assignment is selected, computes SHA-256 of the cached image file and compares it against `Content.ImageHash` from the signed index. Missing hash → warning logged, continues. Mismatch → error logged, returns `(best, null)` so the caller exits silently rather than displaying tampered content. Disabled by `BypassImageIntegrityCheck = true`.
-- If no valid presentation found: **exit silently, no window shown**
-- If no qualifying monitor (Full HD or better): **do not show the window**
+- Active-window/day filtering and the "newest by `PresentationLastModified`" pick are the shared pure helper `NewsCentral.Models.IndexFile.ActiveAssignmentSelector` (`IsActive` + `PickNewestActive(assignments, now, predicate)`), unit-tested in `NewsCentral.Shared.Tests`. `SelectActive` uses predicate `_ => true`; `SelectActiveWallpaper` uses `a => a.DisplayTypes.IsWallpaper`. Both read from the same signature-verified index enumeration — wallpaper selection never bypasses verification.
+- **Image integrity verification** — after the winning assignment is selected, computes SHA-256 of the cached image file and compares it against `Content.ImageHash` from the signed index. Missing hash → warning logged, continues. Mismatch → error logged, returns `(best, null)` so the caller declines to display/apply tampered content. Disabled by `BypassImageIntegrityCheck = true`.
+- If no valid presentation found: **the poster is skipped** (but the wallpaper step still runs — see Wallpaper Application)
+- If no qualifying monitor (Full HD or better): **do not show the poster window** (the wallpaper step is not gated by this)
 
 ## Window Layout
 
@@ -106,6 +107,26 @@ When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
 **ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`. The `CreateAssignment` UI enforces this constraint: the ShowNew radio button is disabled (with an explanatory hint) when the selected presentation has `UseVirtualDesktop = true`.
 
 Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Unicode`, no unsafe blocks).
+
+## Wallpaper Application
+
+NewsViewer applies the **desktop wallpaper** in the user session (lock-screen application stays with NewsService). `NewsViewer/Services/WallpaperService.cs` is a thin, AOT-clean shell — **`SystemParametersInfo` + HKCU only, no COM/`IDesktopWallpaper`** (`DllImport` with simple blittable types + `Microsoft.Win32.Registry`, no extra packages, no unsafe code; matching `NativeMethods.cs`).
+
+`bool SetWallpaper(string imagePath)`:
+- `!File.Exists` → warning, returns `false`.
+- Writes `HKCU\Control Panel\Desktop`: `WallpaperStyle`/`TileWallpaper` from the configured style (default **Fit** → `WallpaperStyle="6"`, `TileWallpaper="0"`; also Fill `10`/`0`, Stretch `2`/`0`, Center `0`/`0`, Tile `0`/`1`).
+- Sets a uniform desktop background colour so Fit letterbox bars are even: `HKCU\Control Panel\Colors\Background = "R G B"` plus `SetSysColors(COLOR_DESKTOP)` (configurable, default `"0 0 0"`).
+- `SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)`; returns its result.
+
+**Selection** — `PresentationSelector.SelectActiveWallpaper(teams)` picks the newest active `DisplayTypes.IsWallpaper` assignment from the same signature-verified index read (never bypasses verification), returning `(assignment, resolvedImagePath)` or `(null, null)`.
+
+**Control flow (terminal step, re-asserted every run, stateless — no viewerstate):**
+- Skipped entirely on remote/virtual sessions (`IsRemoteOrVirtualSession`); otherwise runs on any local interactive session and is **not** gated by `HasQualifyingMonitor`.
+- A "no active display assignment" (or no qualifying monitor) case does **not** exit the process — the poster is skipped and the wallpaper step still runs, then the process exits.
+- Runs as the **terminal** step: **ShowOnce** after `ViewerForm` closes and the virtual desktop (if used) is switched back and destroyed — on the main thread / original desktop, never on the temporary VD; **ShowNew** once, immediately **before** `Application.Run(showNewContext)` blocks (ShowNew is incompatible with VD, so the current desktop is correct — wallpaper is never driven from inside the resident context).
+- Decision: `intended` = wallpaper winner path; else `Delivery:DefaultWallpaperPath` if set & `File.Exists`; else `null`. `intended != null` → `SetWallpaper(intended)` (Information log `Wallpaper applied: {source} -> {path}` with source `presentation {id}, team {team}` or `default`; Error on `false`). `intended == null` → leave the current wallpaper untouched (sticky), Debug log. If the winner's image fails integrity verification (`wpPath == null`), it falls back to the default rather than applying unverified content.
+
+Config (`Delivery` section, NewsViewer): `DefaultWallpaperPath` (default `""`), `WallpaperStyle` (default `Fit`), `WallpaperBackgroundColor` (default `"0 0 0"`). See `docs/configuration.md`.
 
 ## Session Telemetry
 
