@@ -47,9 +47,11 @@ public sealed class EntraTeamResolutionService(
             // 5. Read existing entries (empty if absent/unreadable).
             var existing = ReadExisting();
 
-            // 6. Merge through the grace state machine.
+            // 6. Merge through the grace state machine. G1: attribute source only — the group
+            // source is not yet resolved or supplied here (that is G2), so runtime stays attribute-only.
             var merged = EntraResolvedTeamsMerger.Merge(
-                existing, result, resolvedTeam,
+                existing,
+                [new EntraSourceOutcome(ResolvedTeamSource.Attribute, result, resolvedTeam)],
                 DateTime.UtcNow, TimeSpan.FromMinutes(config.Entra.GracePeriodMinutes));
 
             // 7. Atomic write.

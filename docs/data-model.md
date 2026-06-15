@@ -358,13 +358,14 @@ Lists **only** dynamic teams resolved from the device's Entra `extensionAttribut
     {
       "TeamFolderName": "cz-prague-its",
       "LastConfirmedUtc": "2026-06-12T08:12:00Z",
-      "State": "Active"
+      "State": "Active",
+      "Source": "Attribute"
     }
   ]
 }
 ```
 
-`State` values: `Active`, `Grace`. Serializes with the existing camelCase + `JsonStringEnumConverter` options used across NewsService/NewsViewer; no new serializer options are introduced.
+`State` values: `Active`, `Grace`. `Source` values: `Attribute` (resolved from device `extensionAttributes`) or `Group` (resolved from group membership — see `docs/entra-group-team.md`). `Source` drives **per-source grace** in `EntraResolvedTeamsMerger` (each source carries its own grace window independently) and **defaults to `Attribute`** so pre-feature files with no `Source` field deserialize correctly. **NewsViewer ignores `Source`** — it reads only `TeamFolderName` and unions by name. Serializes with the existing camelCase + `JsonStringEnumConverter` options used across NewsService/NewsViewer; no new serializer options are introduced.
 
 ## Session Telemetry (NewsViewer → uploads folder)
 

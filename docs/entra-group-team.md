@@ -130,7 +130,10 @@ the catch-all `Unreachable`).
 ## Integration with the existing pipeline
 
 - The "**one dynamic team per device**" invariant becomes "**up to two**": the attribute team and the
-  group team. `resolved-teams.json` already holds a list — **no schema change**.
+  group team. `resolved-teams.json` already holds a list, and each entry now carries a per-entry
+  **`Source` discriminator** (`Attribute` | `Group`, default `Attribute`) so each source has an
+  independent grace window. This is the only schema addition; it is back-compatible (a missing
+  `Source` deserializes to `Attribute`) and **NewsViewer ignores it** (it reads only `TeamFolderName`).
 - The orchestrator runs **both** resolvers each cycle and collects per-source outcomes.
 - The grace **merger generalizes** from a single team to a team **set**: when reachable, the
   authoritative set = `{attribute team if any} ∪ {group team if any}`, written `Active`; a per-source
@@ -157,11 +160,13 @@ the catch-all `Unreachable`).
   persistent/transient exception mapping.
 - **Orchestrator:** runs the attribute resolver and the group resolver per cycle, producing a set of
   per-source outcomes.
-- **Merger:** generalized from a single resolved team to a resolved **set**; existing tests generalize.
+- **Merger:** generalized from a single resolved team to a per-source resolved **set**; existing tests generalize.
+- **Schema:** `resolved-teams.json` entries gain a `Source` discriminator (`Attribute` | `Group`,
+  default `Attribute`) for per-source grace — back-compatible (missing `Source` ⇒ `Attribute`).
 - **Permission / docs:** `GroupMember.Read.All` added to the agent app registration; `azure-setup.md`
   and `configuration.md` updated.
-- **No change** to NewsViewer, to verification (`VerifyWithPrecedence`), to the authoring side, or to
-  the `resolved-teams.json` schema.
+- **No change** to NewsViewer (it ignores `Source`), to verification (`VerifyWithPrecedence`), or to
+  the authoring side.
 
 ## Out of scope
 

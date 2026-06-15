@@ -31,6 +31,15 @@ public class EntraOptions
 
     /// <summary>Selector (extensionAttribute1 value) → rule (e.g. "FAT" → "extensionAttribute2-extensionAttribute5").</summary>
     public Dictionary<string, string> Mappings { get; set; } = new();
+
+    /// <summary>Group-membership dynamic team (inclusion ∧ ¬exclusion). Inert until G2 wires the resolver.</summary>
+    public GroupTeamOptions GroupTeam { get; set; } = new();
+}
+
+public class GroupTeamOptions
+{
+    public string InclusionGroup { get; set; } = string.Empty;
+    public string ExclusionGroup { get; set; } = string.Empty;
 }
 
 public class ServiceSection
