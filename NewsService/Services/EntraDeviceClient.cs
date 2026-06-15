@@ -1,28 +1,30 @@
 using System.Text.Json;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
-using Microsoft.Graph.Models.ODataErrors;
 using Microsoft.Kiota.Abstractions.Serialization;
 using NewsService.Configuration;
 
 namespace NewsService.Services;
 
 /// <summary>
-/// Tri-state result of one Entra device fetch.
-/// <see cref="Attributes"/> is populated only when <see cref="Outcome"/> is <c>Found</c>.
+/// Four-state result of one Entra device fetch. <see cref="Attributes"/> and
+/// <see cref="DeviceObjectId"/> are populated only when <see cref="Outcome"/> is <c>Found</c>.
+/// <c>PermissionDenied</c> (403) is persistent — callers remove promptly, never grace.
 /// </summary>
 public sealed record EntraDeviceFetch(
     EntraFetchOutcome Outcome,
-    IReadOnlyDictionary<string, string?>? Attributes = null)
+    IReadOnlyDictionary<string, string?>? Attributes = null,
+    string? DeviceObjectId = null)
 {
-    public static EntraDeviceFetch Found(IReadOnlyDictionary<string, string?> attrs) =>
-        new(EntraFetchOutcome.Found, attrs);
+    public static EntraDeviceFetch Found(IReadOnlyDictionary<string, string?> attrs, string? deviceObjectId) =>
+        new(EntraFetchOutcome.Found, attrs, deviceObjectId);
 
-    public static readonly EntraDeviceFetch NotFound    = new(EntraFetchOutcome.NotFound);
-    public static readonly EntraDeviceFetch Unreachable = new(EntraFetchOutcome.Unreachable);
+    public static readonly EntraDeviceFetch NotFound         = new(EntraFetchOutcome.NotFound);
+    public static readonly EntraDeviceFetch PermissionDenied = new(EntraFetchOutcome.PermissionDenied);
+    public static readonly EntraDeviceFetch Unreachable      = new(EntraFetchOutcome.Unreachable);
 }
 
-public enum EntraFetchOutcome { Found, NotFound, Unreachable }
+public enum EntraFetchOutcome { Found, NotFound, PermissionDenied, Unreachable }
 
 /// <summary>
 /// Reads this machine's Entra device object via the Microsoft Graph SDK and returns its
@@ -49,7 +51,7 @@ public sealed class EntraDeviceClient(
             var response = await Graph.Devices.GetAsync(rc =>
             {
                 rc.QueryParameters.Filter = $"deviceId eq '{deviceId}'";
-                rc.QueryParameters.Select = ["extensionAttributes"];
+                rc.QueryParameters.Select = ["id", "extensionAttributes"];
             }, ct);
 
             var device = response?.Value?.FirstOrDefault();
@@ -59,22 +61,28 @@ public sealed class EntraDeviceClient(
                 return EntraDeviceFetch.NotFound;
             }
 
-            return EntraDeviceFetch.Found(ExtractAttributes(device));
-        }
-        catch (ODataError ex) when (ex.ResponseStatusCode == 404)
-        {
-            logger.LogWarning("Entra device query returned 404 for deviceId {DeviceId}.", deviceId);
-            return EntraDeviceFetch.NotFound;
-        }
-        catch (OperationCanceledException)
-        {
-            logger.LogWarning("Entra device fetch was cancelled or timed out.");
-            return EntraDeviceFetch.Unreachable;
+            return EntraDeviceFetch.Found(ExtractAttributes(device), device.Id);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Entra device fetch failed (auth/network) — treated as Unreachable.");
-            return EntraDeviceFetch.Unreachable;
+            // 403 is persistent (missing consent) — surface it distinctly so callers remove promptly
+            // and log at Error; 404 is authoritative not-found; transient/other ride the grace window.
+            switch (GraphFailureClassifier.Classify(ex))
+            {
+                case GraphFailureKind.PermissionDenied:
+                    logger.LogError(ex,
+                        "Entra device query denied (403) for deviceId {DeviceId} — check Device.Read.All admin consent.",
+                        deviceId);
+                    return EntraDeviceFetch.PermissionDenied;
+
+                case GraphFailureKind.NotFound:
+                    logger.LogWarning("Entra device query returned 404 for deviceId {DeviceId}.", deviceId);
+                    return EntraDeviceFetch.NotFound;
+
+                default:
+                    logger.LogWarning(ex, "Entra device fetch failed (transient) — treated as Unreachable.");
+                    return EntraDeviceFetch.Unreachable;
+            }
         }
     }
 

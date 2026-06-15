@@ -1,7 +1,9 @@
 # Entra Group-Membership Team
 
-**Status:** Specified — not yet implemented. Extends the existing Entra device team
-resolution (attribute-based) in NewsService with a second, optional dynamic-team source.
+**Status:** Implemented (NewsService, behind `Entra:Enabled`; group source active only when
+`Entra:GroupTeam:InclusionGroup` is set). Live validation on an Entra-joined box is still pending.
+Extends the existing Entra device team resolution (attribute-based) with a second, optional
+dynamic-team source.
 
 ## Purpose
 

@@ -40,6 +40,7 @@ builder.Services.AddSingleton(config.AzureBlob);
 // constructed when Entra is disabled or AzureBlob creds are absent.
 builder.Services.AddSingleton<IDeviceIdentityProvider, DeviceIdentityProvider>();
 builder.Services.AddSingleton<IEntraDeviceClient, EntraDeviceClient>();
+builder.Services.AddSingleton<IEntraGroupClient, EntraGroupClient>();
 builder.Services.AddSingleton<EntraTeamResolutionService>();
 
 // ── Signing services ─────────────────────────────────────────────────────────
