@@ -2,6 +2,8 @@
 
 ## Per-Component Authentication
 
+> Azure app-registration permissions (incl. Graph `Device.Read.All` / `GroupMember.Read.All`), storage RBAC, the signing certificate, and device/group provisioning: see `docs/azure-setup.md` — the single source for Azure setup.
+
 ### NewsCentral
 
 - Detects UPN accounts and supports local accounts

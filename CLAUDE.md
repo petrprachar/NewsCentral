@@ -146,6 +146,7 @@ No direct inter-process communication. All coordination is via the shared cache 
 
 @docs/solution-structure.md
 @docs/configuration.md
+@docs/azure-setup.md
 @docs/data-model.md
 @docs/newscentral-spec.md
 @docs/newsservice-spec.md

@@ -277,10 +277,6 @@ HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
 
 **Grace (per source, persistent vs transient):** when the device/Graph is **unreachable** (network/timeout/throttling/5xx), each source's last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer — device read OK but no/invalid mapping (attribute) or not-in-inclusion/excluded/unresolved group name (group), or device object not found — removes that source's entry **immediately**. A **403** on either the device read or the group check is **persistent**: it removes promptly (logged at Error), never grace. The attribute and group sources grace independently.
 
-**Credential reuse:** the Microsoft Graph device read uses the **same `AzureBlob` credential and the same single app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**. Graph rides the same default .NET HTTP stack as blob — no app-specific proxy configuration.
+**Credential reuse:** the Microsoft Graph reads use the **same `AzureBlob` credential and app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**.
 
-**Required Graph permissions (operational prerequisite, not provisioned by code):** the existing app registration must be granted, with **admin consent**, the Microsoft Graph **application** permissions:
-- `Device.Read.All` — the device read (attribute source; always required when `Entra:Enabled`).
-- `GroupMember.Read.All` — the group-membership check (`Entra:GroupTeam`; required **only** when the group-team feature is configured). `Directory.Read.All` is an acceptable broader fallback.
-
-No new app registration is created. A missing/unconsented permission surfaces as a **403** — persistent, so the affected source is removed (logged at Error), never graced.
+> Azure app-registration permissions (Graph `Device.Read.All` / `GroupMember.Read.All`, admin consent), storage RBAC, the signing certificate, and device/group provisioning: see `docs/azure-setup.md` — the single source for Azure setup.
