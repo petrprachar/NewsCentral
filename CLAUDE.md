@@ -147,6 +147,7 @@ No direct inter-process communication. All coordination is via the shared cache 
 @docs/data-model.md
 @docs/newscentral-spec.md
 @docs/newsservice-spec.md
+@docs/entra-group-team.md
 @docs/newsviewer-spec.md
 @docs/security.md
 @docs/future.md
