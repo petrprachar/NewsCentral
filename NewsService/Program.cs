@@ -35,6 +35,10 @@ else
 // the same credential even when StorageMode=Share), so register it unconditionally.
 builder.Services.AddSingleton(config.AzureBlob);
 
+// Optional shared WinHTTP transport for blob + Graph (AzureBlob:UseWinHttpProxy). Default off →
+// the factory instantiates nothing and all SDKs are built exactly as before.
+builder.Services.AddSingleton<AzureProxyTransportFactory>();
+
 // ── Entra device team resolution (Phase 2 — produces resolved-teams.json) ─────
 // GraphServiceClient/credential are built lazily inside EntraDeviceClient, so nothing is
 // constructed when Entra is disabled or AzureBlob creds are absent.

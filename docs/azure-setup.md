@@ -99,6 +99,14 @@ Authentication is delegated to the signed-in user.
 (and corporate proxy) as the rest of its traffic — no app-specific proxy. Permit the agent machines/proxy
 egress if the account uses a firewall or private endpoint.
 
+**Proxy under Local System:** the default .NET HttpClient resolves its proxy via **WinINet** (per-user),
+which is unreliable under Local System when no user profile is loaded — whereas the Intune client and
+Windows Update reach the cloud via the **machine WinHTTP proxy** (`netsh winhttp` / WPAD). If NewsService
+cannot reach Blob/Graph under SYSTEM but the machine otherwise has cloud connectivity, set
+`AzureBlob:UseWinHttpProxy = true`: NewsService then routes **both** blob and Graph through
+`WinHttpHandler`/`UseWinHttpProxy`, riding that same proven machine proxy path (one shared transport, no
+per-app proxy config). Default `false` = unchanged behavior. See `docs/configuration.md`.
+
 ---
 
 ## 4. Entra device data — dynamic-team features
@@ -205,4 +213,6 @@ NewsCentral keys: `Storage:EnableBlobDistribution=true`, `Storage:DistributionMo
 - **Group membership is transitive** — nested groups count.
 - **Devices must be Entra/Hybrid-joined**, and each feature is inert until its device data (attributes or
   group membership) is provisioned.
-- **No app-specific proxy** — Graph and Blob share the same default HTTP stack.
+- **No app-specific proxy** — Graph and Blob share the same default HTTP stack. If that stack doesn't
+  traverse the proxy under Local System (WinINet is per-user), set `AzureBlob:UseWinHttpProxy = true` to
+  route both through the machine WinHTTP proxy instead (the Intune/Windows Update path).

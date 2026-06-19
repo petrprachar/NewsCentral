@@ -35,14 +35,25 @@ public enum EntraFetchOutcome { Found, NotFound, PermissionDenied, Unreachable }
 /// </summary>
 public sealed class EntraDeviceClient(
     AzureBlobSection azureBlob,
+    AzureProxyTransportFactory transportFactory,
     ILogger<EntraDeviceClient> logger) : IEntraDeviceClient
 {
     private static readonly string[] GraphScopes = ["https://graph.microsoft.com/.default"];
 
     private GraphServiceClient? _graph;
 
-    private GraphServiceClient Graph =>
-        _graph ??= new GraphServiceClient(AzureCredentialFactory.Create(azureBlob), GraphScopes);
+    private GraphServiceClient Graph => _graph ??= BuildGraph();
+
+    private GraphServiceClient BuildGraph()
+    {
+        var credential = AzureCredentialFactory.Create(azureBlob, transportFactory.AzureTransport);
+
+        // Off (GraphHttpClient == null) → credential-only construction, exactly as before; on → use the
+        // shared HttpClient (Graph middleware over the WinHTTP transport).
+        return transportFactory.GraphHttpClient is null
+            ? new GraphServiceClient(credential, GraphScopes)
+            : new GraphServiceClient(transportFactory.GraphHttpClient, credential, GraphScopes);
+    }
 
     public async Task<EntraDeviceFetch> FetchAsync(string deviceId, CancellationToken ct)
     {

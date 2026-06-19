@@ -21,6 +21,7 @@ public sealed class AzureBlobRepositoryReader : IRepositoryReader
 
     public AzureBlobRepositoryReader(
         AzureBlobSection config,
+        AzureProxyTransportFactory transportFactory,
         ILogger<AzureBlobRepositoryReader> logger)
     {
         _logger = logger;
@@ -30,9 +31,14 @@ public sealed class AzureBlobRepositoryReader : IRepositoryReader
         if (string.IsNullOrWhiteSpace(config.ContainerName))
             throw new InvalidOperationException("AzureBlob:ContainerName must be set.");
 
-        var credential  = AzureCredentialFactory.Create(config);
+        var transport   = transportFactory.AzureTransport;
+        var credential  = AzureCredentialFactory.Create(config, transport);
         var serviceUri  = new Uri($"https://{config.AccountName}.blob.core.windows.net");
-        var service     = new BlobServiceClient(serviceUri, credential);
+
+        // Off (transport == null) → construct exactly as before; on → route through the WinHTTP transport.
+        var service = transport is null
+            ? new BlobServiceClient(serviceUri, credential)
+            : new BlobServiceClient(serviceUri, credential, new BlobClientOptions { Transport = transport });
         _container      = service.GetBlobContainerClient(config.ContainerName);
 
         _logger.LogInformation(

@@ -35,6 +35,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       ContainerName          REG_SZ
 │       CertificateThumbprint  REG_SZ
 │       ClientSecret           REG_SZ
+│       UseWinHttpProxy        REG_SZ   "true" or "false"  (default false; route blob+Graph via machine WinHTTP proxy)
 ├── Hmac\
 │       SecretKey   REG_SZ    (Base64-encoded 32-byte key; empty = HMAC disabled)
 ├── Signing\
@@ -171,7 +172,8 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
     "CertificateThumbprint": "",
     "ClientSecret": "",
     "AccountName": "",
-    "ContainerName": "newscentral"
+    "ContainerName": "newscentral",
+    "UseWinHttpProxy": false
   },
   "Hmac": {
     "SecretKey": ""
@@ -231,6 +233,8 @@ NewsService runs as an unattended Windows Service with no interactive user. It a
 **ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing.
 
 NewsCentral does **not** use these modes. It authenticates via an interactive MSAL user session.
+
+**`AzureBlob:UseWinHttpProxy`** (bool, default `false`) — when `true`, NewsService routes **all** its cloud SDK traffic (Azure Blob **and** Microsoft Graph) through `WinHttpHandler` with `UseWinHttpProxy`, i.e. the **machine WinHTTP proxy** (`netsh winhttp` / WPAD) that the Intune client and Windows Update use. Default `false` keeps today's behavior — the SDKs use the default .NET HTTP stack, which resolves its proxy via **WinINet** (per-user, unreliable under Local System with no user profile loaded). Enable this when NewsService cannot reach Azure/Graph under SYSTEM but the machine otherwise has working cloud connectivity. Shared transport: `AzureProxyTransportFactory` (one set of handlers per process); no per-app proxy config. Registry override: `AzureBlob\UseWinHttpProxy` REG_SZ `"true"`/`"false"`.
 
 ## Entra device team resolution (NewsService)
 

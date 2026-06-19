@@ -63,4 +63,12 @@ public class AzureBlobSection
     public string ClientSecret          { get; set; } = string.Empty;
     public string AccountName           { get; set; } = string.Empty;
     public string ContainerName         { get; set; } = "newscentral";
+
+    /// <summary>
+    /// When true, NewsService routes ALL its cloud SDK traffic (Azure Blob + Microsoft Graph) through
+    /// WinHttpHandler with UseWinHttpProxy — the machine WinHTTP proxy used by the Intune client and
+    /// Windows Update — instead of the default WinINet-based proxy resolution, which is unreliable under
+    /// Local System with no user profile loaded. Default false = today's behavior (no transport override).
+    /// </summary>
+    public bool UseWinHttpProxy { get; set; } = false;
 }

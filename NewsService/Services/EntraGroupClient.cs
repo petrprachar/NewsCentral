@@ -15,6 +15,7 @@ namespace NewsService.Services;
 /// </summary>
 public sealed class EntraGroupClient(
     AzureBlobSection azureBlob,
+    AzureProxyTransportFactory transportFactory,
     ILogger<EntraGroupClient> logger) : IEntraGroupClient
 {
     private static readonly string[] GraphScopes = ["https://graph.microsoft.com/.default"];
@@ -25,8 +26,18 @@ public sealed class EntraGroupClient(
 
     private GraphServiceClient? _graph;
 
-    private GraphServiceClient Graph =>
-        _graph ??= new GraphServiceClient(AzureCredentialFactory.Create(azureBlob), GraphScopes);
+    private GraphServiceClient Graph => _graph ??= BuildGraph();
+
+    private GraphServiceClient BuildGraph()
+    {
+        var credential = AzureCredentialFactory.Create(azureBlob, transportFactory.AzureTransport);
+
+        // Off (GraphHttpClient == null) → credential-only construction, exactly as before; on → use the
+        // shared HttpClient (Graph middleware over the WinHTTP transport).
+        return transportFactory.GraphHttpClient is null
+            ? new GraphServiceClient(credential, GraphScopes)
+            : new GraphServiceClient(transportFactory.GraphHttpClient, credential, GraphScopes);
+    }
 
     public async Task<EntraGroupEvaluation> EvaluateAsync(
         string deviceObjectId, string? inclusionName, string? exclusionName, CancellationToken ct)

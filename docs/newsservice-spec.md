@@ -82,3 +82,5 @@ A configurable **default lock-screen image** is applied when no lock-screen cont
 - Machine certificate from local machine certificate store
 - Proactive token refresh; exponential backoff on transient failures; cert-expiry logging
 - Handles weeks-long uptime without restart
+
+**Optional WinHTTP transport (`AzureProxyTransportFactory`).** A singleton, gated by `AzureBlob:UseWinHttpProxy` (default `false`). When on, it builds one shared `WinHttpHandler`-backed transport for Azure.Core (`HttpClientTransport`, used by the credential + blob reader) and one Graph `HttpClient` (`GraphClientFactory.Create(finalHandler: WinHttpHandler{UseWinHttpProxy})`, preserving Graph's retry/redirect/throttling middleware, used by the device + group clients) — so all blob + Graph traffic rides the machine WinHTTP proxy under Local System (see `docs/configuration.md` / `docs/azure-setup.md`). When off, both members are null, `WinHttpHandler` is never instantiated, and every SDK is constructed exactly as before. Only transport construction is affected — credential selection, resolvers, `checkMemberGroups`, and team selection are unchanged.

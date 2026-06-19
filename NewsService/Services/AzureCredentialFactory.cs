@@ -1,4 +1,5 @@
 using Azure.Core;
+using Azure.Core.Pipeline;
 using Azure.Identity;
 using NewsService.Configuration;
 using System.Security.Cryptography.X509Certificates;
@@ -14,7 +15,13 @@ namespace NewsService.Services;
 /// </summary>
 public static class AzureCredentialFactory
 {
-    public static TokenCredential Create(AzureBlobSection cfg)
+    /// <param name="transport">
+    /// Optional Azure.Core transport (the shared WinHTTP transport from
+    /// <see cref="AzureProxyTransportFactory"/>). When non-null it is applied to the credential's
+    /// AAD token calls so they ride the machine WinHTTP proxy too. When null, the credential is
+    /// constructed exactly as before — no options object, today's behavior byte-for-byte.
+    /// </param>
+    public static TokenCredential Create(AzureBlobSection cfg, HttpClientTransport? transport = null)
     {
         if (cfg.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
         {
@@ -24,7 +31,11 @@ public static class AzureCredentialFactory
                 throw new InvalidOperationException(
                     "AzureBlob:AuthMode=ClientSecret requires TenantId, ClientId, and ClientSecret.");
 
-            return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret);
+            if (transport is null)
+                return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret);
+
+            return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret,
+                new ClientSecretCredentialOptions { Transport = transport });
         }
 
         // Default: Certificate
@@ -43,6 +54,10 @@ public static class AzureCredentialFactory
             throw new InvalidOperationException(
                 $"Certificate with thumbprint '{cfg.CertificateThumbprint}' not found in LocalMachine\\My.");
 
-        return new ClientCertificateCredential(cfg.TenantId, cfg.ClientId, certs[0]);
+        if (transport is null)
+            return new ClientCertificateCredential(cfg.TenantId, cfg.ClientId, certs[0]);
+
+        return new ClientCertificateCredential(cfg.TenantId, cfg.ClientId, certs[0],
+            new ClientCertificateCredentialOptions { Transport = transport });
     }
 }
