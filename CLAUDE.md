@@ -153,4 +153,5 @@ No direct inter-process communication. All coordination is via the shared cache 
 @docs/entra-group-team.md
 @docs/newsviewer-spec.md
 @docs/security.md
+@docs/anti-tamper.md
 @docs/future.md

@@ -1,5 +1,7 @@
 # Security
 
+> Anti-tamper quick reference (integrity values, config/registry matrix, static-vs-dynamic key-trust model): see `docs/anti-tamper.md`. This document covers the phase history and rationale.
+
 ## Per-Component Authentication
 
 > Azure app-registration permissions (incl. Graph `Device.Read.All` / `GroupMember.Read.All`), storage RBAC, the signing certificate, and device/group provisioning: see `docs/azure-setup.md` — the single source for Azure setup.
