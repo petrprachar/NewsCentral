@@ -1,5 +1,7 @@
 # Configuration Model
 
+> For the anti-tamper-relevant subset (signing keys, `RequireSignedIndex`, image-integrity bypass, HMAC key) consolidated into one table with defaults and effects, see `docs/anti-tamper.md`.
+
 ## Registry Hive
 
 All registry-configurable values reside under:
