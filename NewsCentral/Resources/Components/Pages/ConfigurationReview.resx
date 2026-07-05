@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" /></xsd:sequence><xsd:attribute name="name" use="required" type="xsd:string" /><xsd:attribute name="type" type="xsd:string" /><xsd:attribute name="mimetype" type="xsd:string" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="assembly"><xsd:complexType><xsd:attribute name="alias" type="xsd:string" /><xsd:attribute name="name" type="xsd:string" /></xsd:complexType></xsd:element>
+          <xsd:element name="data"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /><xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" /><xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" /><xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" /><xsd:attribute ref="xml:space" /></xsd:complexType></xsd:element>
+          <xsd:element name="resheader"><xsd:complexType><xsd:sequence><xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" /></xsd:sequence><xsd:attribute name="name" type="xsd:string" use="required" /></xsd:complexType></xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="PageTitle" xml:space="preserve"><value>Configuration Review</value></data>
+  <data name="PageDescription" xml:space="preserve"><value>Read-only view of how each configuration value resolves across appsettings.json and the registry for all three components on this machine.</value></data>
+  <data name="AccessDenied" xml:space="preserve"><value>Access Denied</value></data>
+  <data name="AccessDeniedMessage" xml:space="preserve"><value>This page is available to system administrators only.</value></data>
+  <data name="DiskVsLiveNote" xml:space="preserve"><value>Shows configuration sources on disk/registry now; a running service may hold an earlier snapshot until restart.</value></data>
+  <data name="InstallDirectory" xml:space="preserve"><value>Install directory</value></data>
+  <data name="DiscoverySource" xml:space="preserve"><value>Discovered via</value></data>
+  <data name="NotDiscovered" xml:space="preserve"><value>(not discovered)</value></data>
+  <data name="AppSettingsPath" xml:space="preserve"><value>appsettings.json path</value></data>
+  <data name="RegistryHive" xml:space="preserve"><value>Registry hive</value></data>
+  <data name="Found" xml:space="preserve"><value>Found</value></data>
+  <data name="NotFound" xml:space="preserve"><value>Not found</value></data>
+  <data name="NotReadable" xml:space="preserve"><value>not readable (insufficient rights)</value></data>
+  <data name="Exists" xml:space="preserve"><value>exists</value></data>
+  <data name="Missing" xml:space="preserve"><value>missing</value></data>
+  <data name="ColValueName" xml:space="preserve"><value>Value name</value></data>
+  <data name="ColSubkey" xml:space="preserve"><value>Subkey path</value></data>
+  <data name="ColDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="ColAppSettings" xml:space="preserve"><value>appsettings.json</value></data>
+  <data name="ColRegistry" xml:space="preserve"><value>Registry</value></data>
+  <data name="ColOverridable" xml:space="preserve"><value>Overridable</value></data>
+  <data name="NAPathDefining" xml:space="preserve"><value>N/A — defines the registry path</value></data>
+  <data name="Empty" xml:space="preserve"><value>(empty)</value></data>
+  <data name="On" xml:space="preserve"><value>On</value></data>
+  <data name="Off" xml:space="preserve"><value>Off</value></data>
+  <data name="Overridable" xml:space="preserve"><value>Registry-overridable</value></data>
+  <data name="NotOverridable" xml:space="preserve"><value>Not overridable</value></data>
+  <data name="RegistryOnly" xml:space="preserve"><value>Registry-only</value></data>
+  <data name="Teams" xml:space="preserve"><value>Teams</value></data>
+  <data name="SigningKeys" xml:space="preserve"><value>Signing keys</value></data>
+  <data name="ColTeam" xml:space="preserve"><value>Team</value></data>
+  <data name="ColPublicKey" xml:space="preserve"><value>PublicKey</value></data>
+  <data name="ColPublicKeyPrevious" xml:space="preserve"><value>PublicKeyPrevious</value></data>
+  <data name="EntraMappings" xml:space="preserve"><value>Entra Mappings</value></data>
+  <data name="ColSelector" xml:space="preserve"><value>Selector</value></data>
+  <data name="ColRule" xml:space="preserve"><value>Rule</value></data>
+</root>

@@ -1,0 +1,319 @@
+@page "/configuration-review"
+@using System.IO
+@using System.Linq
+@using NewsCentral.Services
+@using NewsCentral.Models
+@using NewsCentral.Configuration
+@using Microsoft.Extensions.Localization
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject IStringLocalizer<ConfigurationReview> Localizer
+
+<PageTitle>@Localizer["PageTitle"]</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>@Localizer["PageTitle"]</h1>
+        <p class="page-description">@Localizer["PageDescription"]</p>
+    </div>
+
+    @if (!isAuthorized)
+    {
+        <div class="alert alert-danger">
+            <strong>@Localizer["AccessDenied"]</strong>
+            <p>@Localizer["AccessDeniedMessage"]</p>
+        </div>
+        return;
+    }
+
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>@Localizer["DiskVsLiveNote"]
+    </div>
+
+    @foreach (var r in resolutions)
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-box-seam me-2"></i>@r.ComponentName</h5>
+            </div>
+            <div class="card-body">
+
+                @* ── Header block (§4) ─────────────────────────────────────── *@
+                <dl class="row mb-4">
+                    <dt class="col-sm-3">@Localizer["InstallDirectory"]</dt>
+                    <dd class="col-sm-9">
+                        @if (r.InstallDir is null)
+                        {
+                            <span class="text-muted">@Localizer["NotDiscovered"]</span>
+                        }
+                        else
+                        {
+                            <code>@r.InstallDir</code>
+                            @ExistsBadge(r.InstallDirExists)
+                        }
+                        <div><small class="text-muted">@Localizer["DiscoverySource"]: <code>@r.DiscoverySource</code></small></div>
+                    </dd>
+
+                    <dt class="col-sm-3">@Localizer["AppSettingsPath"]</dt>
+                    <dd class="col-sm-9">
+                        @if (r.AppSettingsStatus == LayerStatus.Unreadable)
+                        {
+                            <span class="text-danger">@Localizer["NotReadable"]</span>
+                        }
+                        else if (r.AppSettingsPath is null)
+                        {
+                            <span class="text-muted">@Localizer["NotDiscovered"]</span>
+                        }
+                        else
+                        {
+                            <code>@r.AppSettingsPath</code>
+                            @ExistsBadge(r.AppSettingsExists)
+                        }
+                    </dd>
+
+                    <dt class="col-sm-3">@Localizer["RegistryHive"]</dt>
+                    <dd class="col-sm-9">
+                        <code>@r.HivePath</code>
+                        @if (r.RegistryStatus == LayerStatus.Unreadable)
+                        {
+                            <span class="badge bg-danger ms-2">@Localizer["NotReadable"]</span>
+                        }
+                        else if (r.HiveFound)
+                        {
+                            <span class="badge bg-success ms-2">@Localizer["Found"]</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary ms-2">@Localizer["NotFound"]</span>
+                        }
+                    </dd>
+                </dl>
+
+                @* ── Config table (§5) ─────────────────────────────────────── *@
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>@Localizer["ColValueName"]</th>
+                                <th>@Localizer["ColSubkey"]</th>
+                                <th>@Localizer["ColDefault"]</th>
+                                <th>@Localizer["ColAppSettings"]</th>
+                                <th>@Localizer["ColRegistry"]</th>
+                                <th>@Localizer["ColOverridable"]</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in r.Rows)
+                            {
+                                <tr>
+                                    <td>
+                                        <div>
+                                            @row.Descriptor.DisplayName
+                                            <span class="bi bi-info-circle text-muted ms-1"
+                                                  title="@row.Descriptor.ValueHint" aria-label="@row.Descriptor.ValueHint"></span>
+                                        </div>
+                                        <small class="text-muted"><code>@row.Descriptor.CanonicalKey</code></small>
+                                    </td>
+                                    <td>@SubkeyCell(row.Descriptor)</td>
+                                    <td>@DefaultCell(row.Descriptor)</td>
+                                    <td>@ValueCell(row.Descriptor, row.AppSettingsValue)</td>
+                                    <td>@ValueCell(row.Descriptor, row.RegistryValue)</td>
+                                    <td>@OverridableBadge(row.Descriptor.OverridableState)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @* ── Structural hives (§6) ─────────────────────────────────── *@
+                @if (r.Teams.Count > 0)
+                {
+                    <h6 class="mt-4">@Localizer["Teams"]</h6>
+                    <ul class="mb-3">
+                        @foreach (var t in r.Teams)
+                        {
+                            <li><code>@t</code></li>
+                        }
+                    </ul>
+                }
+
+                @if (r.Signing.Count > 0)
+                {
+                    <h6 class="mt-4">@Localizer["SigningKeys"]</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>@Localizer["ColTeam"]</th>
+                                    <th>@Localizer["ColPublicKey"]</th>
+                                    <th>@Localizer["ColPublicKeyPrevious"]</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var s in r.Signing)
+                                {
+                                    <tr>
+                                        <td><code>@s.Team</code></td>
+                                        <td>@KeyCell(s.PublicKey)</td>
+                                        <td>@KeyCell(s.PublicKeyPrevious)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @if (r.EntraMappings.Count > 0)
+                {
+                    <h6 class="mt-4">@Localizer["EntraMappings"]</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>@Localizer["ColSelector"]</th>
+                                    <th>@Localizer["ColRule"]</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in r.EntraMappings)
+                                {
+                                    <tr>
+                                        <td><code>@m.Selector</code></td>
+                                        <td><code>@m.Rule</code></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isAuthorized;
+    private List<ComponentResolution> resolutions = new();
+
+    protected override void OnInitialized()
+    {
+        var currentUser = AuthService.GetCurrentUser();
+        if (currentUser is null)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        isAuthorized = currentUser.IsSystemAdmin;
+        if (!isAuthorized) return;
+
+        // Re-resolve every load; session-only, cache nothing (§3/§8). Fixed page order
+        // NewsCentral → NewsService → NewsViewer via ConfigManifests.All.
+        resolutions = ConfigManifests.All.Select(EffectiveConfigResolver.Resolve).ToList();
+    }
+
+    // ── Read-only cell renderers ──────────────────────────────────────────────
+
+    private RenderFragment ExistsBadge(bool exists) => __builder =>
+    {
+        if (exists)
+        {
+            <span class="badge bg-success ms-2">@Localizer["Exists"]</span>
+        }
+        else
+        {
+            <span class="badge bg-secondary ms-2">@Localizer["Missing"]</span>
+        }
+    };
+
+    private RenderFragment SubkeyCell(ConfigKeyDescriptor d) => __builder =>
+    {
+        if (d.OverridableState == OverridableState.DefinesPath)
+        {
+            <span class="text-muted">@Localizer["NAPathDefining"]</span>
+        }
+        else
+        {
+            <code>@d.RegistrySubkeyPath</code>
+        }
+    };
+
+    private RenderFragment DefaultCell(ConfigKeyDescriptor d) => __builder =>
+    {
+        if (d.Default.Length == 0)
+        {
+            <span class="text-muted">@Localizer["Empty"]</span>
+        }
+        else
+        {
+            <code>@d.Default</code>
+        }
+    };
+
+    // Type-appropriate read-only rendering (§5). Redaction via ConfigValueFormatter — never writes.
+    private RenderFragment ValueCell(ConfigKeyDescriptor d, string? raw) => __builder =>
+    {
+        var text = ConfigValueFormatter.ForDisplay(d, raw);
+
+        if (d.ControlKind == ControlKind.Toggle && TryBool(raw, out var b))
+        {
+            <span class="badge @(b ? "bg-success" : "bg-secondary")">@(b ? Localizer["On"] : Localizer["Off"])</span>
+        }
+        else if (d.ControlKind == ControlKind.Path && !string.IsNullOrEmpty(raw) && !d.IsSecret)
+        {
+            <code>@text</code>
+            <span>&nbsp;</span>
+            @ExistsBadge(PathExists(raw!))
+        }
+        else
+        {
+            @text
+        }
+    };
+
+    // Signing public keys are NOT secret: shown in full, visually truncated but copyable (§6).
+    private RenderFragment KeyCell(string? key) => __builder =>
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            <span class="text-muted">@Localizer["Empty"]</span>
+        }
+        else
+        {
+            <code class="user-select-all d-inline-block text-truncate" style="max-width: 340px; vertical-align: bottom;"
+                  title="@key">@key</code>
+        }
+    };
+
+    private RenderFragment OverridableBadge(OverridableState state) => __builder =>
+    {
+        if (state == OverridableState.Overridable)
+        {
+            <span class="badge bg-primary">@Localizer["Overridable"]</span>
+        }
+        else if (state == OverridableState.DefinesPath)
+        {
+            <span class="badge bg-secondary">@Localizer["NotOverridable"]</span>
+        }
+        else
+        {
+            <span class="badge bg-info">@Localizer["RegistryOnly"]</span>
+        }
+    };
+
+    private static bool TryBool(string? s, out bool value)
+    {
+        value = false;
+        if (string.IsNullOrEmpty(s)) return false;
+        if (bool.TryParse(s, out value)) return true;
+        if (s == "1") { value = true; return true; }
+        if (s == "0") { value = false; return true; }
+        return false;
+    }
+
+    private static bool PathExists(string p)
+    {
+        try { return File.Exists(p) || Directory.Exists(p); }
+        catch { return false; }
+    }
+}

@@ -54,6 +54,7 @@
   <data name="Teams" xml:space="preserve"><value>Teams</value></data>
   <data name="Users" xml:space="preserve"><value>Users</value></data>
   <data name="IndexManagement" xml:space="preserve"><value>Index Management</value></data>
+  <data name="ConfigurationReview" xml:space="preserve"><value>Configuration Review</value></data>
   <data name="KeyManagement" xml:space="preserve"><value>Key Management</value></data>
   <data name="Settings" xml:space="preserve"><value>Settings</value></data>
 </root>
