@@ -110,7 +110,7 @@ public static class MauiProgram
         builder.Configuration.AddConfiguration(config);
         builder.Configuration.AddRegistryOverrides(
             config["Company"] ?? "Contoso",
-            "NewsCentral",
+            SolutionConstants.SolutionName,
             "NewsCentral");
 
         // DEBUG: read from builder.Configuration (includes registry overrides)

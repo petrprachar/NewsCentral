@@ -5,7 +5,6 @@ namespace NewsService.Configuration;
 public class ServiceConfiguration
 {
     public string Company { get; set; } = "Contoso";
-    public string ApplicationName { get; set; } = "NewsCentral";
     public ServiceSection Service { get; set; } = new();
     public RepositorySection Repository { get; set; } = new();
     public AzureBlobSection AzureBlob { get; set; } = new();

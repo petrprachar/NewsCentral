@@ -10,7 +10,7 @@ All registry-configurable values reside under:
 HKLM\Software\[Company]\[NewsCentral]\
 ```
 
-The `[Company]` and `[NewsCentral]` placeholder strings are defined in `appsettings.json` and are **not** overridable via registry (they define the registry path itself).
+`[Company]` is the only path-defining **configuration** value: it is read from `appsettings.json` and is **not** overridable via registry (it defines the registry path itself). The `[NewsCentral]` solution segment is **not** configuration at all — it is the fixed constant `SolutionConstants.SolutionName` (in `NewsCentral.Shared`, namespace `NewsCentral.Configuration`).
 
 ## Precedence Rule
 

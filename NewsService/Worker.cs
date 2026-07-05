@@ -24,8 +24,8 @@ public sealed class Worker(
             if (teams.Length == 0)
                 logger.LogWarning(
                     "No teams configured. Add team folder names as REG_SZ values under " +
-                    "HKLM\\Software\\{Company}\\{App}\\teams\\.",
-                    config.Company, config.ApplicationName);
+                    "HKLM\\Software\\{Company}\\{Solution}\\{Component}\\teams\\.",
+                    config.Company, SolutionConstants.SolutionName, "NewsService");
             else
                 await RunCycleAsync(teams, stoppingToken);
 

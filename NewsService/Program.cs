@@ -9,10 +9,10 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options => options.ServiceName = "NewsService");
 
 // ── Load appsettings, then apply registry overrides ──────────────────────────
-// Company/ApplicationName are read first (they define the registry path itself and
-// are therefore not registry-overridable).
+// Company is read first (it defines the registry path itself and is therefore not
+// registry-overridable); the solution segment is the fixed SolutionConstants.SolutionName.
 var baseConfig = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();
-builder.Configuration.AddRegistryOverrides(baseConfig.Company, "NewsCentral", "NewsService");
+builder.Configuration.AddRegistryOverrides(baseConfig.Company, SolutionConstants.SolutionName, "NewsService");
 
 // Re-bind so all typed POCOs reflect registry overrides.
 var config = builder.Configuration.Get<ServiceConfiguration>() ?? new ServiceConfiguration();

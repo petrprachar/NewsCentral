@@ -18,8 +18,8 @@ public class AppConfiguration
     // When using Azure Files, mount the share as a drive and set DataPath to it.
 
     public string DataPath             => _configuration["DataPath"] ?? string.Empty;
-    public string DefaultAdminUsername => _configuration["DefaultAdminUsername"] ?? "admin";
-    public string DefaultAdminPassword => _configuration["DefaultAdminPassword"] ?? "admin";
+    public string DefaultAdminUsername => _configuration["Initialization:DefaultAdminUsername"] ?? "admin";
+    public string DefaultAdminPassword => _configuration["Initialization:DefaultAdminPassword"] ?? "admin";
     public int    LockExpirationMinutes =>
         int.TryParse(_configuration["LockExpirationMinutes"], out var m) ? m : 15;
 

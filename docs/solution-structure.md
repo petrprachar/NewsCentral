@@ -62,7 +62,9 @@ NewsCentral.Shared\
 └── Configuration\
     ├── RegistryConfigurationProvider.cs   IConfigurationProvider/IConfigurationSource + AddRegistryOverrides() extension
     ├── TeamConfigurationReader.cs         GetTeams(IConfiguration) helper
-    └── SigningKeyConfigurationReader.cs   GetPublicKeys(IConfiguration, teamFolderName) — reads Signing:{team}:PublicKey / :PublicKeyPrevious for ECDSA verification
+    ├── SigningKeyConfigurationReader.cs   GetPublicKeys(IConfiguration, teamFolderName) — reads Signing:{team}:PublicKey / :PublicKeyPrevious for ECDSA verification
+    ├── SolutionConstants.cs               SolutionName = "NewsCentral" — fixed hive segment for AddRegistryOverrides(company, SolutionName, component)
+    └── AppConfiguration.cs                typed accessor over IConfiguration for the NewsCentral authoring app (admin creds via Initialization:*, DataPath, distribution, Azure/HMAC)
 ```
 
 ## NewsService — Service Layout
