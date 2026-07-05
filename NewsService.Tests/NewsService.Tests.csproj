@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NewsService\NewsService.csproj" />
+    <ProjectReference Include="..\NewsViewer\NewsViewer.csproj" />
     <ProjectReference Include="..\NewsCentral.Shared\NewsCentral.Shared.csproj" />
   </ItemGroup>
 
