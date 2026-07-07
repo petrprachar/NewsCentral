@@ -5,7 +5,7 @@
 ```
 NewsCentral.sln
 ├── NewsCentral.Shared\          .NET 9 class library — shared domain models
-├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers + active-assignment selector (82 facts, all passing)
+├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers + active-assignment selector (all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
 ├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; 26 facts, all passing)
@@ -123,7 +123,7 @@ NewsCentral.Shared.Tests\
 ├── SigningKeyConfigurationReaderTests.cs   5 facts: GetPublicKeys contract (both keys, empty filter, null filter, no-config, team scoping)
 ├── SignatureGateTests.cs                  14 facts: ShouldReject full matrix (VerifyResult × requireSignedIndex) + reason-string assertions
 ├── ActiveAssignmentSelectorTests.cs       10 facts: IsActive window/day + PickNewestActive newest-by-PresentationLastModified; IsWallpaper vs IsNewsOfWeek predicate independence (K03 wallpaper-only skipped by display selection)
-└── … (Entra resolver/merger, delivered-key precedence, shared readers, EffectiveTeams — 82 facts total, all passing)
+└── … (Entra resolver/merger, delivered-key precedence, shared readers, EffectiveTeams — all passing)
 ```
 
 ## JSON Serialization Convention
