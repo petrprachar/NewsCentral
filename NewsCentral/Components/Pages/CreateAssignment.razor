@@ -88,9 +88,10 @@
                                    @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowOnce)" />
                             <span><strong>@Localizer["ShowOnce"]</strong> — @Localizer["ShowOnceDescription"]</span>
                         </label>
-                        <label class="radio-label @(presentation!.UseVirtualDesktop ? "radio-label-disabled" : "")">
+                        <label class="radio-label radio-label-disabled">
+                            @* "Show New" temporarily disabled — visible but not selectable (UI-only). *@
                             <input type="radio" name="showMode"
-                                   disabled="@presentation.UseVirtualDesktop"
+                                   disabled="@true"
                                    checked="@(scheduleShowMode == Schedule.DisplayMode.ShowNew)"
                                    @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowNew)" />
                             <span>
