@@ -152,4 +152,68 @@ public sealed class EffectiveConfigResolverTests
         Assert.Empty(result.Signing);
         Assert.Empty(result.EntraMappings);
     }
+
+    // ── Resolve install-dir override (spec §4) ────────────────────────────────
+
+    [Fact]
+    public void Resolve_WithValidOverride_ReadsThatDirsAppsettings()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "ncr-override-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "appsettings.json"),
+                "{ \"Company\": \"TestCo\", \"Service\": { \"PollIntervalSeconds\": \"77\" } }");
+
+            var result = EffectiveConfigResolver.Resolve(ConfigManifests.NewsService, dir);
+
+            Assert.Equal(dir, result.InstallDir);
+            Assert.Equal("manual override (session)", result.DiscoverySource);
+            Assert.Equal(Path.Combine(dir, "appsettings.json"), result.AppSettingsPath);
+            Assert.True(result.AppSettingsExists);
+            Assert.Equal(LayerStatus.Found, result.AppSettingsStatus);
+
+            // Values are read from THAT directory's appsettings.json.
+            Assert.Equal("TestCo",
+                result.Rows.Single(r => r.Descriptor.CanonicalKey == "Company").AppSettingsValue);
+            Assert.Equal("77",
+                result.Rows.Single(r => r.Descriptor.CanonicalKey == "Service:PollIntervalSeconds").AppSettingsValue);
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void Resolve_WithEmptyOrNullOverride_FallsBackToDiscovery()
+    {
+        // NewsCentral discovery is deterministic: AppContext.BaseDirectory.
+        var viaNull  = EffectiveConfigResolver.Resolve(ConfigManifests.NewsCentral, null);
+        var viaEmpty = EffectiveConfigResolver.Resolve(ConfigManifests.NewsCentral, "   ");
+
+        Assert.Equal("AppContext.BaseDirectory", viaNull.DiscoverySource);
+        Assert.Equal("AppContext.BaseDirectory", viaEmpty.DiscoverySource);
+        Assert.Equal(AppContext.BaseDirectory, viaNull.InstallDir);
+        Assert.Equal(AppContext.BaseDirectory, viaEmpty.InstallDir);
+    }
+
+    [Fact]
+    public void Resolve_WithNonExistentOverride_ResolvesEmpty_WithoutThrowing()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "ncr-missing-" + Guid.NewGuid().ToString("N"));
+
+        var result = EffectiveConfigResolver.Resolve(ConfigManifests.NewsService, missing);
+
+        Assert.Equal(missing, result.InstallDir);
+        Assert.False(result.InstallDirExists);
+        Assert.Equal(Path.Combine(missing, "appsettings.json"), result.AppSettingsPath);
+        Assert.False(result.AppSettingsExists);
+        Assert.Equal(LayerStatus.NotFound, result.AppSettingsStatus);
+
+        // Rows still present (manifest surface), all appsettings values absent; no structural data.
+        Assert.NotEmpty(result.Rows);
+        Assert.All(result.Rows, row => Assert.Null(row.AppSettingsValue));
+        Assert.Empty(result.Teams);
+    }
 }

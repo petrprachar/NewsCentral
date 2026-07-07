@@ -49,6 +49,16 @@ Above each config table, a small metadata block describing *where the module liv
 
 The **found/not-found** badge on the hive is load-bearing: a `Company` mismatch makes `OpenSubKey` return null, and this badge surfaces that as a diagnostic signal rather than a silently empty registry column (§10).
 
+**Install-directory override (session-only).** Auto-discovery (§4.1) is the default, but on a dev box the components are rarely installed where the service registration / `Run` key point, so discovery yields `(not discovered)` and the NewsService/NewsViewer sections come up empty. Each section therefore exposes **one** editable field — the install directory — as an override:
+
+- The field is an **override**, not a replacement: blank = auto-discovery exactly as today; non-empty = the resolver uses the typed directory and **skips discovery**.
+- The `appsettings.json` path is **derived** from it as `{override}\appsettings.json` — there is no second editable field.
+- Applying is an **explicit per-section action** (an *Apply / Reload* button, or field blur), not a keystroke-reactive watcher. On apply the section **re-resolves** end to end: install dir → derived appsettings path → both layers → rows + structural blocks, and the header badges (exists / hive found-or-not) reflect the new path.
+- A non-existent override path falls back to the normal `(not discovered)` / not-found messaging via the exists badges — it never throws.
+- **Session-only**: the override lives in page component state; it is **never** persisted and is lost on reload/restart (the developer re-enters it). It is NewsCentral's own in-memory diagnostic pointer — nothing is written to the registry or to any component's `appsettings.json`.
+
+The NewsCentral section already self-discovers via `AppContext.BaseDirectory`; the field is present there for consistency but is not needed.
+
 ### 4.1 Install Directory Discovery
 
 | Component | Source | Notes |
@@ -74,7 +84,7 @@ Columns per row:
 
 | Column | Content |
 |---|---|
-| Value name | `DisplayName` + a small **ⓘ** affordance carrying the `ValueHint` tooltip (§7). Canonical colon-key shown as secondary/monospace text. |
+| Value name | `DisplayName` + a small **ⓘ** affordance carrying the `ValueHint` tooltip (§7). The **ⓘ** is a visible title-based (native) tooltip — a styled `ⓘ` span with `title={ValueHint}`, rendered only when `ValueHint` is non-empty. Canonical colon-key shown as secondary/monospace text. |
 | Subkey path | Registry subkey relative to the hive, e.g. `AzureBlob\ClientSecret`. For path-defining keys: **N/A — defines the registry path**. |
 | Default | Code default from the manifest. Render `""` as `(empty)`. |
 | appsettings.json | Live read of the file value; `(not set)` if absent. Redacted if secret & present (§5.1). |

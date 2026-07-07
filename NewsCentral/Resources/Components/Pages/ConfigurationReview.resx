@@ -23,6 +23,10 @@
   <data name="AccessDeniedMessage" xml:space="preserve"><value>This page is available to system administrators only.</value></data>
   <data name="DiskVsLiveNote" xml:space="preserve"><value>Shows configuration sources on disk/registry now; a running service may hold an earlier snapshot until restart.</value></data>
   <data name="InstallDirectory" xml:space="preserve"><value>Install directory</value></data>
+  <data name="InstallDirOverride" xml:space="preserve"><value>Install dir override</value></data>
+  <data name="OverridePlaceholder" xml:space="preserve"><value>Leave blank for auto-discovery; enter a path to override</value></data>
+  <data name="OverrideHint" xml:space="preserve"><value>Session-only diagnostic pointer — not persisted, never written to the component. Blank = auto-discovery.</value></data>
+  <data name="ApplyReload" xml:space="preserve"><value>Apply / Reload</value></data>
   <data name="DiscoverySource" xml:space="preserve"><value>Discovered via</value></data>
   <data name="NotDiscovered" xml:space="preserve"><value>(not discovered)</value></data>
   <data name="AppSettingsPath" xml:space="preserve"><value>appsettings.json path</value></data>

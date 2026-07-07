@@ -227,11 +227,19 @@ public static class EffectiveConfigResolver
         };
     }
 
-    /// <summary>Convenience: discover → build layers → project, carrying header metadata through (spec §8).</summary>
-    public static ComponentResolution Resolve(ComponentManifest manifest)
+    /// <summary>
+    /// Convenience: discover → build layers → project, carrying header metadata through (spec §8).
+    /// When <paramref name="installDirOverride"/> is non-empty it is used directly and auto-discovery
+    /// is skipped (spec §4 override); the appsettings path is still derived as
+    /// <c>{override}\appsettings.json</c>. A non-existent override resolves to not-found/empty layers
+    /// without throwing. Empty/null → behavior is unchanged (auto-discovery). Pure — no persistence.
+    /// </summary>
+    public static ComponentResolution Resolve(ComponentManifest manifest, string? installDirOverride = null)
     {
         var component = manifest.ComponentName;
-        var installDir = DiscoverInstallDir(component);
+        var overridden = !string.IsNullOrWhiteSpace(installDirOverride);
+        var installDir = overridden ? installDirOverride!.Trim() : DiscoverInstallDir(component);
+
         var (app, appStatus, reg, regStatus, hiveFound) = BuildLayers(component, installDir);
         var projected = Project(manifest, app, reg);
 
@@ -243,7 +251,7 @@ public static class EffectiveConfigResolver
         return projected with
         {
             InstallDir = installDir,
-            DiscoverySource = DiscoverySourceLabel(component),
+            DiscoverySource = overridden ? "manual override (session)" : DiscoverySourceLabel(component),
             InstallDirExists = installDir is not null && SafeDirExists(installDir),
             AppSettingsPath = appPath,
             AppSettingsExists = appPath is not null && SafeFileExists(appPath),
