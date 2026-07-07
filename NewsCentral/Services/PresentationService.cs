@@ -107,6 +107,54 @@ public class PresentationService
         return await repo.CreateAsync(presentation);
     }
 
+    // ── Duplicate ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Creates a NEW presentation in <paramref name="targetTeamFolder"/> seeded from the source with
+    /// ONLY its name, MoreUrl, and ORIGINAL picture — no description, poster, or assignment/schedule.
+    /// The copy is "draft" by construction (a presentation with no assignments). The source's ORIGINAL
+    /// image bytes are copied (falling back to the embedded content image only if the original is
+    /// missing/unreadable); reusing <see cref="CreatePresentationAsync"/> performs the cross-team image
+    /// copy into the target team's storage and enforces ContentAuthor/SystemAdmin on the target team.
+    /// </summary>
+    public async Task<Presentation> DuplicatePresentationAsync(
+        string sourceTeamFolder,
+        string presentationId,
+        string targetTeamId,
+        string targetTeamFolder)
+    {
+        var sourceRepo = new TeamAwareRepository<Presentation>(_storage, sourceTeamFolder, "presentations");
+        var source     = await sourceRepo.GetByIdAsync(presentationId)
+            ?? throw new InvalidOperationException($"Presentation {presentationId} not found");
+
+        // Copy the source's ORIGINAL image (pre-posterization), not the poster/ContentImageBase64.
+        byte[]? imageData = null;
+        if (!string.IsNullOrEmpty(source.OriginalImagePath))
+            imageData = await _storage.ReadBytesAsync(source.OriginalImagePath);
+
+        // Fallback only when the original file is missing/unreadable.
+        if ((imageData is null || imageData.Length == 0) && !string.IsNullOrEmpty(source.ContentImageBase64))
+            imageData = Convert.FromBase64String(source.ContentImageBase64);
+
+        if (imageData is null || imageData.Length == 0)
+            throw new InvalidOperationException(
+                $"Cannot duplicate presentation {presentationId}: source image is unavailable");
+
+        var originalImageName = string.IsNullOrEmpty(source.ImageOriginalName)
+            ? "image.jpg"
+            : source.ImageOriginalName;
+
+        // Seed ONLY name + moreUrl + original picture; description omitted; no poster/assignment.
+        return await CreatePresentationAsync(
+            targetTeamId,
+            targetTeamFolder,
+            name: source.Name,
+            description: string.Empty,
+            moreUrl: source.MoreUrl,
+            imageData: imageData,
+            originalImageName: originalImageName);
+    }
+
     // ── Update ───────────────────────────────────────────────────────────────
 
     public async Task<Presentation> UpdatePresentationAsync(

@@ -1,0 +1,122 @@
+@using NewsCentral.Models
+@using NewsCentral.Authorization
+@inject Services.AuthenticationService AuthService
+@inject Services.TeamService TeamService
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="Cancel">
+        <div class="modal-content duplicate-dialog" @onclick:stopPropagation="true">
+            <div class="dialog-icon"><span>📄</span></div>
+
+            <h3>@Title</h3>
+            <p>@Message</p>
+
+            <div class="dialog-field">
+                <select class="form-select" @bind="selectedTeamId">
+                    <option value="" disabled selected>@PlaceholderText</option>
+                    @foreach (var team in authorableTeams)
+                    {
+                        <option value="@team.TeamID">
+                            @team.Name@(team.FolderName == Source?.TeamFolderName ? $" {CurrentTeamSuffix}" : "")
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="dialog-actions">
+                <button @onclick="Cancel" class="btn btn-secondary">@CancelText</button>
+                <button @onclick="Confirm" class="btn btn-primary"
+                        disabled="@string.IsNullOrEmpty(selectedTeamId)">@ConfirmText</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        animation: fadeIn 0.2s;
+    }
+
+    @@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .duplicate-dialog {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        max-width: 420px;
+        width: 90%;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s;
+    }
+
+    @@keyframes slideIn {
+        from { transform: translateY(-50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    .dialog-icon { font-size: 48px; margin-bottom: 15px; }
+
+    .duplicate-dialog h3 { margin: 0 0 15px 0; color: #333; }
+
+    .duplicate-dialog p { color: #666; margin-bottom: 20px; line-height: 1.5; }
+
+    .dialog-field { margin-bottom: 25px; text-align: left; }
+
+    .dialog-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+    }
+
+    .dialog-actions .btn { min-width: 110px; }
+</style>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public Presentation? Source { get; set; }
+    [Parameter] public string Title { get; set; } = "Duplicate presentation";
+    [Parameter] public string Message { get; set; } = string.Empty;
+    [Parameter] public string ConfirmText { get; set; } = "Duplicate";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string PlaceholderText { get; set; } = "Select team…";
+    [Parameter] public string CurrentTeamSuffix { get; set; } = "(current team)";
+    [Parameter] public EventCallback<Team> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private List<Team> authorableTeams = new();
+    private string selectedTeamId = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            var user = AuthService.GetCurrentUser();
+            var allTeams = await TeamService.GetAllTeamsAsync();
+            authorableTeams = TeamAuthorization.AuthorableTeams(allTeams, user);
+        }
+        else
+        {
+            // Reset selection when closed so a re-open starts unselected.
+            selectedTeamId = string.Empty;
+            authorableTeams = new();
+        }
+    }
+
+    private async Task Confirm()
+    {
+        var team = authorableTeams.FirstOrDefault(t => t.TeamID == selectedTeamId);
+        if (team is null) return;   // Confirm is disabled until a team is chosen
+        await OnConfirm.InvokeAsync(team);
+    }
+
+    private async Task Cancel() => await OnCancel.InvokeAsync();
+}

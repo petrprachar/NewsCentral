@@ -106,6 +106,11 @@
                             @Localizer["CreateAssignment"]
                         </button>
 
+                        <button @onclick="() => ShowDuplicate(presentation)"
+                                class="btn btn-secondary">
+                            @Localizer["Duplicate"]
+                        </button>
+
                         @if (CanDelete(presentation))
                         {
                             <button @onclick="() => ShowDeleteConfirmation(presentation)"
@@ -129,6 +134,18 @@
                DialogType="danger"
                OnConfirm="ConfirmDeletePresentation"
                OnCancel="CancelDeletePresentation" />
+
+<!-- NEW: Duplicate Dialog (team picker) -->
+<DuplicateDialog IsVisible="@showDuplicate"
+                 Source="@presentationToDuplicate"
+                 Title="@Localizer["DuplicateTitle"]"
+                 Message="@Localizer["DuplicateMessage"]"
+                 ConfirmText="@Localizer["Duplicate"]"
+                 CancelText="@Localizer["Cancel"]"
+                 PlaceholderText="@Localizer["SelectTeam"]"
+                 CurrentTeamSuffix="@Localizer["CurrentTeamSuffix"]"
+                 OnConfirm="ConfirmDuplicate"
+                 OnCancel="CancelDuplicate" />
 
 <style>
     .presentations-container {
@@ -355,6 +372,10 @@
     private Presentation? presentationToDelete = null;
     private string deleteConfirmMessage = string.Empty;
 
+    // NEW: Duplicate dialog state
+    private bool showDuplicate = false;
+    private Presentation? presentationToDuplicate = null;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadPresentations();
@@ -471,6 +492,50 @@
     {
         showDeleteConfirm = false;
         presentationToDelete = null;
+    }
+
+    // NEW: Duplicate — open the team-picker modal for this presentation
+    private void ShowDuplicate(Presentation presentation)
+    {
+        presentationToDuplicate = presentation;
+        showDuplicate = true;
+    }
+
+    private void CancelDuplicate()
+    {
+        showDuplicate = false;
+        presentationToDuplicate = null;
+    }
+
+    // NEW: Confirm — duplicate into the selected target team, then refresh the current view
+    private async Task ConfirmDuplicate(Team targetTeam)
+    {
+        if (presentationToDuplicate == null) return;
+
+        try
+        {
+            await PresentationService.DuplicatePresentationAsync(
+                presentationToDuplicate.TeamFolderName,
+                presentationToDuplicate.PresentationID,
+                targetTeam.TeamID,
+                targetTeam.FolderName);
+
+            showDuplicate = false;
+            presentationToDuplicate = null;
+
+            successMessage = Localizer["DuplicateSuccess"];
+            await LoadPresentations();   // copy appears here only if the target is the current team
+
+            await Task.Delay(3000);
+            successMessage = string.Empty;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error duplicating presentation: {ex.Message}";
+            showDuplicate = false;
+            presentationToDuplicate = null;
+        }
     }
 
     private bool CanDelete(Presentation presentation)

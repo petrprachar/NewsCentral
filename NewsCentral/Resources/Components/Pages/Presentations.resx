@@ -38,4 +38,10 @@
   <data name="CreatedByYou" xml:space="preserve"><value>You</value></data>
   <data name="CreatedByTeamMember" xml:space="preserve"><value>Team Member</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Duplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="DuplicateTitle" xml:space="preserve"><value>Duplicate Presentation</value></data>
+  <data name="DuplicateMessage" xml:space="preserve"><value>Duplicate this presentation into the selected team? A new draft is created with the same name and picture only.</value></data>
+  <data name="SelectTeam" xml:space="preserve"><value>Select team…</value></data>
+  <data name="CurrentTeamSuffix" xml:space="preserve"><value>(current team)</value></data>
+  <data name="DuplicateSuccess" xml:space="preserve"><value>Presentation duplicated successfully</value></data>
 </root>
