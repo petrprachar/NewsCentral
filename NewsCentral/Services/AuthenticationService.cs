@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -26,47 +25,6 @@ public class AuthenticationService
             ""
         );
         _windowsIdentityService = windowsIdentityService;
-    }
-
-    public async Task InitializeAsync()
-    {
-        var usersExist = await _userRepo.ExistsAsync("users");
-
-        if (!usersExist)
-        {
-            await CreateDefaultAdminAsync();
-        }
-    }
-
-    private async Task CreateDefaultAdminAsync()
-    {
-        var adminUser = new User
-        {
-            UserID = "admin-001",
-            Username = _config.DefaultAdminUsername,
-            Email = "admin@newscentral.local",
-            DisplayName = "System Administrator",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(_config.DefaultAdminPassword),
-            IsSystemAdmin = true,
-            IsActive = true,
-            DateCreated = DateTime.UtcNow,
-            TeamRoles = new List<TeamRole>()
-        };
-
-        var usersCollection = new UsersCollection
-        {
-            Users = new List<User> { adminUser },
-            Version = "1",
-            LastModified = DateTime.UtcNow,
-            ModifiedBy = "system"
-        };
-
-        await _userRepo.CreateAsync(usersCollection);
-
-        System.Diagnostics.Debug.WriteLine("Default admin user created:");
-        System.Diagnostics.Debug.WriteLine($"Username: {_config.DefaultAdminUsername}");
-        System.Diagnostics.Debug.WriteLine($"Password: {_config.DefaultAdminPassword}");
-        System.Diagnostics.Debug.WriteLine("IMPORTANT: Change password after first login!");
     }
 
     public async Task<User?> LoginAsync(string username, string password)
