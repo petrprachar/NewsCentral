@@ -1,4 +1,10 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@using NewsCentral.Services
+@using NewsCentral.Models
+@inject AuthenticationService AuthService
+@inject TeamContextService TeamContext
+@inject TeamService TeamService
+@implements IDisposable
 
 <div class="page">
     <div class="sidebar">
@@ -7,7 +13,23 @@
 
     <main>
         <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+            @* Display-only identity — reflects the Home team selector, updates on change *@
+            @if (currentUser != null)
+            {
+                <span class="me-3">
+                    <i class="bi bi-person-circle me-1"></i>@currentUser.DisplayName
+                    @if (currentUser.IsSystemAdmin)
+                    {
+                        <span class="badge bg-primary ms-1">System Admin</span>
+                    }
+                </span>
+                @if (!string.IsNullOrEmpty(currentTeamName))
+                {
+                    <span class="text-muted">
+                        <i class="bi bi-diagram-3 me-1"></i>@currentTeamName
+                    </span>
+                }
+            }
         </div>
 
         <article class="content px-4">
@@ -15,3 +37,67 @@
         </article>
     </main>
 </div>
+
+@code {
+    private User? currentUser;
+    private string? currentTeamName;
+    private Dictionary<string, string> teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        AuthService.OnAuthenticationStateChanged += HandleAuthChanged;
+        TeamContext.OnTeamChanged += HandleTeamChanged;
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        currentUser = AuthService.GetCurrentUser();
+
+        if (currentUser != null && teamNamesByFolder.Count == 0)
+        {
+            try
+            {
+                var teams = await TeamService.GetAllTeamsAsync();
+                teamNamesByFolder = teams.ToDictionary(
+                    t => t.FolderName, t => t.Name, StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Top bar: failed to load team names: {ex.Message}");
+            }
+        }
+
+        UpdateTeamName();
+    }
+
+    // Resolve the friendly team name from the current folder; fall back to the folder name.
+    private void UpdateTeamName()
+    {
+        var folder = TeamContext.CurrentTeamFolderName;
+        currentTeamName = !string.IsNullOrEmpty(folder) && teamNamesByFolder.TryGetValue(folder, out var name)
+            ? name
+            : folder;
+    }
+
+    private async void HandleAuthChanged()
+    {
+        // Reload the folder→name map on (re)login so the top bar populates.
+        teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
+        await RefreshAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleTeamChanged()
+    {
+        currentUser = AuthService.GetCurrentUser();
+        UpdateTeamName();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthService.OnAuthenticationStateChanged -= HandleAuthChanged;
+        TeamContext.OnTeamChanged -= HandleTeamChanged;
+    }
+}

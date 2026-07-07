@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @using NewsCentral.Services
 @using NewsCentral.Models
 @using Microsoft.Extensions.Localization
@@ -10,292 +10,63 @@
 
 <PageTitle>@Localizer["Dashboard"] - NewsCentral</PageTitle>
 
-<div class="dashboard-container">
+<div class="page-container">
     <div class="page-header">
-        <h1>Welcome to NewsCentral</h1>
-
-        @if (currentUser != null)
-        {
-            <div class="user-badge">
-                <i class="bi bi-person-circle"></i>
-                <span>@currentUser.DisplayName</span>
-                @if (currentUser.IsSystemAdmin)
-                {
-                    <span class="badge bg-primary ms-2">System Admin</span>
-                }
-            </div>
-        }
+        <h1>@Localizer["Welcome"]</h1>
+        <p class="page-description">@Localizer["WelcomeSubtitle"]</p>
     </div>
 
-    @* Team Selector *@
+    @* Team selector — the interactive control stays on Home (§ top bar only reflects it) *@
     @if (currentUser != null && availableTeams.Any())
     {
-        <div class="team-selector-card">
-            <label class="form-label">Current Team:</label>
-            <select class="form-select" @bind="selectedTeamFolderName" @bind:after="OnTeamChanged">
-                @foreach (var team in availableTeams)
-                {
-                    <option value="@team.FolderName">@team.Name</option>
-                }
-            </select>
+        <div class="card mb-4">
+            <div class="card-body">
+                <label class="form-label fw-semibold">@Localizer["CurrentTeam"]</label>
+                <select class="form-select" style="max-width: 400px;"
+                        @bind="selectedTeamFolderName" @bind:after="OnTeamChanged">
+                    @foreach (var team in availableTeams)
+                    {
+                        <option value="@team.FolderName">@team.Name</option>
+                    }
+                </select>
+            </div>
         </div>
     }
     else if (currentUser != null && !availableTeams.Any())
     {
         <div class="alert alert-warning">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            No teams yet — create one in Team Management.
+            <i class="bi bi-exclamation-triangle me-2"></i>@Localizer["NoTeams"]
         </div>
     }
 
+    @* Your profile — the identity the old banner carried, without the dev framing *@
     @if (currentUser != null)
     {
-        @* Authentication Status Card *@
-        <div class="info-card auth-card">
-            <div class="card-icon">🎉</div>
-            <h3>Authentication Working!</h3>
-            <div class="info-grid">
-                <div class="info-item">
-                    <span class="info-label">You are now logged in as:</span>
-                    <span class="info-value">@currentUser.Username</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">@currentUser.Email</span>
-                </div>
-                <div class="info-item">
-                    <span class="info-label">User ID:</span>
-                    <span class="info-value"><code>@currentUser.UserID</code></span>
-                </div>
-                @if (currentUser.LastLogin.HasValue)
-                {
-                    <div class="info-item">
-                        <span class="info-label">Last Login:</span>
-                        <span class="info-value">@currentUser.LastLogin.Value.ToString("yyyy-MM-dd HH:mm:ss")</span>
-                    </div>
-                }
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-person-circle me-2"></i>@Localizer["YourProfile"]</h5>
             </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">@Localizer["DisplayName"]</dt>
+                    <dd class="col-sm-9">@currentUser.DisplayName</dd>
 
-            @if (currentUser.Username == "admin")
-            {
-                <div class="warning-box">
-                    <div class="warning-icon">⚠️</div>
-                    <div class="warning-content">
-                        <strong>Important:</strong> You are using the default admin account.
-                        <br />
-                        Please change your password as soon as possible.
-                        <br />
-                        <em>(Password change feature coming in next phase)</em>
-                    </div>
-                </div>
-            }
-        </div>
+                    <dt class="col-sm-3">@Localizer["Email"]</dt>
+                    <dd class="col-sm-9">@Display(currentUser.Email)</dd>
 
-        <div class="features-grid">
-            @* Data Location Card *@
-            <div class="info-card">
-                <div class="card-icon">📁</div>
-                <h3>Data Location</h3>
-                <div class="data-path">
-                    <code>C:\Download\NewsCentral\config\users.json</code>
-                </div>
-                <p class="card-description">You can check this file to see your user data stored as JSON</p>
-            </div>
+                    <dt class="col-sm-3">@Localizer["UPN"]</dt>
+                    <dd class="col-sm-9">@Display(currentUser.UPN)</dd>
 
-            @* Completed Features Card *@
-            <div class="info-card">
-                <div class="card-icon">✅</div>
-                <h3>Completed Features</h3>
-                <ul class="feature-list">
-                    <li>✓ User authentication with BCrypt password hashing</li>
-                    <li>✓ First-time setup (auto-create admin user)</li>
-                    <li>✓ Session management</li>
-                    <li>✓ JSON file-based user repository</li>
-                    <li>✓ Login/logout functionality</li>
-                </ul>
-            </div>
+                    <dt class="col-sm-3">@Localizer["Roles"]</dt>
+                    <dd class="col-sm-9">@RenderRoles()</dd>
 
-            @* Coming Next Card *@
-            <div class="info-card">
-                <div class="card-icon">🚀</div>
-                <h3>Coming Next</h3>
-                <ul class="feature-list">
-                    <li>Team management</li>
-                    <li>User management</li>
-                    <li>Role assignment</li>
-                    <li>Content creation</li>
-                </ul>
+                    <dt class="col-sm-3">@Localizer["LastLogin"]</dt>
+                    <dd class="col-sm-9">@(currentUser.LastLogin?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</dd>
+                </dl>
             </div>
         </div>
     }
 </div>
-
-<style>
-    .dashboard-container {
-        padding: 30px;
-        max-width: 1400px;
-        margin: 0 auto;
-    }
-
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 30px;
-    }
-
-    .page-header h1 {
-        margin: 0;
-        font-size: 2rem;
-        color: #333;
-    }
-
-    .user-badge {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 20px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-
-    .user-badge i {
-        font-size: 1.5rem;
-        color: #667eea;
-    }
-
-    .team-selector-card {
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        margin-bottom: 30px;
-    }
-
-    .team-selector-card label {
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 10px;
-    }
-
-    .team-selector-card select {
-        max-width: 400px;
-    }
-
-    .info-card {
-        background: white;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-
-    .auth-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-
-    .card-icon {
-        font-size: 3rem;
-        margin-bottom: 15px;
-    }
-
-    .info-card h3 {
-        margin: 0 0 20px 0;
-        font-size: 1.5rem;
-    }
-
-    .auth-card h3 {
-        color: white;
-    }
-
-    .info-grid {
-        display: grid;
-        gap: 15px;
-        margin-bottom: 20px;
-    }
-
-    .info-item {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-    }
-
-    .info-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-
-    .info-value {
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-
-    .info-value code {
-        background: rgba(255,255,255,0.2);
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 0.9rem;
-    }
-
-    .warning-box {
-        margin-top: 20px;
-        padding: 15px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 8px;
-        border-left: 4px solid #ffc107;
-        display: flex;
-        gap: 15px;
-    }
-
-    .warning-icon {
-        font-size: 1.5rem;
-    }
-
-    .warning-content {
-        flex: 1;
-    }
-
-    .features-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-    }
-
-    .data-path {
-        background: #f8f9fa;
-        padding: 15px;
-        border-radius: 6px;
-        margin-bottom: 15px;
-    }
-
-    .data-path code {
-        color: #0056b3;
-        word-break: break-all;
-    }
-
-    .card-description {
-        color: #666;
-        font-size: 0.9rem;
-        margin: 0;
-    }
-
-    .feature-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .feature-list li {
-        padding: 8px 0;
-        border-bottom: 1px solid #eee;
-    }
-
-    .feature-list li:last-child {
-        border-bottom: none;
-    }
-</style>
 
 @code {
     private User? currentUser;
@@ -322,22 +93,17 @@
             // SystemAdmin sees ALL teams
             if (currentUser!.IsSystemAdmin)
             {
-                System.Diagnostics.Debug.WriteLine("Loading all teams for SystemAdmin");
                 availableTeams = await TeamService.GetAllTeamsAsync();
-                System.Diagnostics.Debug.WriteLine($"Loaded {availableTeams.Count} teams for SystemAdmin");
             }
             // Regular users see only their assigned teams
             else if (currentUser.TeamRoles.Any())
             {
-                System.Diagnostics.Debug.WriteLine("Loading teams from user's TeamRoles");
                 var allTeams = await TeamService.GetAllTeamsAsync();
                 var userTeamFolders = currentUser.TeamRoles.Select(tr => tr.TeamFolderName).ToList();
                 availableTeams = allTeams.Where(t => userTeamFolders.Contains(t.FolderName)).ToList();
-                System.Diagnostics.Debug.WriteLine($"Loaded {availableTeams.Count} teams for user");
             }
             else
             {
-                System.Diagnostics.Debug.WriteLine("User has no team assignments");
                 availableTeams = new List<Team>();
             }
 
@@ -350,7 +116,6 @@
                 var firstTeam = availableTeams[0];
                 selectedTeamFolderName = firstTeam.FolderName;
                 TeamContext.SetCurrentTeam(firstTeam.TeamID, firstTeam.FolderName);
-                System.Diagnostics.Debug.WriteLine($"Auto-selected team: {firstTeam.Name} ({firstTeam.FolderName})");
             }
         }
         catch (Exception ex)
@@ -367,9 +132,29 @@
             if (team != null)
             {
                 TeamContext.SetCurrentTeam(team.TeamID, team.FolderName);
-                System.Diagnostics.Debug.WriteLine($"Team changed to: {team.Name} ({team.FolderName})");
                 StateHasChanged();
             }
         }
     }
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private RenderFragment RenderRoles() => __builder =>
+    {
+        if (currentUser!.IsSystemAdmin)
+        {
+            <span class="badge bg-primary">@Localizer["SystemAdministrator"]</span>
+        }
+        else if (currentUser.TeamRoles.Any())
+        {
+            @foreach (var tr in currentUser.TeamRoles)
+            {
+                <span class="badge bg-secondary me-1">@tr.TeamFolderName: @string.Join(", ", tr.Roles)</span>
+            }
+        }
+        else
+        {
+            <span class="text-muted">@Localizer["NoRoles"]</span>
+        }
+    };
 }

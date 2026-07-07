@@ -39,4 +39,7 @@
   <data name="PasswordTooShort" xml:space="preserve"><value>Password must be at least 6 characters</value></data>
   <data name="PasswordsDoNotMatch" xml:space="preserve"><value>Passwords do not match</value></data>
   <data name="PasswordChangedSuccess" xml:space="preserve"><value>Password changed successfully!</value></data>
+  <data name="DataStore" xml:space="preserve"><value>Data Store</value></data>
+  <data name="DataStoreLocation" xml:space="preserve"><value>Location</value></data>
+  <data name="DataStoreDescription" xml:space="preserve"><value>Local JSON data store. You can inspect this file to see user data stored as JSON.</value></data>
 </root>

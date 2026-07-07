@@ -1,8 +1,11 @@
 ﻿@page "/settings"
+@using System.IO
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Configuration
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
+@inject AppConfiguration AppConfig
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Settings> Localizer
 
@@ -103,6 +106,20 @@
         </div>
     </div>
 
+    @* Data Store Location (informational) *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-folder me-2"></i>@Localizer["DataStore"]</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-2">
+                <div class="col-md-3"><strong>@Localizer["DataStoreLocation"]:</strong></div>
+                <div class="col-md-9"><code>@dataStorePath</code></div>
+            </div>
+            <small class="text-muted">@Localizer["DataStoreDescription"]</small>
+        </div>
+    </div>
+
     @* Admin Section *@
     @if (currentUser?.IsSystemAdmin == true)
     {
@@ -134,6 +151,7 @@
     private string confirmPassword = string.Empty;
     private string? successMessage;
     private string? errorMessage;
+    private string dataStorePath = string.Empty;
 
     protected override void OnInitialized()
     {
@@ -142,7 +160,11 @@
         if (currentUser == null)
         {
             Navigation.NavigateTo("/login");
+            return;
         }
+
+        // Informational: where the JSON data store lives (moved here from Home).
+        dataStorePath = Path.Combine(AppConfig.DataPath ?? string.Empty, "config", "users.json");
     }
 
     private async Task ChangePassword()

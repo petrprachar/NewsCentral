@@ -47,4 +47,16 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="Dashboard" xml:space="preserve"><value>Dashboard</value></data>
+  <data name="Welcome" xml:space="preserve"><value>Welcome to NewsCentral</value></data>
+  <data name="WelcomeSubtitle" xml:space="preserve"><value>Your account and current team.</value></data>
+  <data name="CurrentTeam" xml:space="preserve"><value>Current team</value></data>
+  <data name="NoTeams" xml:space="preserve"><value>No teams yet — create one in Team Management.</value></data>
+  <data name="YourProfile" xml:space="preserve"><value>Your profile</value></data>
+  <data name="DisplayName" xml:space="preserve"><value>Display name</value></data>
+  <data name="Email" xml:space="preserve"><value>Email</value></data>
+  <data name="UPN" xml:space="preserve"><value>UPN</value></data>
+  <data name="Roles" xml:space="preserve"><value>Roles</value></data>
+  <data name="LastLogin" xml:space="preserve"><value>Last login</value></data>
+  <data name="SystemAdministrator" xml:space="preserve"><value>System Administrator</value></data>
+  <data name="NoRoles" xml:space="preserve"><value>No roles assigned</value></data>
 </root>
