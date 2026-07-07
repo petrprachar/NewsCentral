@@ -8,7 +8,7 @@ NewsCentral.sln
 ├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers + active-assignment selector (all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
-├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; 26 facts, all passing)
+├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; all passing)
 └── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete; desktop wallpaper application)
 ```
 
