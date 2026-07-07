@@ -1,6 +1,8 @@
 ﻿@page "/assignments"
+@using System.Globalization
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Formatting
 @using Microsoft.Extensions.Localization
 @inject AssignmentService AssignmentService
 @inject PresentationService PresentationService
@@ -95,7 +97,7 @@
                         {
                             <div class="schedule-box">
                                 <p class="schedule-label">Schedule:</p>
-                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                                <p class="schedule-dates">@AssignmentDateFormat.DateOnly(schedule.ScheduleStart, CultureInfo.CurrentCulture) - @AssignmentDateFormat.DateOnly(schedule.ScheduleEnd, CultureInfo.CurrentCulture) | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
                             </div>
                         }
 
@@ -148,7 +150,7 @@
                                     To: <strong>@assignment.TargetTeam</strong>
                                     @if (assignment.ApprovedDate.HasValue)
                                     {
-                                        <span class="approval-date">| Approved: @assignment.ApprovedDate.Value.ToString("MMM dd, yyyy")</span>
+                                        <span class="approval-date">| Approved: @AssignmentDateFormat.DateOnly(assignment.ApprovedDate.Value, CultureInfo.CurrentCulture)</span>
                                     }
                                 </p>
 
@@ -186,7 +188,7 @@
                         {
                             <div class="schedule-box">
                                 <p class="schedule-label">Schedule:</p>
-                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                                <p class="schedule-dates">@AssignmentDateFormat.DateOnly(schedule.ScheduleStart, CultureInfo.CurrentCulture) - @AssignmentDateFormat.DateOnly(schedule.ScheduleEnd, CultureInfo.CurrentCulture) | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
                             </div>
                         }
 
@@ -255,7 +257,7 @@
                                     To: <strong>@assignment.TargetTeam</strong>
                                     @if (assignment.PublishedDate.HasValue)
                                     {
-                                        <span class="approval-date">| Published: @assignment.PublishedDate.Value.ToString("MMM dd, yyyy")</span>
+                                        <span class="approval-date">| Published: @AssignmentDateFormat.UtcTimestamp(assignment.PublishedDate.Value, CultureInfo.CurrentCulture)</span>
                                     }
                                 </p>
 
@@ -293,7 +295,7 @@
                         {
                             <div class="schedule-box">
                                 <p class="schedule-label">Schedule:</p>
-                                <p class="schedule-dates">@schedule.ScheduleStart.ToString("MMM dd") - @schedule.ScheduleEnd.ToString("MMM dd, yyyy") | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
+                                <p class="schedule-dates">@AssignmentDateFormat.DateOnly(schedule.ScheduleStart, CultureInfo.CurrentCulture) - @AssignmentDateFormat.DateOnly(schedule.ScheduleEnd, CultureInfo.CurrentCulture) | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
                             </div>
                         }
 
