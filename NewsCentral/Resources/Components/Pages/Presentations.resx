@@ -44,4 +44,5 @@
   <data name="SelectTeam" xml:space="preserve"><value>Select team…</value></data>
   <data name="CurrentTeamSuffix" xml:space="preserve"><value>(current team)</value></data>
   <data name="DuplicateSuccess" xml:space="preserve"><value>Presentation duplicated successfully</value></data>
+  <data name="Comment" xml:space="preserve"><value>Comment:</value></data>
 </root>

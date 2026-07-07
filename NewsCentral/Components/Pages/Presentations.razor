@@ -80,10 +80,7 @@
                             </div>
                         }
 
-                        @if (!string.IsNullOrEmpty(presentation.Description))
-                        {
-                            <p class="card-description">@presentation.Description</p>
-                        }
+                        <p class="card-description">@Localizer["Comment"] @presentation.Description</p>
 
                         <div class="card-meta">
                             <span class="created-by">@Localizer["CreatedBy"] @GetCreatorName(presentation.CreatedBy)</span>

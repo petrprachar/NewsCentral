@@ -45,4 +45,5 @@
   <data name="Fri" xml:space="preserve"><value>Fri</value></data>
   <data name="Sat" xml:space="preserve"><value>Sat</value></data>
   <data name="Sun" xml:space="preserve"><value>Sun</value></data>
+  <data name="CommentLabel" xml:space="preserve"><value>Comment:</value></data>
 </root>

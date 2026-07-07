@@ -88,10 +88,7 @@
                             <span class="status-badge pending">Pending</span>
                         </div>
 
-                        @if (!string.IsNullOrEmpty(presentation?.Description))
-                        {
-                            <p class="description">@presentation.Description</p>
-                        }
+                        <p class="description"><strong>Comment:</strong> @presentation?.Description</p>
 
                         @if (schedule != null)
                         {
@@ -179,10 +176,7 @@
                             <span class="status-badge approved">Approved</span>
                         </div>
 
-                        @if (!string.IsNullOrEmpty(presentation?.Description))
-                        {
-                            <p class="description">@presentation.Description</p>
-                        }
+                        <p class="description"><strong>Comment:</strong> @presentation?.Description</p>
 
                         @if (schedule != null)
                         {
@@ -286,10 +280,7 @@
                             <span class="status-badge published">Published</span>
                         </div>
 
-                        @if (!string.IsNullOrEmpty(presentation?.Description))
-                        {
-                            <p class="description">@presentation.Description</p>
-                        }
+                        <p class="description"><strong>Comment:</strong> @presentation?.Description</p>
 
                         @if (schedule != null)
                         {
