@@ -4,6 +4,7 @@
 @inject AuthenticationService AuthService
 @inject TeamContextService TeamContext
 @inject TeamService TeamService
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <div class="page">
@@ -29,6 +30,9 @@
                         <i class="bi bi-diagram-3 me-1"></i>@currentTeamName
                     </span>
                 }
+                <button class="btn btn-sm btn-outline-secondary ms-3" @onclick="SignOut">
+                    <i class="bi bi-box-arrow-right me-1"></i>Sign out
+                </button>
             }
         </div>
 
@@ -93,6 +97,13 @@
         currentUser = AuthService.GetCurrentUser();
         UpdateTeamName();
         InvokeAsync(StateHasChanged);
+    }
+
+    // Reuse the existing Logout() (clears the session; auto-login stays suppressed on /login).
+    private void SignOut()
+    {
+        AuthService.Logout();
+        Navigation.NavigateTo("/login");
     }
 
     public void Dispose()
