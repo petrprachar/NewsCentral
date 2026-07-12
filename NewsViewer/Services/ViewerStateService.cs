@@ -19,8 +19,6 @@ public sealed class ViewerStateService
             && state.LastShownPresentationId == presentationId;
     }
 
-    public string? GetLastShownPresentationId() => Read().LastShownPresentationId;
-
     public void RecordShown(string presentationId)
     {
         Write(new ViewerState

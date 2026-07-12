@@ -101,25 +101,7 @@ static class Program
         bool bypass     = config.BypassShowOnceCheck;
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday(assignment.PresentationId);
 
-        if (assignment.ShowMode == Schedule.DisplayMode.ShowNew)
-        {
-            // Virtual desktop is incompatible with ShowNew: ShowNewApplicationContext creates
-            // a hidden timer window before any SwitchToNew() call, causing SetThreadDesktop to fail.
-            // ShowNew presentations always show on the current desktop.
-            var context = new ShowNewApplicationContext(
-                teams, selector, viewerState, telemetry, config.CacheRootPath, bypass);
-
-            if (!alreadyShown)
-                context.TryShowViewer();
-
-            // ShowNew runs on the current desktop, so apply wallpaper once here — immediately before
-            // the message pump blocks. Do NOT drive wallpaper from inside the resident context.
-            ApplyWallpaper();
-            Application.Run(context);
-            return;
-        }
-
-        // ShowOnce: show once per day then exit. The wallpaper still re-asserts on an already-shown day.
+        // Show once per day then exit. The wallpaper still re-asserts on an already-shown day.
         if (alreadyShown)
         {
             ApplyWallpaper();
