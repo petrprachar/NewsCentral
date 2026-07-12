@@ -26,12 +26,6 @@
   <data name="ScheduleSection" xml:space="preserve"><value>1. Planification</value></data>
   <data name="StartDate" xml:space="preserve"><value>Date de début : *</value></data>
   <data name="EndDate" xml:space="preserve"><value>Date de fin : *</value></data>
-  <data name="DisplayMode" xml:space="preserve"><value>Mode d'affichage :</value></data>
-  <data name="ShowOnce" xml:space="preserve"><value>Afficher une fois</value></data>
-  <data name="ShowOnceDescription" xml:space="preserve"><value>afficher une fois par jour calendaire</value></data>
-  <data name="ShowNew" xml:space="preserve"><value>Afficher le nouveau</value></data>
-  <data name="ShowNewDescription" xml:space="preserve"><value>afficher une fois par jour et à nouveau à l'arrivée de nouveau contenu</value></data>
-  <data name="NotAvailableWithVirtualDesktop" xml:space="preserve"><value>Non disponible avec le bureau virtuel</value></data>
   <data name="TargetTeamsSection" xml:space="preserve"><value>2. Équipes cibles</value></data>
   <data name="CurrentTeamLabel" xml:space="preserve"><value>Équipe actuelle (auto-affectation) :</value></data>
   <data name="CurrentTeamSuffix" xml:space="preserve"><value>(Actuelle)</value></data>

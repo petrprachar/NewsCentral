@@ -26,12 +26,6 @@
   <data name="ScheduleSection" xml:space="preserve"><value>1. Schedule</value></data>
   <data name="StartDate" xml:space="preserve"><value>Start Date: *</value></data>
   <data name="EndDate" xml:space="preserve"><value>End Date: *</value></data>
-  <data name="DisplayMode" xml:space="preserve"><value>Display Mode:</value></data>
-  <data name="ShowOnce" xml:space="preserve"><value>Show Once</value></data>
-  <data name="ShowOnceDescription" xml:space="preserve"><value>show once per calendar day</value></data>
-  <data name="ShowNew" xml:space="preserve"><value>Show New</value></data>
-  <data name="ShowNewDescription" xml:space="preserve"><value>show once per day, and again when new content arrives</value></data>
-  <data name="NotAvailableWithVirtualDesktop" xml:space="preserve"><value>Not available with Virtual Desktop</value></data>
   <data name="TargetTeamsSection" xml:space="preserve"><value>2. Target Teams</value></data>
   <data name="CurrentTeamLabel" xml:space="preserve"><value>Current Team (Self-Assignment):</value></data>
   <data name="CurrentTeamSuffix" xml:space="preserve"><value>(Current)</value></data>

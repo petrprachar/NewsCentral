@@ -79,33 +79,6 @@
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="section-label">@Localizer["DisplayMode"]</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="showMode"
-                                   checked="@(scheduleShowMode == Schedule.DisplayMode.ShowOnce)"
-                                   @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowOnce)" />
-                            <span><strong>@Localizer["ShowOnce"]</strong> — @Localizer["ShowOnceDescription"]</span>
-                        </label>
-                        <label class="radio-label radio-label-disabled">
-                            @* "Show New" temporarily disabled — visible but not selectable (UI-only). *@
-                            <input type="radio" name="showMode"
-                                   disabled="@true"
-                                   checked="@(scheduleShowMode == Schedule.DisplayMode.ShowNew)"
-                                   @onchange="@(() => scheduleShowMode = Schedule.DisplayMode.ShowNew)" />
-                            <span>
-                                <strong>@Localizer["ShowNew"]</strong> — @Localizer["ShowNewDescription"]
-                                @if (presentation.UseVirtualDesktop)
-                                {
-                                    <br />
-
-                                    <small class="mode-hint">@Localizer["NotAvailableWithVirtualDesktop"]</small>
-                                }
-                            </span>
-                        </label>
-                    </div>
-                </div>
             </div>
 
             <div class="form-section">
@@ -491,7 +464,6 @@
 
     private DateTime scheduleStartDate = DateTime.Today;
     private DateTime scheduleEndDate = DateTime.Today.AddDays(30);
-    private Schedule.DisplayMode scheduleShowMode = Schedule.DisplayMode.ShowOnce;
     private bool monday = true;
     private bool tuesday = true;
     private bool wednesday = true;
@@ -675,8 +647,7 @@
                 presentation.Version.ToString(),
                 scheduleStartDate,
                 scheduleEndDate,
-                selectedDays,
-                scheduleShowMode
+                selectedDays
             );
 
             // Create assignments for each selected team
