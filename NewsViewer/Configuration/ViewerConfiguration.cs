@@ -1,3 +1,4 @@
+using NewsCentral.Models;
 using NewsCentral.Security;
 
 namespace NewsViewer.Configuration;
@@ -10,6 +11,23 @@ public class ViewerConfiguration
     public bool BypassImageIntegrityCheck { get; set; } = false;
     public HmacOptions Hmac { get; set; } = new();
     public DeliverySection Delivery { get; set; } = new();
+    public DisplaySection Display { get; set; } = new();
+}
+
+public class DisplaySection
+{
+    private int _logicalDayStartHour;
+
+    /// <summary>
+    /// Hour (0..23, local) at which the once-per-day display gate rolls over. Default 0 = calendar
+    /// day. Clamped on read: an out-of-range value degrades to 0 rather than throwing. Must be
+    /// provisioned as REG_SZ — RegistryConfigurationProvider coerces REG_DWORD 0/1 to "False"/"True".
+    /// </summary>
+    public int LogicalDayStartHour
+    {
+        get => LogicalDayCalculator.NormalizeStartHour(_logicalDayStartHour);
+        set => _logicalDayStartHour = value;
+    }
 }
 
 public class DeliverySection

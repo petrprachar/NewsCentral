@@ -89,6 +89,9 @@ public static class ConfigManifests
                 options: new[] { "Fill", "Fit", "Stretch", "Center", "Tile" }),
             Key("Delivery:WallpaperBackgroundColor", "0 0 0", @"Delivery\WallpaperBackgroundColor", RegistryValueType.RegSz,
                 ControlKind.Text, OverridableState.Overridable, "\"R G B\", each 0–255"),
+            Key("Display:LogicalDayStartHour", "0", @"Display\LogicalDayStartHour", RegistryValueType.RegSz,
+                ControlKind.Number, OverridableState.Overridable,
+                "0–23 local (registry: REG_SZ, NOT DWORD — 0/1 coerce to \"False\"/\"True\"); out-of-range → 0"),
         }
     };
 

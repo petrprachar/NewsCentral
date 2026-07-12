@@ -1,4 +1,5 @@
 using System.Text.Json;
+using NewsCentral.Models;
 using NewsViewer.Models;
 
 namespace NewsViewer.Services;
@@ -6,24 +7,28 @@ namespace NewsViewer.Services;
 public sealed class ViewerStateService
 {
     private readonly string _statePath;
+    private readonly int _logicalDayStartHour;
 
-    public ViewerStateService(string userStatePath)
+    public ViewerStateService(string userStatePath, int logicalDayStartHour)
     {
         _statePath = Path.Combine(userStatePath, "viewerstate.json");
+        _logicalDayStartHour = logicalDayStartHour;
     }
 
-    public bool AlreadyShownToday(string presentationId)
+    // Date-only gate: disturb the user once per logical day, regardless of which presentation is
+    // active. A new presentation no longer earns an automatic same-day escape — that becomes
+    // author-controlled (Priority) in a later release.
+    public bool AlreadyShownToday()
     {
         var state = Read();
-        return state.LastShownDate == DateTime.Today.ToString("yyyy-MM-dd")
-            && state.LastShownPresentationId == presentationId;
+        return state.LastShownDate == LogicalDayCalculator.LogicalDay(DateTime.Now, _logicalDayStartHour);
     }
 
     public void RecordShown(string presentationId)
     {
         Write(new ViewerState
         {
-            LastShownDate = DateTime.Today.ToString("yyyy-MM-dd"),
+            LastShownDate = LogicalDayCalculator.LogicalDay(DateTime.Now, _logicalDayStartHour),
             LastShownPresentationId = presentationId
         });
     }
