@@ -106,7 +106,9 @@ new JsonSerializerOptions {
 
 **Registry `teams\` naming** — value names must match the generated folder name exactly, i.e. the sanitized team name (e.g. `cz-its`, not `CZ_ITS`). Folder names carry no `team-` prefix.
 
-**NewsViewer startup** — `appsettings.json` is required (`optional: false`). Missing file = hard startup failure. `Main()` validates `Company`, `CacheRootPath` and exits with `MessageBox` if any are empty.
+**`Company` is a single build-time constant, not configuration.** Authored once in `Directory.Build.props` (`<Company>`), surfaced to code as `SolutionConstants.Company` (generated into `NewsCentral.Shared`), and consumed by all three components; an MSBuild target fails the build if it is empty. It is **absent from every `appsettings.json`** — no runtime default, no fallback — and is **not** registry-overridable (it defines the hive path `HKLM\Software\{Company}\NewsCentral\{Component}`). A `Company` **mismatch fails silently**: `OpenSubKey` returns `null` with no error, so every GPO/registry override is quietly ignored and the component runs on shipped defaults (the exact drift that motivated making it one constant). See `docs/configuration.md`.
+
+**NewsViewer startup** — `appsettings.json` is required (`optional: false`); the `appsettings.Development.json` overlay is `optional: true`. Missing base file = hard startup failure. `Main()` validates `CacheRootPath` (not `Company` — that is the build constant) and exits with `MessageBox` if it is empty.
 
 ---
 

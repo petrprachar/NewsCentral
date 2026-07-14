@@ -11,8 +11,8 @@ NewsViewer is a **one-shot process**: launch → evaluate the daily gate → ren
 - Registered in Task Scheduler triggered by Workstation Unlock event
 - Optionally launchable from the Windows Start menu
 - `appsettings.json` must be declared in `NewsViewer.csproj` as `<Content Include="appsettings.json">` with `CopyToOutputDirectory = PreserveNewest` so it is deployed alongside the executable
-- `BuildConfiguration()` uses `optional: false` for both `AddJsonFile` calls — a missing `appsettings.json` is a hard startup failure
-- `Main()` validates `Company` and `CacheRootPath` after config load; if any are empty a `MessageBox` is shown and the process exits
+- **Configuration layers** (registry always wins): `appsettings.json` (shipped, neutral, **committed** — a tracked artifact, never gitignored — loaded `optional: false`, so a missing file is a hard startup failure) → `appsettings.Development.json` (optional, gitignored dev overlay, loaded `optional: true`, **never published** via `CopyToPublishDirectory=Never`; documented shape in `appsettings.Development.json.example`) → registry (GPO). `appsettings.json` is the base layer the MSI installs and GPO sits on top of. See `docs/configuration.md` → appsettings.json — NewsViewer.
+- `Main()` validates `CacheRootPath` after config load; if it is empty a `MessageBox` is shown and the process exits. (`Company` is **not** validated here — it is the build-time constant `SolutionConstants.Company`, enforced at build time, not read from config.)
 - Registry `teams\` value names must match the generated folder name exactly — the sanitized team name with no `team-` prefix (e.g. `cz-its`, not `CZ_ITS`)
 
 ### Launch surface — two complementary triggers

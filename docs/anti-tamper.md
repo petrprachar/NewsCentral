@@ -50,7 +50,7 @@ NewsViewer's.
 
 Every anti-tamper-relevant value. Registry paths are under
 `HKLM\Software\[Company]\NewsCentral\<Component>\` (see `docs/configuration.md` for the full layout;
-`[Company]` / `NewsCentral` come from `appsettings.json` and are not registry-overridable).
+`[Company]` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`) and `NewsCentral` is `SolutionConstants.SolutionName`; neither is registry-overridable).
 
 | Value | Registry path (per component) | Type | Default | Read by | Effect |
 |---|---|---|---|---|---|

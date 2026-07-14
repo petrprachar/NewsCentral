@@ -2,7 +2,7 @@
 
 **Component:** NewsCentral (MAUI Blazor Hybrid authoring app)
 **Status:** Specified — not started.
-**Depends on:** `SolutionConstants.SolutionName` and the `Initialization:*` admin-cred fix (both committed as `0fe00a2`). The manifest below reflects post-`0fe00a2` config; `ApplicationName` is gone as a config value.
+**Depends on:** `SolutionConstants.SolutionName` and the `Initialization:*` admin-cred fix (both committed as `0fe00a2`). The manifest below reflects current config: `Company` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`, not an appsettings key).
 
 ## 1. Purpose & Scope
 
@@ -103,7 +103,7 @@ Driven by the manifest `IsSecret` flag (keys under `Hmac`, `*Secret`, `*Password
 | Not overridable | defines the hive path (`Company`) | **N/A — defines the registry path** |
 | Registry-only | no appsettings counterpart; settable only via registry | shows the subkey path |
 
-This disambiguates a blank appsettings column (`Company` blank because it *can't* be there, vs a registry-only key blank in appsettings because no such JSON key exists).
+This disambiguates a blank appsettings column (`Company` blank because it is a build-time constant, `SolutionConstants.Company`, and *can't* be in any appsettings file, vs a registry-only key blank in appsettings because no such JSON key exists).
 
 ## 6. Structural Hives
 
@@ -129,8 +129,8 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 
 | Canonical key | Default | Subkey | RegType | Ovr | Control | Secret | ValueHint |
 |---|---|---|---|---|---|---|---|
-| `Company` | `Contoso` | — | — | PATH | text | | company name; defines hive path |
-| `Service:PollIntervalSeconds` | `60` | `Service\PollIntervalSeconds` | D | OV | number | | integer seconds, 10–86400 |
+| `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company`; defines hive path; not in appsettings |
+| `Service:PollIntervalSeconds` | `60` | `Service\PollIntervalSeconds` | S | OV | number | | integer seconds, 10–86400; MUST be REG_SZ (DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Service:CacheRootPath` | `C:\ProgramData\NewsCentral` | `Service\CacheRootPath` | S | OV | path | | absolute path |
 | `Repository:StorageMode` | `Share` | `Repository\StorageMode` | S | OV | dropdown | | `Share \| Azure` |
 | `Repository:SharePath` | `""` | `Repository\SharePath` | S | OV | path | | UNC or local path |
@@ -145,7 +145,7 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes |
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
 | `Entra:Enabled` | `false` | `Entra\Enabled` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
-| `Entra:GracePeriodMinutes` | `240` | `Entra\GracePeriodMinutes` | D | OV | number | | integer minutes |
+| `Entra:GracePeriodMinutes` | `240` | `Entra\GracePeriodMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (0 = "no grace" is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Entra:GroupTeam:InclusionGroup` | `""` | `Entra\GroupTeam\InclusionGroup` | S | OV | text | | Entra group id/name |
 | `Entra:GroupTeam:ExclusionGroup` | `""` | `Entra\GroupTeam\ExclusionGroup` | S | OV | text | | Entra group id/name |
 | `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable |
@@ -158,7 +158,7 @@ Hive: `…\NewsCentral\NewsViewer\`.
 
 | Canonical key | Default | Subkey | RegType | Ovr | Control | Secret | ValueHint |
 |---|---|---|---|---|---|---|---|
-| `Company` | `Contoso` | — | — | PATH | text | | company name; defines hive path |
+| `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company`; defines hive path; not in appsettings |
 | `CacheRootPath` | `C:\ProgramData\NewsCentral` | `CacheRootPath` (hive root) | S | OV | path | | absolute path |
 | `BypassDailyGate` | `false` | `BypassDailyGate` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `BypassImageIntegrityCheck` | `false` | `BypassImageIntegrityCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
@@ -176,11 +176,11 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 
 | Canonical key | Default | Subkey | RegType | Ovr | Control | Secret | ValueHint |
 |---|---|---|---|---|---|---|---|
-| `Company` | `MyCompany` | — | — | PATH | text | | company name; defines hive path |
+| `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company` (single `Directory.Build.props` value, same for all components); defines hive path; not in appsettings |
 | `DataPath` | `""` | `DataPath` | S | OV | path | | authoring data root |
 | `Initialization:DefaultAdminUsername` | `admin` | `Initialization\DefaultAdminUsername` | S | OV | text | | seed admin username |
 | `Initialization:DefaultAdminPassword` | `admin` | `Initialization\DefaultAdminPassword` | S | OV | redacted | ✔ | seed admin password |
-| `LockExpirationMinutes` | `15` | `LockExpirationMinutes` | D | OV | number | | integer minutes |
+| `LockExpirationMinutes` | `15` | `LockExpirationMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (a 1-minute lock is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Authentication:EnableAutoLogin` | `false` | `Authentication\EnableAutoLogin` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Authentication:UseMockUPN` | `false` | `Authentication\UseMockUPN` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Authentication:MockUPN` | `""` | `Authentication\MockUPN` | S | OV | text | | UPN string |
@@ -199,7 +199,7 @@ The page must show the two layers **separately**, not merged — so it does **no
 
 1. **Discover** install dir (§4.1) and derive `{InstallDir}\appsettings.json`.
 2. **appsettings layer:** `new ConfigurationBuilder().AddJsonFile(appsettingsPath, optional: true).Build()` → query per manifest key. `null` → `(not set)`.
-3. **Company for the hive:** read `Company` from the appsettings layer (this is what the component itself uses to locate its hive). Empty/missing → hive not-found.
+3. **Company for the hive:** `Company` is the compile-time constant `SolutionConstants.Company` (a single `Directory.Build.props` value, identical for all three components) — **not** read from any appsettings layer. This is what each component itself uses to locate its hive; a component built under a different `Company` → hive not-found.
 4. **registry layer:** `new ConfigurationBuilder().AddRegistryOverrides(company, SolutionConstants.SolutionName, component).Build()` → query per manifest key. `null` → `(not set)`. This reuses the shipped `RegistryConfigurationSource`, so `teams:*`, `Signing:{team}:*`, and `Entra:Mappings:*` surface automatically for the structural sub-blocks.
 5. **Render** each manifest row from (default, appsettings-value, registry-value), applying redaction and overridable-state.
 

@@ -6,7 +6,7 @@
 
 ## Configuration Resolution
 
-`RegistryConfigurationProvider` (from `NewsCentral.Shared`) is added to `IConfigurationBuilder` in `Program.cs` via `AddRegistryOverrides(company, SolutionConstants.SolutionName, "NewsService")`. It reads from `HKLM\Software\{Company}\NewsCentral\NewsService\` and merges registry values on top of `appsettings.json`. Any appsettings.json key can be overridden; see `docs/configuration.md` for the full registry layout.
+`RegistryConfigurationProvider` (from `NewsCentral.Shared`) is added to `IConfigurationBuilder` in `Program.cs` via `AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsService")`. It reads from `HKLM\Software\{Company}\NewsCentral\NewsService\` and merges registry values on top of `appsettings.json`. Any appsettings.json key can be overridden; see `docs/configuration.md` for the full registry layout.
 
 Key registry values for NewsService:
 
@@ -19,7 +19,7 @@ Key registry values for NewsService:
 | `Signing\{teamFolderName}\PublicKey` | `REG_SZ` | Base64 SPKI for ECDSA `index.json` verification |
 | `Signing\{teamFolderName}\PublicKeyPrevious` | `REG_SZ` | Base64 SPKI — rotation window (optional) |
 
-`Company` is read from appsettings.json before the registry provider is added and is not registry-overridable (it defines the hive path). The solution segment is the fixed constant `SolutionConstants.SolutionName`, not a config value.
+`Company` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`, generated into `NewsCentral.Shared`) — **not** an appsettings value — and is not registry-overridable (it defines the hive path; a mismatch fails silently as `OpenSubKey` returns `null`). The solution segment is likewise the fixed constant `SolutionConstants.SolutionName`, not a config value.
 
 ## Poll Cycle — `SyncService.RunCycleAsync`
 

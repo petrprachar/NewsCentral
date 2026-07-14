@@ -10,7 +10,7 @@ All registry-configurable values reside under:
 HKLM\Software\[Company]\[NewsCentral]\
 ```
 
-`[Company]` is the only path-defining **configuration** value: it is read from `appsettings.json` and is **not** overridable via registry (it defines the registry path itself). The `[NewsCentral]` solution segment is **not** configuration at all — it is the fixed constant `SolutionConstants.SolutionName` (in `NewsCentral.Shared`, namespace `NewsCentral.Configuration`).
+`[Company]` is **not configuration** — it is a single **build-time constant** authored once in `Directory.Build.props` (`<Company>`) and surfaced to code as `SolutionConstants.Company` (generated into `NewsCentral.Shared`), identical across all three components. It is **absent from every `appsettings.json`**, has **no runtime default and no fallback**, and an MSBuild target (`Directory.Build.targets`) fails the build if it is empty, so it cannot ship unset. It is **not** registry-overridable: it *defines* the hive path and cannot be read from the path it defines. A `Company` **mismatch fails silently** — `RegistryConfigurationProvider`'s `OpenSubKey` returns `null` with no error, so every registry/GPO override is quietly ignored and the component runs on its shipped defaults. That silent-drift risk is exactly why `Company` is a single source of truth (the packaging MSI reads the same `Directory.Build.props` value for the scheduled-task path `\{Company}\NewsCentral\NewsViewer`). The `[NewsCentral]` solution segment is likewise **not** configuration — it is the fixed constant `SolutionConstants.SolutionName` (in `NewsCentral.Shared`, namespace `NewsCentral.Configuration`).
 
 ## Precedence Rule
 
@@ -124,9 +124,10 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 
 ## appsettings.json — NewsCentral
 
+`Company` is deliberately **absent** — it is the build-time constant `SolutionConstants.Company`, not an appsettings key (see the Registry Hive note above).
+
 ```json
 {
-  "Company": "Contoso",
   "DataPath": "C:\\Download\\NewsCentral",
   "Initialization": {
     "DefaultAdminUsername": "admin",
@@ -200,10 +201,18 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
 
 ## appsettings.json — NewsViewer
 
+NewsViewer resolves configuration across three layers (registry always wins):
+
+| Layer | File / source | Status |
+|---|---|---|
+| Base | `appsettings.json` | **Shipped, neutral, committed** — a tracked artifact (never gitignored). Every key explicit; loaded with `optional: false` (a missing file is a hard startup failure). This is the base layer the MSI installs. |
+| Dev overlay | `appsettings.Development.json` | **Optional, gitignored, dev-only** — loaded with `optional: true`; its mere presence activates it (no environment variable). **Never published** (`CopyToPublishDirectory=Never`), so nothing in it can reach the fleet. Documented shape: `appsettings.Development.json.example`. |
+| Override | Registry (GPO) | **Always wins** — `HKLM\Software\{Company}\NewsCentral\NewsViewer`. |
+
+`appsettings.json` is a committed base artifact, not a hand-maintained local file; GPO sits on top of it. `Company` is **not** present in any layer's file — it is the build-time constant `SolutionConstants.Company` (see the Registry Hive note above).
+
 ```json
 {
-  "Company": "MyCompany",
-  "ApplicationName": "NewsCentral",
   "CacheRootPath": "C:\\ProgramData\\NewsCentral",
   "BypassDailyGate": false,
   "BypassImageIntegrityCheck": false,
