@@ -19,7 +19,7 @@ namespace NewsCentral.Models
         public bool IsWallpaper { get; set; } = false;
         public bool IsLogonScreen { get; set; } = false;
 
-        public int DisplayDurationSeconds { get; set; }
+        public int DisplayDurationSeconds { get; set; } = PresentationDefaults.DisplayDurationSeconds;
 
         public bool UseVirtualDesktop { get; set; }
 

@@ -110,6 +110,11 @@ static class Program
 
         var isOnline = ReadOnlineStatus(config.CacheRootPath);
 
+        // Resolve the raw duration to an effective value here (not in the view): -1 = never auto-close,
+        // 0 / any other negative = unset -> 30s default, >0 = as-is. Single source of truth is
+        // PresentationDefaults.
+        int effectiveDuration = PresentationDefaults.ResolveDuration(assignment.DisplayDurationSeconds);
+
         if (assignment.UseVirtualDesktop)
         {
             // Application.EnableVisualStyles() and other WinForms startup calls on the main
@@ -123,6 +128,7 @@ static class Program
             var t  = telemetry;
             var vs = viewerState;
             var io = isOnline;
+            var ed = effectiveDuration;
 
             var uiThread = new Thread(() =>
             {
@@ -132,7 +138,7 @@ static class Program
                 var bgForm     = new BackgroundForm(a.VirtualDesktopBackgroundColor);
                 bgForm.Show();
 
-                var viewerForm = new ViewerForm(a, ip, t, vs, io);
+                var viewerForm = new ViewerForm(a, ip, t, vs, io, ed);
                 viewerForm.FormClosed += (_, _) => { bgForm.Close(); desktop.SwitchToOriginal(); };
                 Application.Run(viewerForm);
             });
@@ -145,7 +151,7 @@ static class Program
         }
         else
         {
-            Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline));
+            Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline, effectiveDuration));
             ApplyWallpaper();
         }
     }

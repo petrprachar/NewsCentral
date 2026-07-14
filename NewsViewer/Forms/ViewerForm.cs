@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using NewsCentral.Models;
 using NewsCentral.Models.IndexFile;
 using NewsViewer.Services;
 
@@ -12,7 +13,6 @@ public sealed class ViewerForm : Form
     private const int PosterStripHeight = 44;
     private const int FormWidth = ImageWidth + SidePanelWidth;       // 1800
     private const int FormHeight = ImageHeight + PosterStripHeight;   // 944
-    private const int DefaultDurationSeconds = 60;
     private const int PanelMargin = 16;
     private const int ContentWidth = SidePanelWidth - (PanelMargin * 2);   // 168
     private const int ProgressWidth = 144;
@@ -38,9 +38,10 @@ public sealed class ViewerForm : Form
     private readonly Panel _progressFill;
     private readonly ToolTip _toolTip = new();
 
-    private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Windows.Forms.Timer? _timer;
     private int _secondsRemaining;
     private int _totalSeconds;
+    private readonly int _effectiveDurationSeconds;
     private readonly DateTime _sessionStart = DateTime.UtcNow;
     private string _closeReason = "UserClose";
 
@@ -49,13 +50,15 @@ public sealed class ViewerForm : Form
         string imagePath,
         TelemetryWriter telemetry,
         ViewerStateService viewerState,
-        bool isOnline)
+        bool isOnline,
+        int effectiveDurationSeconds)
     {
         _assignment = assignment;
         _imagePath = imagePath;
         _telemetry = telemetry;
         _viewerState = viewerState;
         _isOnline = isOnline;
+        _effectiveDurationSeconds = effectiveDurationSeconds;
 
         // ── Form — solid 5px frame around the whole window ───────────────────
         FormBorderStyle = FormBorderStyle.None;
@@ -273,16 +276,25 @@ public sealed class ViewerForm : Form
         pnlPoster.Controls.Add(_lblPosterText);
 
         // ── Countdown timer ──────────────────────────────────────────────────
-        _secondsRemaining = _assignment.DisplayDurationSeconds > 0
-            ? _assignment.DisplayDurationSeconds
-            : DefaultDurationSeconds;
-        _totalSeconds = _secondsRemaining;
+        // Duration is already resolved by the caller (PresentationDefaults.ResolveDuration): the view
+        // performs NO resolution of its own. -1 means never auto-close — no timer, and the countdown
+        // card is hidden so there is no frozen "0" or stale count; the poster stays until the user
+        // closes it (Close button, which leaves _closeReason at its "UserClose" default).
+        if (_effectiveDurationSeconds == PresentationDefaults.NeverAutoClose)
+        {
+            _pnlAutoClose.Visible = false;
+        }
+        else
+        {
+            _secondsRemaining = _effectiveDurationSeconds;
+            _totalSeconds = _secondsRemaining;
 
-        UpdateCountdownUi();
+            UpdateCountdownUi();
 
-        _timer = new System.Windows.Forms.Timer { Interval = 1000 };
-        _timer.Tick += OnTimerTick;
-        _timer.Start();
+            _timer = new System.Windows.Forms.Timer { Interval = 1000 };
+            _timer.Tick += OnTimerTick;
+            _timer.Start();
+        }
 
         FormClosed += OnFormClosed;
 
@@ -335,11 +347,11 @@ public sealed class ViewerForm : Form
             _lblCountdown.ForeColor = FluentTheme.TextPrimary;
             _lblCountdownUnit.ForeColor = FluentTheme.TextSecondary;
             _progressFill.BackColor = FluentTheme.Accent;
-            _timer.Start();
+            _timer?.Start();
         }
         else
         {
-            _timer.Stop();
+            _timer?.Stop();
             _lblCountdown.ForeColor = FluentTheme.AccentPaused;
             _lblCountdownUnit.ForeColor = FluentTheme.AccentPaused;
             _progressFill.BackColor = FluentTheme.AccentPaused;
@@ -373,8 +385,8 @@ public sealed class ViewerForm : Form
 
     private void OnFormClosed(object? sender, FormClosedEventArgs e)
     {
-        _timer.Stop();
-        _timer.Dispose();
+        _timer?.Stop();
+        _timer?.Dispose();
         _toolTip.Dispose();
         _pictureBox.Image?.Dispose();
 
