@@ -30,6 +30,15 @@ static class Program
         var configuration = BuildConfiguration();
         var config        = configuration.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
+        // UI theme — resolved ONCE here and consumed via Theme.Current (the same
+        // resolve-once-then-pass pattern as duration resolution). Registry Ui\Theme
+        // (REG_SZ "Dark" | "Light", surfaced as Ui:Theme) overrides the code default:
+        // "light" (case-insensitive) selects Light; anything else — absent, "Dark",
+        // or garbage — is Dark. Must be set before any Form is constructed.
+        Theme.Current = string.Equals(configuration["Ui:Theme"], "Light", StringComparison.OrdinalIgnoreCase)
+            ? Theme.Light
+            : Theme.Dark;
+
         // Company is a build-time constant (SolutionConstants.Company), enforced at build time — it is
         // not read from config and cannot be empty here. Only CacheRootPath still needs validating.
         if (string.IsNullOrWhiteSpace(config.CacheRootPath))

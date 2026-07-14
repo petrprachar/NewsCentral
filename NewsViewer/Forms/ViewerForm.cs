@@ -20,9 +20,6 @@ public sealed class ViewerForm : Form
     private const int ProgressWidth = 144;
     private const int FrameThickness = 5;
 
-    private static readonly Color FrameBand = Color.FromArgb(150, 150, 150);
-    private static readonly Color FrameEdge = Color.FromArgb(105, 105, 105);
-
     // Per-instance geometry, computed in the constructor from the loaded bitmap.
     private readonly int _imageW;
     private readonly int _imageH;
@@ -106,7 +103,7 @@ public sealed class ViewerForm : Form
             _imageW + SidePanelWidth + 2 * FrameThickness,
             _imageH + PosterStripHeight + 2 * FrameThickness);
         StartPosition = FormStartPosition.CenterScreen;
-        BackColor = FrameBand;
+        BackColor = Theme.Current.WindowFrame;
         TopMost = true;
         Text = "NewsViewer";
         Paint += OnFramePaint;
@@ -116,7 +113,7 @@ public sealed class ViewerForm : Form
         {
             Location = new Point(FrameThickness, FrameThickness),
             Size = new Size(_formW, _formH),
-            BackColor = FluentTheme.PanelBg
+            BackColor = Theme.Current.PanelBg
         };
         Controls.Add(root);
 
@@ -126,7 +123,7 @@ public sealed class ViewerForm : Form
             Location = new Point(0, 0),
             Size = new Size(_imageW, _imageH),
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = FluentTheme.Stage,
+            BackColor = Theme.Current.Stage,
             Image = bmp
         };
         root.Controls.Add(_pictureBox);
@@ -136,11 +133,11 @@ public sealed class ViewerForm : Form
         {
             Location = new Point(_imageW, 0),
             Size = new Size(SidePanelWidth, _formH),
-            BackColor = FluentTheme.PanelBg
+            BackColor = Theme.Current.PanelBg
         };
         _pnlSide.Paint += (_, e) =>
         {
-            using var pen = new Pen(FluentTheme.Border);
+            using var pen = new Pen(Theme.Current.Border);
             e.Graphics.DrawLine(pen, 0, 0, 0, _pnlSide.Height);
         };
         root.Controls.Add(_pnlSide);
@@ -150,7 +147,7 @@ public sealed class ViewerForm : Form
         {
             Text = _isOnline ? "● Online" : "● Offline",
             Font = new Font("Segoe UI", 9.5f),
-            ForeColor = _isOnline ? Color.FromArgb(0, 130, 0) : Color.FromArgb(190, 0, 0),
+            ForeColor = _isOnline ? Theme.Current.OnlineFg : Theme.Current.OfflineFg,
             BackColor = Color.Transparent,
             AutoSize = true,
             Location = new Point(PanelMargin, 16)
@@ -182,8 +179,8 @@ public sealed class ViewerForm : Form
         {
             Location = new Point(PanelMargin, 156),
             Size = new Size(ContentWidth, 126),
-            FillColor = FluentTheme.Surface,
-            BorderColor = FluentTheme.Border,
+            FillColor = Theme.Current.Surface,
+            BorderColor = Theme.Current.Border,
             Padding = new Padding(1)
         };
         _pnlSide.Controls.Add(_pnlAutoClose);
@@ -193,7 +190,7 @@ public sealed class ViewerForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 4,
-            BackColor = FluentTheme.Surface,
+            BackColor = Theme.Current.Surface,
             Padding = new Padding(11, 9, 11, 9)
         };
         cardLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -208,7 +205,7 @@ public sealed class ViewerForm : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            BackColor = FluentTheme.Surface,
+            BackColor = Theme.Current.Surface,
             Margin = new Padding(0, 0, 0, 6)
         };
 
@@ -219,7 +216,7 @@ public sealed class ViewerForm : Form
             AutoSize = false,
             Size = new Size(16, 16),
             Margin = new Padding(0, 1, 7, 0),
-            BackColor = FluentTheme.Surface,
+            BackColor = Theme.Current.Surface,
             FlatStyle = FlatStyle.Standard,
             Cursor = Cursors.Hand
         };
@@ -230,8 +227,8 @@ public sealed class ViewerForm : Form
             Text = "Form closes in",
             AutoSize = true,
             Font = new Font("Segoe UI", 9.5f),
-            ForeColor = FluentTheme.TextPrimary,
-            BackColor = FluentTheme.Surface,
+            ForeColor = Theme.Current.TextPrimary,
+            BackColor = Theme.Current.Surface,
             Margin = new Padding(0, 2, 0, 0),
             Cursor = Cursors.Hand
         };
@@ -246,8 +243,8 @@ public sealed class ViewerForm : Form
             Text = string.Empty,
             AutoSize = true,
             Font = new Font("Segoe UI", 11, FontStyle.Regular),
-            ForeColor = FluentTheme.TextPrimary,
-            BackColor = FluentTheme.Surface,
+            ForeColor = Theme.Current.TextPrimary,
+            BackColor = Theme.Current.Surface,
             Anchor = AnchorStyles.None,
             Margin = new Padding(0)
         };
@@ -258,8 +255,8 @@ public sealed class ViewerForm : Form
             Text = "seconds",
             AutoSize = true,
             Font = new Font("Segoe UI", 8.5f),
-            ForeColor = FluentTheme.TextSecondary,
-            BackColor = FluentTheme.Surface,
+            ForeColor = Theme.Current.TextSecondary,
+            BackColor = Theme.Current.Surface,
             Anchor = AnchorStyles.None,
             Margin = new Padding(0, 2, 0, 6)
         };
@@ -268,7 +265,7 @@ public sealed class ViewerForm : Form
         var progressTrack = new Panel
         {
             Size = new Size(ProgressWidth, 4),
-            BackColor = FluentTheme.Border,
+            BackColor = Theme.Current.Border,
             Anchor = AnchorStyles.None,
             Margin = new Padding(0)
         };
@@ -276,7 +273,7 @@ public sealed class ViewerForm : Form
         {
             Location = new Point(0, 0),
             Size = new Size(ProgressWidth, 4),
-            BackColor = FluentTheme.Accent
+            BackColor = Theme.Current.Accent
         };
         progressTrack.Controls.Add(_progressFill);
         cardLayout.Controls.Add(progressTrack, 0, 3);
@@ -291,11 +288,11 @@ public sealed class ViewerForm : Form
         {
             Location = new Point(0, _imageH),
             Size = new Size(_imageW, PosterStripHeight),
-            BackColor = FluentTheme.PanelBg
+            BackColor = Theme.Current.PanelBg
         };
         pnlPoster.Paint += (_, e) =>
         {
-            using var pen = new Pen(FluentTheme.Border);
+            using var pen = new Pen(Theme.Current.Border);
             e.Graphics.DrawLine(pen, 0, 0, pnlPoster.Width, 0);
         };
         root.Controls.Add(pnlPoster);
@@ -308,7 +305,7 @@ public sealed class ViewerForm : Form
         {
             Text = posterText,
             Font = new Font("Segoe UI", 12.5f),
-            ForeColor = FluentTheme.TextPrimary,
+            ForeColor = Theme.Current.TextPrimary,
             BackColor = Color.Transparent,
             AutoSize = false,
             Location = new Point(0, 1),
@@ -348,7 +345,7 @@ public sealed class ViewerForm : Form
     {
         int w = ClientSize.Width;
         int h = ClientSize.Height;
-        using var edge = new Pen(FrameEdge);
+        using var edge = new Pen(Theme.Current.FrameEdge);
         e.Graphics.DrawRectangle(edge, 0, 0, w - 1, h - 1);
         e.Graphics.DrawRectangle(edge, FrameThickness - 1, FrameThickness - 1,
             w - 2 * (FrameThickness - 1) - 1, h - 2 * (FrameThickness - 1) - 1);
@@ -371,17 +368,17 @@ public sealed class ViewerForm : Form
     {
         if (_chkAutoClose.Checked)
         {
-            _lblCountdown.ForeColor = FluentTheme.TextPrimary;
-            _lblCountdownUnit.ForeColor = FluentTheme.TextSecondary;
-            _progressFill.BackColor = FluentTheme.Accent;
+            _lblCountdown.ForeColor = Theme.Current.TextPrimary;
+            _lblCountdownUnit.ForeColor = Theme.Current.TextSecondary;
+            _progressFill.BackColor = Theme.Current.Accent;
             _timer?.Start();
         }
         else
         {
             _timer?.Stop();
-            _lblCountdown.ForeColor = FluentTheme.AccentPaused;
-            _lblCountdownUnit.ForeColor = FluentTheme.AccentPaused;
-            _progressFill.BackColor = FluentTheme.AccentPaused;
+            _lblCountdown.ForeColor = Theme.Current.AccentPaused;
+            _lblCountdownUnit.ForeColor = Theme.Current.AccentPaused;
+            _progressFill.BackColor = Theme.Current.AccentPaused;
         }
     }
 

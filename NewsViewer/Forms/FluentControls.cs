@@ -1,23 +1,79 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Drawing.Drawing2D;
 
 namespace NewsViewer.Forms;
 
-internal static class FluentTheme
+/// <summary>
+/// Instance color palette for the viewer UI. Two built-in palettes exist — <see cref="Light"/>
+/// (the classic Fluent gray look) and <see cref="Dark"/> (the default). The active palette is
+/// <see cref="Current"/>, resolved ONCE in Program.cs from Ui:Theme (registry REG_SZ override
+/// Ui\Theme = "Dark" | "Light"; code default Dark) before any Form is constructed — the same
+/// resolve-once-then-pass pattern used for DisplayDurationSeconds.
+/// </summary>
+internal sealed class Theme
 {
-    internal static readonly Color PanelBg = Color.FromArgb(240, 240, 240);
-    internal static readonly Color Surface = Color.FromArgb(225, 225, 225);
-    internal static readonly Color SurfaceHover = Color.FromArgb(229, 241, 251);
-    internal static readonly Color SurfacePress = Color.FromArgb(204, 228, 247);
-    internal static readonly Color Border = Color.FromArgb(173, 173, 173);
-    internal static readonly Color BorderHover = Color.FromArgb(0, 120, 215);
-    internal static readonly Color BorderPress = Color.FromArgb(0, 84, 153);
-    internal static readonly Color Accent = Color.FromArgb(0, 120, 215);
-    internal static readonly Color AccentPaused = Color.FromArgb(160, 160, 160);
-    internal static readonly Color TextPrimary = Color.FromArgb(0, 0, 0);
-    internal static readonly Color TextSecondary = Color.FromArgb(96, 96, 96);
-    internal static readonly Color Stage = Color.FromArgb(96, 96, 96);
+    internal Color PanelBg { get; init; }
+    internal Color Surface { get; init; }
+    internal Color SurfaceHover { get; init; }
+    internal Color SurfacePress { get; init; }
+    internal Color Border { get; init; }
+    internal Color BorderHover { get; init; }
+    internal Color BorderPress { get; init; }
+    internal Color Accent { get; init; }
+    internal Color AccentPaused { get; init; }
+    internal Color TextPrimary { get; init; }
+    internal Color TextSecondary { get; init; }
+    internal Color Stage { get; init; }
+    internal Color WindowFrame { get; init; }
+    internal Color FrameEdge { get; init; }
+    internal Color OnlineFg { get; init; }
+    internal Color OfflineFg { get; init; }
+
     internal const int Radius = 0;
+
+    internal static readonly Theme Light = new()
+    {
+        PanelBg = Color.FromArgb(240, 240, 240),
+        Surface = Color.FromArgb(225, 225, 225),
+        SurfaceHover = Color.FromArgb(229, 241, 251),
+        SurfacePress = Color.FromArgb(204, 228, 247),
+        Border = Color.FromArgb(173, 173, 173),
+        BorderHover = Color.FromArgb(0, 120, 215),
+        BorderPress = Color.FromArgb(0, 84, 153),
+        Accent = Color.FromArgb(0, 120, 215),
+        AccentPaused = Color.FromArgb(160, 160, 160),
+        TextPrimary = Color.FromArgb(0, 0, 0),
+        TextSecondary = Color.FromArgb(96, 96, 96),
+        Stage = Color.FromArgb(96, 96, 96),
+        WindowFrame = Color.FromArgb(150, 150, 150),
+        FrameEdge = Color.FromArgb(105, 105, 105),
+        OnlineFg = Color.FromArgb(0, 130, 0),
+        OfflineFg = Color.FromArgb(190, 0, 0)
+    };
+
+    internal static readonly Theme Dark = new()
+    {
+        PanelBg = Color.FromArgb(26, 26, 28),
+        Surface = Color.FromArgb(38, 38, 42),
+        SurfaceHover = Color.FromArgb(50, 50, 56),
+        SurfacePress = Color.FromArgb(30, 30, 34),
+        Border = Color.FromArgb(62, 62, 66),
+        BorderHover = Color.FromArgb(76, 140, 220),
+        BorderPress = Color.FromArgb(56, 110, 180),
+        Accent = Color.FromArgb(76, 140, 220),
+        AccentPaused = Color.FromArgb(90, 90, 96),
+        TextPrimary = Color.FromArgb(240, 240, 240),
+        TextSecondary = Color.FromArgb(150, 150, 155),
+        Stage = Color.FromArgb(12, 12, 14),
+        WindowFrame = Color.FromArgb(48, 48, 52),
+        FrameEdge = Color.FromArgb(90, 90, 96),
+        OnlineFg = Color.FromArgb(92, 200, 110),
+        OfflineFg = Color.FromArgb(235, 110, 90)
+    };
+
+    // Declared AFTER Light/Dark: static initializers run in textual order, so Dark must
+    // already exist when this default is evaluated. Program.cs overwrites it at startup.
+    internal static Theme Current { get; set; } = Dark;
 
     internal static GraphicsPath RoundedRect(Rectangle r, int radius)
     {
@@ -36,13 +92,16 @@ internal static class FluentTheme
 internal sealed class RoundedPanel : Panel
 {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public int Radius { get; set; } = FluentTheme.Radius;
+    public Theme Theme { get; set; } = Theme.Current;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color FillColor { get; set; } = FluentTheme.Surface;
+    public int Radius { get; set; } = Theme.Radius;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color BorderColor { get; set; } = FluentTheme.Border;
+    public Color FillColor { get; set; } = Theme.Current.Surface;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color BorderColor { get; set; } = Theme.Current.Border;
 
     public RoundedPanel()
     {
@@ -55,7 +114,7 @@ internal sealed class RoundedPanel : Panel
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-        using var path = FluentTheme.RoundedRect(rect, Radius);
+        using var path = Theme.RoundedRect(rect, Radius);
         using (var b = new SolidBrush(FillColor)) e.Graphics.FillPath(b, path);
         using (var p = new Pen(BorderColor)) e.Graphics.DrawPath(p, path);
         base.OnPaint(e);
@@ -65,25 +124,28 @@ internal sealed class RoundedPanel : Panel
 internal sealed class RoundedButton : Button
 {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public int Radius { get; set; } = FluentTheme.Radius;
+    public Theme Theme { get; set; } = Theme.Current;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color NormalColor { get; set; } = FluentTheme.Surface;
+    public int Radius { get; set; } = Theme.Radius;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color HoverColor { get; set; } = FluentTheme.SurfaceHover;
+    public Color NormalColor { get; set; } = Theme.Current.Surface;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color PressColor { get; set; } = FluentTheme.SurfacePress;
+    public Color HoverColor { get; set; } = Theme.Current.SurfaceHover;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color BorderColor { get; set; } = FluentTheme.Border;
+    public Color PressColor { get; set; } = Theme.Current.SurfacePress;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color HoverBorderColor { get; set; } = FluentTheme.BorderHover;
+    public Color BorderColor { get; set; } = Theme.Current.Border;
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public Color PressBorderColor { get; set; } = FluentTheme.BorderPress;
+    public Color HoverBorderColor { get; set; } = Theme.Current.BorderHover;
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public Color PressBorderColor { get; set; } = Theme.Current.BorderPress;
 
     private bool _hover;
     private bool _press;
@@ -95,7 +157,7 @@ internal sealed class RoundedButton : Button
         BackColor = Color.Transparent;
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
-        ForeColor = FluentTheme.TextPrimary;
+        ForeColor = Theme.Current.TextPrimary;
         Cursor = Cursors.Hand;
     }
 
@@ -108,7 +170,7 @@ internal sealed class RoundedButton : Button
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-        using var path = FluentTheme.RoundedRect(rect, Radius);
+        using var path = Theme.RoundedRect(rect, Radius);
         var fill = _press ? PressColor : _hover ? HoverColor : NormalColor;
         var bord = _press ? PressBorderColor : _hover ? HoverBorderColor : BorderColor;
         using (var b = new SolidBrush(fill)) e.Graphics.FillPath(b, path);
