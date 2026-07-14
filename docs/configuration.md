@@ -66,7 +66,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 ```
 HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
-│   BypassShowOnceCheck          DWORD     (1 = skip once-per-day guard at startup)
+│   BypassDailyGate             DWORD     (1 = skip once-per-day gate at startup)
 │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
 ├── Display\
 │       LogicalDayStartHour  REG_SZ   (int 0..23; default 0 = calendar day — see below; MUST be REG_SZ)
@@ -205,7 +205,7 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   "Company": "MyCompany",
   "ApplicationName": "NewsCentral",
   "CacheRootPath": "C:\\ProgramData\\NewsCentral",
-  "BypassShowOnceCheck": false,
+  "BypassDailyGate": false,
   "BypassImageIntegrityCheck": false,
   "Display": {
     "LogicalDayStartHour": 0

@@ -99,7 +99,7 @@ static class Program
         var hmac        = new HmacService(config.Hmac);        // telemetry only — unchanged
         var viewerState = new ViewerStateService(userStatePath, config.Display.LogicalDayStartHour);
         var telemetry   = new TelemetryWriter(config.CacheRootPath, hmac);
-        bool bypass     = config.BypassShowOnceCheck;
+        bool bypass     = config.BypassDailyGate;
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday();
 
         // Show once per day then exit. The wallpaper still re-asserts on an already-shown day.

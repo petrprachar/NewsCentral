@@ -43,7 +43,7 @@
 
     HKLM\Software\<Company>\NewsCentral\NewsViewer\
     │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
-    │   BypassShowOnceCheck          DWORD     (1 = skip once-per-day guard at startup)
+    │   BypassDailyGate             DWORD     (1 = skip once-per-day gate at startup)
     │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
     ├── Hmac\
     │       SecretKey   REG_SZ
@@ -82,8 +82,8 @@
     Local cache root used by both NewsService and NewsViewer.
     Default: C:\ProgramData\NewsCentral
 
-.PARAMETER BypassShowOnceCheck
-    When $true, NewsViewer skips the once-per-day display guard.
+.PARAMETER BypassDailyGate
+    When $true, NewsViewer skips the once-per-logical-day display gate.
     Useful for repeated test runs.
 
 .PARAMETER BypassImageIntegrityCheck
@@ -123,7 +123,7 @@
         -StorageMode Share `
         -SharePath "\\fileserver\newscentral" `
         -PollIntervalSeconds 60 `
-        -BypassShowOnceCheck `
+        -BypassDailyGate `
         -BypassImageIntegrityCheck
 
 .EXAMPLE
@@ -164,7 +164,7 @@ param(
     [string] $CacheRootPath,
 
     # ── NewsViewer ────────────────────────────────────────────────────────────
-    [switch] $BypassShowOnceCheck,
+    [switch] $BypassDailyGate,
     [switch] $BypassImageIntegrityCheck,
 
     # ── HMAC ──────────────────────────────────────────────────────────────────
@@ -219,9 +219,9 @@ if ($PSBoundParameters.ContainsKey("CacheRootPath")) {
     Set-RegValue -Path $base -Name "CacheRootPath" -Value $CacheRootPath -Type String
 }
 
-if ($PSBoundParameters.ContainsKey("BypassShowOnceCheck")) {
-    $dword = if ($BypassShowOnceCheck) { 1 } else { 0 }
-    Set-RegValue -Path $base -Name "BypassShowOnceCheck" -Value $dword -Type DWord
+if ($PSBoundParameters.ContainsKey("BypassDailyGate")) {
+    $dword = if ($BypassDailyGate) { 1 } else { 0 }
+    Set-RegValue -Path $base -Name "BypassDailyGate" -Value $dword -Type DWord
 }
 
 if ($PSBoundParameters.ContainsKey("BypassImageIntegrityCheck")) {

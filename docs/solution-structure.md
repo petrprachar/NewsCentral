@@ -94,7 +94,7 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassShowOnceCheck, BypassImageIntegrityCheck, HmacOptions, and DeliverySection (wallpaper)
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassDailyGate, BypassImageIntegrityCheck, HmacOptions, and DeliverySection (wallpaper)
 ├── Models\
 │   └── ViewerState.cs                viewerstate.json structure
 │   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)

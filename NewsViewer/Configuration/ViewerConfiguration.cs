@@ -8,7 +8,7 @@ public class ViewerConfiguration
     // Company is not configuration — it defines the registry hive path and is the build-time
     // constant SolutionConstants.Company. It is intentionally absent from this POCO.
     public string CacheRootPath { get; set; } = @"C:\ProgramData\NewsCentral";
-    public bool BypassShowOnceCheck { get; set; } = false;
+    public bool BypassDailyGate { get; set; } = false;
     public bool BypassImageIntegrityCheck { get; set; } = false;
     public HmacOptions Hmac { get; set; } = new();
     public DeliverySection Delivery { get; set; } = new();

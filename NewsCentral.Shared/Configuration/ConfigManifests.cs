@@ -75,7 +75,7 @@ public static class ConfigManifests
                 OverridableState.DefinesPath, "compile-time constant (SolutionConstants.Company); defines hive path"),
             Key("CacheRootPath", @"C:\ProgramData\NewsCentral", "CacheRootPath", RegistryValueType.RegSz,
                 ControlKind.Path, OverridableState.Overridable, "absolute path"),
-            Key("BypassShowOnceCheck", "false", "BypassShowOnceCheck", RegistryValueType.Dword,
+            Key("BypassDailyGate", "false", "BypassDailyGate", RegistryValueType.Dword,
                 ControlKind.Toggle, OverridableState.Overridable, "true | false (registry: DWORD 0/1)"),
             Key("BypassImageIntegrityCheck", "false", "BypassImageIntegrityCheck", RegistryValueType.Dword,
                 ControlKind.Toggle, OverridableState.Overridable, "true | false (registry: DWORD 0/1)"),

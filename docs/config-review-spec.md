@@ -160,7 +160,7 @@ Hive: `…\NewsCentral\NewsViewer\`.
 |---|---|---|---|---|---|---|---|
 | `Company` | `Contoso` | — | — | PATH | text | | company name; defines hive path |
 | `CacheRootPath` | `C:\ProgramData\NewsCentral` | `CacheRootPath` (hive root) | S | OV | path | | absolute path |
-| `BypassShowOnceCheck` | `false` | `BypassShowOnceCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
+| `BypassDailyGate` | `false` | `BypassDailyGate` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `BypassImageIntegrityCheck` | `false` | `BypassImageIntegrityCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes |
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
