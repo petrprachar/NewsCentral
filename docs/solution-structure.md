@@ -101,9 +101,8 @@ NewsViewer\
 ├── Services\
 │   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate; SelectActive + SelectActiveWallpaper via shared ActiveAssignmentSelector; verifies image SHA-256
 │   ├── WallpaperService.cs           desktop wallpaper applier — SystemParametersInfo + HKCU (DllImport, no COM); style + uniform background colour
-│   ├── ViewerStateService.cs         reads/writes viewerstate.json for ShowOnce/ShowNew tracking
-│   ├── ShowNewApplicationContext.cs  ApplicationContext subclass; FileSystemWatcher + poll timer for ShowNew mode
-│   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper (ShowOnce only)
+│   ├── ViewerStateService.cs         reads/writes viewerstate.json for the date-only logical-day gate (AlreadyShownToday)
+│   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper
 │   └── TelemetryWriter.cs            HMAC-signs and writes session-{guid}.json to uploads\ on close
 ├── Forms\
 │   ├── ViewerForm.cs                 1810×954 borderless WinForms window; fixed Fluent gray side panel
@@ -111,9 +110,11 @@ NewsViewer\
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; startup checks; remote-session guard; poster branches on ShowMode; applies wallpaper as the terminal step (after poster/VD teardown)
+├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then applies wallpaper as the terminal step (after poster/VD teardown); one-shot, exits after
 └── appsettings.json
 ```
+
+`ShowNewApplicationContext.cs` has been removed — NewsViewer is a one-shot process with **zero** `FileSystemWatcher` usage and no resident message pump.
 
 ## NewsCentral.Shared.Tests — Layout
 

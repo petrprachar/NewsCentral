@@ -122,10 +122,30 @@ public class Presentation : IEntity, ISignable
 }
 ```
 
+`DisplayDurationSeconds` defaults to `PresentationDefaults.DisplayDurationSeconds` (see below). `Signature` is inert — see "Inert Signature plumbing" under Assignment.
+
+## PresentationDefaults
+
+Single source of truth for display-duration semantics (in `NewsCentral.Shared`, referenced by both the model default and the NewsViewer fallback so `30` is never hardcoded elsewhere).
+
+```csharp
+public static class PresentationDefaults
+{
+    public const int DisplayDurationSeconds = 30;   // default poster lifetime (seconds)
+    public const int NeverAutoClose = -1;           // reserved sentinel (no authoring UI yet)
+
+    // -1 → -1 (never auto-close); <= 0 → 30 (unset); > 0 → raw. The NeverAutoClose
+    // check MUST precede the unset check so it is not swallowed.
+    public static int ResolveDuration(int raw);
+}
+```
+
+`ResolveDuration` is the only place a raw duration is interpreted; NewsViewer calls it once in `Program.cs`. See `docs/newsviewer-spec.md` → Display Duration.
+
 ## Schedule
 
 ```csharp
-public class Schedule : IEntity, ISignable
+public class Schedule : IEntity
 {
     public string ScheduleID { get; set; }
     public string PresentationID { get; set; }
@@ -137,20 +157,16 @@ public class Schedule : IEntity, ISignable
     public string CreatedBy { get; set; }
     public DateTime LastModified { get; set; }
 
-    public enum DisplayMode { ShowOnce, ShowNew }
-    public DisplayMode ShowMode { get; set; } = DisplayMode.ShowOnce;
-
-    public string? Signature { get; set; }
+    public string? Signature { get; set; }   // inert — see "Inert Signature plumbing" below
 }
 ```
 
-`DisplayMode.ShowOnce` — show once per calendar day (first start or first unlock).  
-`DisplayMode.ShowNew` — same as ShowOnce, and also when new content arrives.
+The `DisplayMode` enum and `ShowMode` property were removed in the `6010cd1` schema break — there is only one display behaviour now (show once per logical day; see `docs/newsviewer-spec.md`).
 
 ## Assignment
 
 ```csharp
-public class Assignment : IEntity, ISignable
+public class Assignment : IEntity
 {
     public string AssignmentID { get; set; }
     public string PresentationID { get; set; }
@@ -161,9 +177,7 @@ public class Assignment : IEntity, ISignable
     public AssignmentStatus Status { get; set; }        // see enum below
     public bool RequiresApproval { get; set; }
 
-    public bool IsNewsOfWeek { get; set; }
-    public bool IsWallpaper { get; set; }
-    public bool IsLogonScreen { get; set; }
+    public int Priority { get; set; } = 0;              // RESERVED — see below
 
     // Audit trail
     public string CreatedBy { get; set; }
@@ -181,7 +195,7 @@ public class Assignment : IEntity, ISignable
     public DateTime? RejectedDate { get; set; }
     public string? RejectionReason { get; set; }
 
-    public string? Signature { get; set; }
+    public string? Signature { get; set; }              // inert — see "Inert Signature plumbing"
 }
 
 public enum AssignmentStatus
@@ -189,6 +203,16 @@ public enum AssignmentStatus
     Draft, PendingApproval, Approved, Published, Cancelled, Rejected
 }
 ```
+
+The display-type flags (`IsNewsOfWeek` / `IsWallpaper` / `IsLogonScreen`) were removed from `Assignment` in `91923e0`. **Display types are owned by `Presentation` and nothing else** — the assignment surfaces only read them. `Priority` is the reserved wire field described below.
+
+### Reserved `Priority`
+
+`Priority` is **RESERVED**: `0` = normal, ascending = more urgent. It is emitted by `IndexGenerationService` **inside the signed index payload** (so its bytes are signature-covered) and **read by nothing** today. It is deliberately an `int` and **not** an enum, because `JsonStringEnumConverter` throws on an unknown enum string — adding a member later would make older clients reject the *entire* index. Reserving it in the `6010cd1` schema break means the future priority-display feature ships as a **pure behaviour change with no wire break and no fleet coordination**.
+
+### Inert `Signature` plumbing
+
+`Assignment`, `Presentation`, and `Schedule` each carry a `Signature` property, but **none of them is ever signed or verified** — only `TeamIndexFile` (ECDSA P-256) and `SessionTelemetry` (HMAC-SHA256) are signed. (`Presentation` still declares `ISignable`; `Assignment` and `Schedule` no longer do.) These `Signature` members are **known dead plumbing**, pending a later cleanup pass.
 
 ## Team / User
 
@@ -280,7 +304,7 @@ public class PublishedAssignmentIndex
 
     public string? PosterText { get; set; }             // From Presentation.PosterText
     public int DisplayDurationSeconds { get; set; }     // From Presentation.DisplayDurationSeconds
-    public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
+    public int Priority { get; set; } = 0;              // RESERVED — see Assignment.Priority
     public bool UseVirtualDesktop { get; set; }
     public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
 }
@@ -295,7 +319,7 @@ public class ContentInfo
     public string MoreInfoUrl { get; set; }
 }
 
-public class DisplayTypeInfo
+public class DisplayTypeInfo   // sourced from the Presentation — the single source of truth
 {
     public bool IsNewsOfWeek { get; set; }
     public bool IsWallpaper { get; set; }

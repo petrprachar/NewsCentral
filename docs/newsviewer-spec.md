@@ -3,6 +3,8 @@
 **Type:** WinForms (.NET 9) desktop application  
 **Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass. Desktop wallpaper application added (user-session, `SystemParametersInfo` + HKCU; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
+NewsViewer is a **one-shot process**: launch → evaluate the daily gate → render the poster (or not) → apply the wallpaper → exit. There is no resident process, no `FileSystemWatcher`, and no held-open message pump. Each display decision is made afresh at launch.
+
 ## Launch Conditions
 
 - Registered in `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` for system startup
@@ -13,12 +15,26 @@
 - `Main()` validates `Company` and `CacheRootPath` after config load; if any are empty a `MessageBox` is shown and the process exits
 - Registry `teams\` value names must match the generated folder name exactly — the sanitized team name with no `team-` prefix (e.g. `cz-its`, not `CZ_ITS`)
 
-## Display Mode
+### Launch surface — two complementary triggers
 
-| Mode | Behaviour |
-|---|---|
-| `ShowOnce` | Show once per calendar day — on first system start or first workstation unlock |
-| `ShowNew` | Same as `ShowOnce`, and additionally show when new content arrives via NewsService |
+The two triggers are **complementary, not redundant**:
+
+- **HKLM `…\Run`** fires once at **session start** (logon). It does **not** fire on workstation unlock.
+- **Task Scheduler / Workstation Unlock** fires on every **unlock** thereafter. It does **not** fire at logon.
+
+On always-on machines that are locked rather than logged off, **Unlock is the only trigger** for every logical day after the first. There is deliberately **no repeating/timer trigger** in this release — re-evaluation is event-driven (logon or unlock), and the daily gate below decides whether each launch actually shows anything.
+
+## The daily gate
+
+The gate is **date-only** and evaluated once per launch. `ViewerStateService.AlreadyShownToday()` takes **no presentation id** — it disturbs the user at most once per **logical day**, regardless of which presentation is active.
+
+A **logical day** runs from `Display:LogicalDayStartHour` (default `0` = calendar day) to the same hour the next day, in **local** time. `AlreadyShownToday()` compares the stored `LastShownDate` against the current logical day; `RecordShown` stamps the logical day after a display.
+
+**Rationale.** A night-shift worker who starts at 22:00 and unlocks again at 01:00 is still inside the *same* logical day and must not be shown the poster twice. Worked example — `LogicalDayStartHour = 5` (05:00 boundary) cleanly covers morning, afternoon, and night shifts: everything from 05:00 through 04:59 the next morning counts as one day, so a night-shift unlock after midnight does not re-trigger.
+
+### Deliberate gap — no same-day delivery (design decision)
+
+Content published **after** the day's poster has already shown **waits for the next logical day**. There is **no same-day delivery path** in this release, and this is **intended** ("do not disturb users much") — it is a design decision, not an omission or a bug to be fixed. The reserved `Priority` field (see `docs/data-model.md`) is the future, author-controlled escape hatch for urgent same-day content.
 
 ## Presentation Selection
 
@@ -55,8 +71,22 @@ A checkbox ("Form closes in") + countdown number + "seconds" label + a
 progress bar, laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
 overlap regardless of font/DPI). The checkbox is checked by default; unchecking
 **stops** the countdown and grays the number, unit, and bar; re-checking resumes
-from the current value. Counts down from `DisplayDurationSeconds` (default 60),
-closes at zero with reason `Timeout`.
+from the current value. Counts down from the **resolved** `DisplayDurationSeconds`
+(see Display Duration below), closes at zero with reason `Timeout`.
+
+## Display Duration
+
+`DisplayDurationSeconds` carries three meanings via a sentinel model:
+
+| Value | Meaning |
+|---|---|
+| `-1` | **Never auto-close** — RESERVED. No authoring UI can set it yet. |
+| `0` | Unset → resolves to `PresentationDefaults.DisplayDurationSeconds` (**30**). |
+| `> 0` | That many seconds. |
+
+Resolution happens **once**, in `Program.cs`, via `PresentationDefaults.ResolveDuration`. `ViewerForm` performs **no** resolution of its own — it receives an already-resolved value. Any **negative value other than `-1`** is treated as unset (→ 30), **not** as never-close (the `NeverAutoClose` check precedes the unset check in `ResolveDuration`).
+
+> **`-1` = never auto-close.** On a virtual desktop this is a modal takeover with the Close button as the sole exit. Any future UI exposing `-1` must address the VD interaction.
 
 ### Styling — FluentControls.cs
 
@@ -71,17 +101,6 @@ border). All public properties carry
 
 When `Presentation.UseVirtualDesktop = true`: creates a new Windows desktop via `CreateDesktop` / `SwitchDesktop` / `SetThreadDesktop`. Taskbar not visible. Background set to `VirtualDesktopBackgroundColor`. Auto-detected and suppressed in RDP / Citrix / VMware Horizon sessions.
 
-## ShowNew Mode — `ShowNewApplicationContext` (Phase 2)
-
-When `assignment.ShowMode == Schedule.DisplayMode.ShowNew`, `Program.Main` creates a `ShowNewApplicationContext` and calls `Application.Run(context)` with no `MainForm`, keeping the message pump alive indefinitely. The context:
-
-- Creates one `FileSystemWatcher` per team folder, watching `index.json` for `Changed`, `Created`, and `Renamed` events (covering both in-place saves and editor temp-file-rename patterns). The handler sets `volatile bool _indexChanged = true`.
-- A `System.Windows.Forms.Timer` (3-second interval, fires on UI thread) polls the flag:
-  1. **New-content check** — if `_indexChanged` was set and the selected `PresentationId` differs from `ViewerStateService.GetLastShownPresentationId()`: show the viewer.
-  2. **Day-boundary check** — if `AlreadyShownToday` returns false (new calendar day or new presentation): show the viewer. `BypassShowOnceCheck` does **not** apply here — only applies to the startup gate in `Program.Main`.
-- `_activeForm != null` guards against opening a second instance while one is already displayed.
-- To terminate a resident ShowNew process: `taskkill /IM NewsViewer.exe /F` or Task Manager → Details → End Task.
-
 ## Remote / Virtual Session Suppression (Phase 2)
 
 Checked in `Program.Main` immediately after `HasQualifyingMonitor`, before any file I/O or window creation:
@@ -91,9 +110,9 @@ Checked in `Program.Main` immediately after `HasQualifyingMonitor`, before any f
 
 If either condition is true the process exits immediately, no window is shown, and no watcher is started.
 
-## Virtual Desktop — Full Details (Phase 2 — ShowOnce only)
+## Virtual Desktop — Full Details (Phase 2)
 
-When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
+Virtual Desktop governs **how the poster is presented** — it does not gate or exclude the independent wallpaper and lock-screen applies. When `assignment.UseVirtualDesktop = true`:
 
 1. `Program.Main` spawns a **fresh STA thread** (`uiThread`) for all virtual-desktop UI. This is required because `Application.EnableVisualStyles()` and other WinForms startup calls on the main thread create hidden internal windows (the WinForms parking window, etc.). `SetThreadDesktop` silently returns `false` once a thread owns any window handle; using a fresh thread that has never touched WinForms guarantees the call succeeds.
 2. On the new thread: `VirtualDesktopManager` is constructed — saves the original desktop handle (`GetThreadDesktop`) and creates a new named desktop (`CreateDesktop("NewsViewer", ...)`).
@@ -103,8 +122,6 @@ When `assignment.UseVirtualDesktop = true` and `ShowMode = ShowOnce`:
 6. On `ViewerForm.FormClosed`: `BackgroundForm` is closed first (still on new desktop context), then `SwitchToOriginal()` returns the user to the default desktop.
 7. `VirtualDesktopManager.Dispose()` calls `CloseDesktop` to release the handle.
 8. The main thread blocks on `uiThread.Join()` until the viewer closes, then the process exits.
-
-**ShowNew + virtual desktop** — not supported. `ShowNewApplicationContext` creates a hidden `System.Windows.Forms.Timer` window before any `SwitchToNew()` call, which would cause `SetThreadDesktop` to fail. ShowNew presentations always display on the current desktop regardless of `UseVirtualDesktop`. The `CreateAssignment` UI enforces this constraint: the ShowNew radio button is disabled (with an explanatory hint) when the selected presentation has `UseVirtualDesktop = true`.
 
 Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Unicode`, no unsafe blocks).
 
@@ -123,8 +140,11 @@ NewsViewer applies the **desktop wallpaper** in the user session (lock-screen ap
 **Control flow (terminal step, re-asserted every run, stateless — no viewerstate):**
 - Skipped entirely on remote/virtual sessions (`IsRemoteOrVirtualSession`); otherwise runs on any local interactive session and is **not** gated by `HasQualifyingMonitor`.
 - A "no active display assignment" (or no qualifying monitor) case does **not** exit the process — the poster is skipped and the wallpaper step still runs, then the process exits.
-- Runs as the **terminal** step: **ShowOnce** after `ViewerForm` closes and the virtual desktop (if used) is switched back and destroyed — on the main thread / original desktop, never on the temporary VD; **ShowNew** once, immediately **before** `Application.Run(showNewContext)` blocks (ShowNew is incompatible with VD, so the current desktop is correct — wallpaper is never driven from inside the resident context).
+- Runs as the **terminal** step, after `ViewerForm` closes and the virtual desktop (if used) is switched back and destroyed — on the main thread / original desktop, never on the temporary VD.
 - Decision: `intended` = wallpaper winner path; else `Delivery:DefaultWallpaperPath` if set & `File.Exists`; else `null`. `intended != null` → `SetWallpaper(intended)` (Information log `Wallpaper applied: {source} -> {path}` with source `presentation {id}, team {team}` or `default`; Error on `false`). `intended == null` → leave the current wallpaper untouched (sticky), Debug log. If the winner's image fails integrity verification (`wpPath == null`), it falls back to the default rather than applying unverified content.
+- `Delivery:DefaultWallpaperPath` is applied on **every run** where no active `IsWallpaper` assignment exists; an **empty** value leaves the current wallpaper in place (**sticky**).
+
+> **Test ritual — stale wallpaper impersonates fresh behaviour.** The wallpaper lives in **HKCU**, so it **survives a `%ProgramData%` cache wipe** — a wallpaper left over from an earlier test will look like fresh output of the run under test. Reset the wallpaper to a known neutral image **before each end-to-end run**.
 
 Config (`Delivery` section, NewsViewer): `DefaultWallpaperPath` (default `""`), `WallpaperStyle` (default `Fit`), `WallpaperBackgroundColor` (default `"0 0 0"`). See `docs/configuration.md`.
 

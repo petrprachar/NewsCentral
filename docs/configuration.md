@@ -68,6 +68,8 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
 │   BypassShowOnceCheck          DWORD     (1 = skip once-per-day guard at startup)
 │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
+├── Display\
+│       LogicalDayStartHour  REG_SZ   (int 0..23; default 0 = calendar day — see below; MUST be REG_SZ)
 ├── Hmac\
 │       SecretKey   REG_SZ
 ├── Signing\
@@ -205,6 +207,9 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   "CacheRootPath": "C:\\ProgramData\\NewsCentral",
   "BypassShowOnceCheck": false,
   "BypassImageIntegrityCheck": false,
+  "Display": {
+    "LogicalDayStartHour": 0
+  },
   "Hmac": {
     "SecretKey": ""
   },
@@ -218,6 +223,12 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   }
 }
 ```
+
+`Display:LogicalDayStartHour` (NewsViewer) — the hour (local time) at which the "logical day" for the once-per-day poster gate rolls over. `int`, default `0` (= calendar day), clamped to `0..23`. Example: `5` makes the day run 05:00 → 04:59 next morning, so a night-shift unlock after midnight is still the same logical day and does not re-trigger the poster. See `docs/newsviewer-spec.md` → The daily gate.
+
+> ⚠️ **`Display:LogicalDayStartHour` MUST be provisioned as `REG_SZ`, never `REG_DWORD`.** `RegistryConfigurationProvider` coerces a `REG_DWORD` of `0` to the string `"False"` and `1` to `"True"` (see the DWORD mapping note above). The configuration binder then tries to convert `"False"`/`"True"` to `int`, throws, and **crashes NewsViewer at startup** — a fleet-wide outage from a one-value mistake. This foot-gun applies to **any** numeric override whose legitimate value range includes `0` or `1` (latent today for `Service:PollIntervalSeconds`). Provision such values as `REG_SZ` (e.g. `LogicalDayStartHour = "5"`).
+
+**Display duration has NO registry or appsettings default.** `DisplayDurationSeconds` is a per-presentation value carried in the content, not configuration. `0` is a **meaningful** value ("unset") resolved in code to `30` by `PresentationDefaults.ResolveDuration` — it is not a missing setting to be filled from config. See `docs/data-model.md` → PresentationDefaults and `docs/newsviewer-spec.md` → Display Duration.
 
 `Delivery` (NewsViewer) — desktop wallpaper applied in the user session via `SystemParametersInfo` + HKCU. `DefaultWallpaperPath` (absolute path; `""` = leave the current wallpaper, sticky) is applied when no active `IsWallpaper` content is present. `WallpaperStyle` is `Fill | Fit | Stretch | Center | Tile` (default `Fit`). `WallpaperBackgroundColor` is `"R G B"` for the Fit letterbox bars (default `"0 0 0"`). NewsViewer-only; the NewsService `Delivery` section is separate (`DefaultLockScreenPath`).
 

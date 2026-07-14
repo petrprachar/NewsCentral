@@ -1,7 +1,7 @@
 # NewsCentral — Component Specification
 
 **Type:** .NET 9 MAUI Blazor Hybrid desktop application  
-**Status:** Active development. Admin page, assignments, publishing workflow, Azure blob distribution, ShowMode/UseVirtualDesktop/VirtualDesktopBackgroundColor UI, and Phase B2 Key Management page implemented.
+**Status:** Active development. Admin page, assignments, publishing workflow, Azure blob distribution, UseVirtualDesktop/VirtualDesktopBackgroundColor UI, and Phase B2 Key Management page implemented.
 
 ## Responsibilities
 
@@ -32,7 +32,7 @@
 | Page | Path | Purpose |
 |---|---|---|
 | `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox (defaults to `true` for new presentations) and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
-| `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates (default start = today, all 7 days selected), select target teams, choose `ShowMode`, set approval requirement. ShowNew option is disabled (greyed out with hint) when the presentation has `UseVirtualDesktop = true`. Wallpaper and Logon Screen display-type badges are dimmed with a hint when `UseVirtualDesktop` is set, because those modes are incompatible with Virtual Desktop. |
+| `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates (default start = today, all 7 days selected), select target teams, set approval requirement. Display-type badges (News-of-Week / Wallpaper / Logon Screen) are shown **read-only** here — display types are set on the presentation (see `EditPresentation.razor`), never on the assignment. |
 | `KeyManagement.razor` | `/key-management` | TeamAdmin-gated (SystemAdmin passes automatically). View current public key (full, copyable for GPO/registry deployment) and truncated private key hint. Generate a new ECDSA P-256 key pair (held in page state). Apply — sets `PublicKeyPrevious = old PublicKey` for rotation-window continuity and writes `team-signing.json` via `IStorageService` (never through `IBlobDistributionService`). Republish — separate deliberate action: re-signs and saves `index.json` via `GenerateAndSaveIndexAsync` (self-verify guard runs). Nav item hidden when no team is selected or user lacks TeamAdmin. Import-from-authority (paste/derive) deferred. |
 
 ## Storage Backend
