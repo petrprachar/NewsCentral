@@ -215,6 +215,7 @@ public class IndexGenerationService
 
             PosterText             = presentation.PosterText,
             DisplayDurationSeconds = presentation.DisplayDurationSeconds,
+            Priority               = assignment.Priority,
             UseVirtualDesktop      = presentation.UseVirtualDesktop,
             VirtualDesktopBackgroundColor = presentation.VirtualDesktopBackgroundColor
         };

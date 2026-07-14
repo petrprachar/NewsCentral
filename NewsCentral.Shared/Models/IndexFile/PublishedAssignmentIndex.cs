@@ -26,7 +26,11 @@ namespace NewsCentral.Models.IndexFile
 
         public string? PosterText { get; set; }
         public int DisplayDurationSeconds { get; set; }
-        public Schedule.DisplayMode ShowMode { get; set; } = Schedule.DisplayMode.ShowOnce;
+
+        // Reserved for a future priority-display feature; read by nothing today (0 = normal,
+        // ascending = more urgent). Deliberately int, not an enum — see Assignment.Priority.
+        // Always emitted (no JsonIgnore) so the signed wire shape is stable from now on.
+        public int Priority { get; set; } = 0;
         public bool UseVirtualDesktop { get; set; }
         public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
     }

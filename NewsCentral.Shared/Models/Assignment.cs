@@ -15,6 +15,12 @@ public class Assignment : IEntity
     public bool IsWallpaper { get; set; } = false;
     public bool IsLogonScreen { get; set; } = false;
 
+    // Reserved for a future priority-display feature; read by nothing today. 0 = normal,
+    // ascending = more urgent. Deliberately int, not an enum: JsonStringEnumConverter throws
+    // on an unknown enum string, so adding a member later would make older clients reject the
+    // entire index. Emitted into the signed index so the wire shape is stable from now on.
+    public int Priority { get; set; } = 0;
+
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime DateCreated { get; set; } = DateTime.UtcNow;
     public string? ApprovedBy { get; set; }
