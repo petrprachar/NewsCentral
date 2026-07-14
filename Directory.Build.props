@@ -1,0 +1,25 @@
+<Project>
+
+  <PropertyGroup>
+    <!--
+      Company defines the registry hive path HKLM\Software\{Company}\NewsCentral\{Component}.
+      It is a build-time vendor constant, identical across all components, and is NOT
+      registry-overridable (it locates the hive; it cannot be read from it). This is the single
+      source of truth: surfaced to code as SolutionConstants.Company (generated into
+      NewsCentral.Shared) and consumed by the MSI for the scheduled-task path. Directory.Build.targets
+      fails the build if it is empty. <Company> also flows into AssemblyCompanyAttribute.
+    -->
+    <Company>Contoso</Company>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      Snapshot the AUTHORED Company here, in Directory.Build.props (imported before the SDK's
+      GenerateAssemblyInfo backfills an empty $(Company) with $(AssemblyName)). The build gate and the
+      generated constant read this snapshot so an empty authored value is caught rather than silently
+      becoming the assembly name.
+    -->
+    <NcCompanyAuthored>$(Company)</NcCompanyAuthored>
+  </PropertyGroup>
+
+</Project>

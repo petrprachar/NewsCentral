@@ -123,7 +123,9 @@ public static class EffectiveConfigResolver
 
     /// <summary>
     /// Reads the two layers separately (spec §8): appsettings.json from the install dir, and the
-    /// registry hive located via the appsettings Company. Never merges them.
+    /// registry hive located via the compile-time <see cref="SolutionConstants.Company"/> constant —
+    /// the same value every component resolves its hive from, so the tool and the runtime provably
+    /// agree on which hive is read. Never merges them.
     /// </summary>
     public static (IConfiguration Appsettings, LayerStatus AppStatus,
                    IConfiguration Registry, LayerStatus RegStatus, bool HiveFound)
@@ -153,8 +155,8 @@ public static class EffectiveConfigResolver
             }
         }
 
-        // ── registry layer (hive located via the component's own Company) ─────
-        var company = appLayer["Company"];
+        // ── registry layer (hive located via the compile-time Company constant) ─────
+        var company = SolutionConstants.Company;
         IConfiguration regLayer;
         LayerStatus regStatus;
         bool hiveFound;
@@ -244,9 +246,9 @@ public static class EffectiveConfigResolver
         var projected = Project(manifest, app, reg);
 
         var appPath = installDir is null ? null : Path.Combine(installDir, "appsettings.json");
-        var company = app["Company"];
-        var companySegment = string.IsNullOrEmpty(company) ? "{Company}" : company;
-        var hivePath = $@"HKLM\Software\{companySegment}\{SolutionConstants.SolutionName}\{component}";
+        // The hive is located by the compile-time Company constant, not by appsettings — so the
+        // displayed hive path matches the one the components actually resolve at runtime.
+        var hivePath = $@"HKLM\Software\{SolutionConstants.Company}\{SolutionConstants.SolutionName}\{component}";
 
         return projected with
         {

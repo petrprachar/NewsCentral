@@ -211,9 +211,11 @@ public sealed class EffectiveConfigResolverTests
         Assert.False(result.AppSettingsExists);
         Assert.Equal(LayerStatus.NotFound, result.AppSettingsStatus);
 
-        // Rows still present (manifest surface), all appsettings values absent; no structural data.
+        // Rows still present (manifest surface); all *appsettings* values absent. The registry layer
+        // is located by the compile-time SolutionConstants.Company constant and is machine-global —
+        // it is independent of the (non-existent) install-dir override, so structural data sourced from
+        // it (Teams etc.) is not asserted here; this test covers the appsettings layer.
         Assert.NotEmpty(result.Rows);
         Assert.All(result.Rows, row => Assert.Null(row.AppSettingsValue));
-        Assert.Empty(result.Teams);
     }
 }

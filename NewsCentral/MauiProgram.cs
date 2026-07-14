@@ -79,7 +79,6 @@ public static class MauiProgram
         {
             var inMemorySettings = new Dictionary<string, string>
             {
-                {"Company",                           "Contoso"},
                 {"DataPath",                          "C:\\Download\\NewsCentral"},
                 {"DefaultAdminUsername",              "admin"},
                 {"DefaultAdminPassword",              "admin"},
@@ -109,7 +108,7 @@ public static class MauiProgram
         // AddRegistryOverrides are immediately readable from builder.Configuration.
         builder.Configuration.AddConfiguration(config);
         builder.Configuration.AddRegistryOverrides(
-            config["Company"] ?? "Contoso",
+            SolutionConstants.Company,   // build-time constant; defines the hive path, not configuration
             SolutionConstants.SolutionName,
             "NewsCentral");
 

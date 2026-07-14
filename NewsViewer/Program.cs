@@ -21,12 +21,13 @@ static class Program
         var configuration = BuildConfiguration();
         var config        = configuration.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
-        if (string.IsNullOrWhiteSpace(config.Company) ||
-            string.IsNullOrWhiteSpace(config.CacheRootPath))
+        // Company is a build-time constant (SolutionConstants.Company), enforced at build time — it is
+        // not read from config and cannot be empty here. Only CacheRootPath still needs validating.
+        if (string.IsNullOrWhiteSpace(config.CacheRootPath))
         {
             MessageBox.Show(
                 "NewsViewer configuration is incomplete.\n" +
-                "Company and CacheRootPath must be set in appsettings.json.",
+                "CacheRootPath must be set in appsettings.json.",
                 "NewsViewer — Configuration Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
@@ -160,15 +161,11 @@ static class Program
     {
         var jsonPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
-        // Preliminary pass to read Company (path-defining, not registry-overridable).
-        var preliminary = new ConfigurationBuilder()
-            .AddJsonFile(jsonPath, optional: false)
-            .Build();
-        var baseConfig = preliminary.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
-
+        // Company is the build-time constant SolutionConstants.Company (defines the hive path, not
+        // registry-overridable), so there is nothing to pre-read: a single load + registry overlay.
         return new ConfigurationBuilder()
             .AddJsonFile(jsonPath, optional: false)
-            .AddRegistryOverrides(baseConfig.Company, SolutionConstants.SolutionName, "NewsViewer")
+            .AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsViewer")
             .Build();
     }
 

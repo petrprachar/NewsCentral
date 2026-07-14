@@ -1,0 +1,16 @@
+<Project>
+
+  <!--
+    Fail the build (all configurations, before compile) if Company is unset. Company defines the
+    registry hive path and has no default; shipping it empty would make every component read the
+    wrong hive silently (RegistryConfigurationProvider's OpenSubKey returns null on a mismatch).
+    Gates on the authored snapshot NcCompanyAuthored (not $(Company), which the SDK backfills with
+    $(AssemblyName) when empty). Rejects empty/whitespace only — any non-empty authored value (the
+    active development value included) is accepted.
+  -->
+  <Target Name="EnsureCompanyIsSet" BeforeTargets="CoreCompile">
+    <Error Condition="'$(NcCompanyAuthored.Trim())' == ''"
+           Text="Company is not set in Directory.Build.props. It defines the registry hive path and has no default." />
+  </Target>
+
+</Project>

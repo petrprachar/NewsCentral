@@ -4,7 +4,8 @@ namespace NewsService.Configuration;
 
 public class ServiceConfiguration
 {
-    public string Company { get; set; } = "Contoso";
+    // Company is not configuration — it defines the registry hive path and is the build-time
+    // constant SolutionConstants.Company. It is intentionally absent from this POCO.
     public ServiceSection Service { get; set; } = new();
     public RepositorySection Repository { get; set; } = new();
     public AzureBlobSection AzureBlob { get; set; } = new();

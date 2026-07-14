@@ -11,7 +11,8 @@ public class AppConfiguration
         _configuration = configuration;
     }
 
-    public string Company => _configuration["Company"] ?? "MyCompany";
+    // Company defines the registry hive path and is a build-time constant, not configuration.
+    public string Company => SolutionConstants.Company;
 
     // ── Authoring tier ───────────────────────────────────────────────────────
     // DataPath is the root for IStorageService / LocalStorageService.

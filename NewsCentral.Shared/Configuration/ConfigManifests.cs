@@ -16,8 +16,8 @@ public static class ConfigManifests
         HasEntraMappings = true,
         Keys = new[]
         {
-            Key("Company", "Contoso", null, RegistryValueType.None, ControlKind.Text,
-                OverridableState.DefinesPath, "company name; defines hive path"),
+            Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
+                OverridableState.DefinesPath, "compile-time constant (SolutionConstants.Company); defines hive path"),
             Key("Service:PollIntervalSeconds", "60", @"Service\PollIntervalSeconds", RegistryValueType.Dword,
                 ControlKind.Number, OverridableState.Overridable, "integer seconds, 10–86400"),
             Key("Service:CacheRootPath", @"C:\ProgramData\NewsCentral", @"Service\CacheRootPath", RegistryValueType.RegSz,
@@ -69,8 +69,8 @@ public static class ConfigManifests
         HasEntraMappings = false,
         Keys = new[]
         {
-            Key("Company", "Contoso", null, RegistryValueType.None, ControlKind.Text,
-                OverridableState.DefinesPath, "company name; defines hive path"),
+            Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
+                OverridableState.DefinesPath, "compile-time constant (SolutionConstants.Company); defines hive path"),
             Key("CacheRootPath", @"C:\ProgramData\NewsCentral", "CacheRootPath", RegistryValueType.RegSz,
                 ControlKind.Path, OverridableState.Overridable, "absolute path"),
             Key("BypassShowOnceCheck", "false", "BypassShowOnceCheck", RegistryValueType.Dword,
@@ -103,8 +103,8 @@ public static class ConfigManifests
         HasEntraMappings = false,
         Keys = new[]
         {
-            Key("Company", "MyCompany", null, RegistryValueType.None, ControlKind.Text,
-                OverridableState.DefinesPath, "company name; defines hive path"),
+            Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
+                OverridableState.DefinesPath, "compile-time constant (SolutionConstants.Company); defines hive path"),
             Key("DataPath", "", "DataPath", RegistryValueType.RegSz,
                 ControlKind.Path, OverridableState.Overridable, "authoring data root"),
             Key("Initialization:DefaultAdminUsername", "admin", @"Initialization\DefaultAdminUsername", RegistryValueType.RegSz,

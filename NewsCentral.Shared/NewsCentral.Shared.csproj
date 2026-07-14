@@ -13,4 +13,29 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.9" />
   </ItemGroup>
 
+  <!--
+    Generate SolutionConstants.Company from the $(Company) MSBuild property (Directory.Build.props)
+    so the compile-time constant and the build property share one source of truth. Written into obj/
+    and added to @(Compile); never hand-edited. Shared is referenced by all three components, so all
+    three see the same value.
+  -->
+  <Target Name="GenerateCompanyConstant" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <_CompanyConstantLine Include="// &lt;auto-generated /&gt; Generated from the &lt;Company&gt; MSBuild property. Do not edit." />
+      <_CompanyConstantLine Include="namespace NewsCentral.Configuration%3B" />
+      <_CompanyConstantLine Include="public static partial class SolutionConstants" />
+      <_CompanyConstantLine Include="{" />
+      <_CompanyConstantLine Include="    public const string Company = &quot;$(NcCompanyAuthored)&quot;%3B" />
+      <_CompanyConstantLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)SolutionConstants.Company.g.cs"
+                      Lines="@(_CompanyConstantLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)SolutionConstants.Company.g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)SolutionConstants.Company.g.cs" />
+    </ItemGroup>
+  </Target>
+
 </Project>
