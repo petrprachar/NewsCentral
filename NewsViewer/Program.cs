@@ -159,12 +159,18 @@ static class Program
 
     private static IConfiguration BuildConfiguration()
     {
-        var jsonPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var jsonPath    = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+        var devJsonPath = Path.Combine(AppContext.BaseDirectory, "appsettings.Development.json");
 
         // Company is the build-time constant SolutionConstants.Company (defines the hive path, not
-        // registry-overridable), so there is nothing to pre-read: a single load + registry overlay.
+        // registry-overridable), so there is nothing to pre-read. Layering, registry always wins:
+        //   appsettings.json (required) -> appsettings.Development.json (optional) -> registry.
+        // The Development overlay is deliberately NOT gated on ASPNETCORE_ENVIRONMENT/DOTNET_ENVIRONMENT
+        // (unset for a WinForms process launched from HKLM Run or a scheduled task) — its mere
+        // presence activates it. It is gitignored and never published (see NewsViewer.csproj).
         return new ConfigurationBuilder()
             .AddJsonFile(jsonPath, optional: false)
+            .AddJsonFile(devJsonPath, optional: true)
             .AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsViewer")
             .Build();
     }

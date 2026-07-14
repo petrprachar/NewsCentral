@@ -371,3 +371,9 @@ team-signing.json
 
 # Exported test project archive (source is tracked as a directory)
 NewsCentral.Shared.Tests.zip
+
+# Local reference docs (not part of the solution)
+/Intune and proxy.docx
+
+# Optional per-developer NewsViewer config overlay — never shipped (see appsettings.Development.json.example)
+NewsViewer/appsettings.Development.json

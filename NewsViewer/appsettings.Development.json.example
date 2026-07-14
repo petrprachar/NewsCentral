@@ -1,0 +1,20 @@
+// appsettings.Development.json  (SAMPLE — copy to appsettings.Development.json, then edit)
+//
+// This is an OPTIONAL developer overlay. Copy this file to
+//   NewsViewer/appsettings.Development.json
+// and it is picked up automatically at startup — no environment variable required.
+//
+// Layering (registry always wins):
+//   appsettings.json  ->  appsettings.Development.json (optional)  ->  registry overrides
+//
+// The real appsettings.Development.json is gitignored and is EXCLUDED FROM PUBLISH
+// (CopyToPublishDirectory=Never), so nothing you put here can ever ship to the fleet.
+// Only override the keys you actually need; everything else falls through to appsettings.json.
+{
+  "Delivery": {
+    "DefaultWallpaperPath": "C:\\Users\\you\\Pictures\\dev-wallpaper.png"
+  },
+  "Display": {
+    "LogicalDayStartHour": 5
+  }
+}
