@@ -30,6 +30,8 @@ The gate is **date-only** and evaluated once per launch. `ViewerStateService.Alr
 
 A **logical day** runs from `Display:LogicalDayStartHour` (default `0` = calendar day) to the same hour the next day, in **local** time. `AlreadyShownToday()` compares the stored `LastShownDate` against the current logical day; `RecordShown` stamps the logical day after a display.
 
+**State file.** The gate state lives in `%LOCALAPPDATA%\NewsCentral\viewerstate.json` — **per-user, and NOT part of the `%ProgramData%\NewsCentral\` machine cache.** Consequence for testing: **wiping the `%ProgramData%` cache does not reset the daily gate** — delete `viewerstate.json` (or set `BypassDailyGate`) to force a re-display. `LastShownDate` stores the logical-day key (the `LogicalDayStartHour` boundary is already baked in), so the gate is a plain string-equality check with no time component. See `docs/data-model.md` → viewerstate.json.
+
 **Rationale.** A night-shift worker who starts at 22:00 and unlocks again at 01:00 is still inside the *same* logical day and must not be shown the poster twice. Worked example — `LogicalDayStartHour = 5` (05:00 boundary) cleanly covers morning, afternoon, and night shifts: everything from 05:00 through 04:59 the next morning counts as one day, so a night-shift unlock after midnight does not re-trigger.
 
 ### Deliberate gap — no same-day delivery (design decision)
@@ -103,12 +105,12 @@ When `Presentation.UseVirtualDesktop = true`: creates a new Windows desktop via 
 
 ## Remote / Virtual Session Suppression (Phase 2)
 
-Checked in `Program.Main` immediately after `HasQualifyingMonitor`, before any file I/O or window creation:
+Checked in `Program.Main` **before** the `PresentationSelector` is constructed — and well before `HasQualifyingMonitor()`, which is evaluated later in the poster-assignment guard — before any file I/O or window creation:
 
 - **RDP and Citrix ICA** — detected via `SystemInformation.TerminalServerSession` (`GetSystemMetrics(SM_REMOTESESSION)`). Both RDP and Citrix ICA sessions set this flag.
 - **VMware Horizon** — detected via the `ViewClient_Machine_Name` environment variable, which Horizon sets in every user session.
 
-If either condition is true the process exits immediately, no window is shown, and no watcher is started.
+If either condition is true the process exits immediately and no window is shown.
 
 ## Virtual Desktop — Full Details (Phase 2)
 

@@ -49,6 +49,15 @@ public class LogicalDayCalculatorTests
             LogicalDayCalculator.LogicalDay(atStart, startHour));
     }
 
+    // LogicalDay clamps startHour internally (via NormalizeStartHour): an out-of-range value degrades
+    // to 0 (calendar day) rather than silently shifting the day for a raw caller.
+    [Fact]
+    public void LogicalDay_OutOfRangeStartHour_ClampsToZero()
+    {
+        var now = new DateTime(2026, 1, 1, 8, 30, 0);
+        Assert.Equal(LogicalDayCalculator.LogicalDay(now, 0), LogicalDayCalculator.LogicalDay(now, 25));
+    }
+
     // Clamping: values below 0 and above 23 degrade to 0 (not boundary-clamped: 24 -> 0, not 23).
     [Theory]
     [InlineData(-1)]

@@ -351,7 +351,10 @@ Written by NewsService to `%programdata%\NewsCentral\` after each poll cycle.
 
 ## viewerstate.json (NewsViewer internal)
 
-Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-level).
+Location: `%LOCALAPPDATA%\NewsCentral\viewerstate.json` — **per-user state, NOT part of the
+`%ProgramData%\NewsCentral\` machine cache.** Consequence for testing: **wiping the `%ProgramData%`
+cache does NOT reset the daily gate** — delete `viewerstate.json` (or set `BypassDailyGate`) to force
+a re-display.
 
 ```json
 {
@@ -359,6 +362,16 @@ Location: `%localappdata%\NewsCentral\viewerstate.json` (per-user, not machine-l
   "LastShownPresentationId": "abc-123"
 }
 ```
+
+- **`LastShownDate`** holds a **logical-day key** (`"yyyy-MM-dd"`), **not** a calendar date and **not**
+  a timestamp. The `LogicalDayStartHour` boundary shift is already baked into the key by
+  `LogicalDayCalculator.LogicalDay`, so the gate (`AlreadyShownToday`) is a plain **string-equality**
+  test. There is deliberately **no time component** — the file's `LastWriteTime` supplies that for
+  debugging.
+- **`LastShownPresentationId`** is **write-only** — `RecordShown` writes it; nothing reads it
+  (`GetLastShownPresentationId` was removed in `04d6379`). This is **deliberate, not dead code**: it is
+  retained for diagnostics and as the seed of the Priority-phase **shown-ID set** (a high-priority
+  poster firing mid-day must be suppressed **per-presentation**, not per-day). **Do not remove it.**
 
 ## Lock-screen apply state (NewsService)
 

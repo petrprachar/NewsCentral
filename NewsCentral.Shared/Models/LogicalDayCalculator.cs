@@ -12,9 +12,12 @@ public static class LogicalDayCalculator
     /// The logical-day key ("yyyy-MM-dd") for <paramref name="localNow"/> given a day that starts
     /// at <paramref name="startHour"/>. <c>startHour = 0</c> is a strict no-op that reproduces the
     /// calendar day (<c>localNow.ToString("yyyy-MM-dd")</c>, i.e. <c>DateTime.Today</c>).
+    /// <paramref name="startHour"/> is normalized via <see cref="NormalizeStartHour"/> before use,
+    /// so an out-of-range value degrades to the calendar day rather than silently shifting it — a
+    /// raw caller (e.g. a future Priority-phase call site or a test harness) cannot get a wrong day.
     /// </summary>
     public static string LogicalDay(DateTime localNow, int startHour)
-        => localNow.AddHours(-startHour).ToString("yyyy-MM-dd");
+        => localNow.AddHours(-NormalizeStartHour(startHour)).ToString("yyyy-MM-dd");
 
     /// <summary>
     /// Clamps a configured start hour to the valid 0..23 range. An out-of-range value degrades to
