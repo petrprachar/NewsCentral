@@ -8,6 +8,12 @@
 #  NOTE: the team names in the .EXAMPLE blocks below (e.g. team-cz-exp,
 #  team-de-prod) predate the removal of the `team-` folder-name prefix and
 #  are retained as-is. Current folder names carry no `team-` prefix.
+#
+#  WARNING — numeric values must NEVER be written as -Type DWord. RegistryConfigurationProvider
+#  coerces REG_DWORD 0 -> "False" and 1 -> "True", after which the configuration binder throws
+#  converting "False"/"True" to int and crashes the component at startup. Write every int-valued
+#  key (PollIntervalSeconds, GracePeriodMinutes, LockExpirationMinutes, LogicalDayStartHour, ...)
+#  as -Type String. Genuine booleans as DWord are fine — the coercion exists for them.
 # ============================================================================
 <#
 .SYNOPSIS
@@ -23,7 +29,7 @@
     ─────────────────────────────────────────────────────────────
     HKLM\Software\<Company>\NewsCentral\NewsService\
     ├── Service\
-    │       PollIntervalSeconds   DWORD    (poll interval in seconds)
+    │       PollIntervalSeconds   REG_SZ   (int poll interval in seconds — REG_SZ, never DWORD)
     │       CacheRootPath         REG_SZ   (overrides Service:CacheRootPath)
     ├── Repository\
     │       StorageMode   REG_SZ   ("Share" or "Azure")
@@ -51,11 +57,13 @@
             <teamFolderName>   REG_SZ ""
 
     Each component reads only its own subkey; values set for one component do
-    not affect another.  Company is read from appsettings.json and must match
+    not affect another.  Company must match Directory.Build.props (SolutionConstants.Company)
     exactly — it defines the registry path and is never registry-overridable.
 
 .PARAMETER Company
-    Must match the Company value in appsettings.json. Default: Contoso
+    Mandatory, no default. Must match Directory.Build.props (SolutionConstants.Company) exactly —
+    it defines the registry hive path, is NOT registry-overridable, and a mismatch fails silently
+    (OpenSubKey returns null), quietly discarding every override.
 
 .PARAMETER ApplicationName
     Kept for documentation only — no longer used for registry path construction.
@@ -141,7 +149,11 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     # ── Registry path identity ────────────────────────────────────────────────
-    [string] $Company         = "Contoso",
+    # Company must match Directory.Build.props exactly — it defines the registry hive path, a
+    # mismatch fails silently (OpenSubKey returns null), and it is NOT registry-overridable.
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string] $Company,
     [string] $ApplicationName = "NewsCentral",
 
     [Parameter(Mandatory)]
@@ -236,7 +248,7 @@ if ($PSBoundParameters.ContainsKey("HmacSecretKey")) {
 
 # ── Service\ ─────────────────────────────────────────────────────────────────
 if ($PSBoundParameters.ContainsKey("PollIntervalSeconds")) {
-    Set-RegValue -Path "$base\Service" -Name "PollIntervalSeconds" -Value $PollIntervalSeconds -Type DWord
+    Set-RegValue -Path "$base\Service" -Name "PollIntervalSeconds" -Value $PollIntervalSeconds -Type String
 }
 if ($PSBoundParameters.ContainsKey("CacheRootPath")) {
     Set-RegValue -Path "$base\Service" -Name "CacheRootPath" -Value $CacheRootPath -Type String
