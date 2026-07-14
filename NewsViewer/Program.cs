@@ -14,6 +14,15 @@ static class Program
     [STAThread]
     static void Main()
     {
+        // Single-instance guard, session-scoped. HKLM Run (logon) and the Workstation Unlock task can
+        // double-launch on a fast lock/unlock cycle; two concurrent runs race on the HKCU wallpaper
+        // write and on viewerstate.json (whose Write swallows exceptions), so a lost write silently
+        // re-fires the poster next unlock. Local\ (not Global\) so fast user switching still gives each
+        // session its own poster. createdNew — not WaitOne — avoids AbandonedMutexException if a prior
+        // instance crashed holding it.
+        using var mutex = new Mutex(initiallyOwned: true, "Local\\NewsCentral.NewsViewer", out bool createdNew);
+        if (!createdNew) return;   // another instance is live in this session — exit silently
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
@@ -155,6 +164,12 @@ static class Program
             Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline, effectiveDuration));
             ApplyWallpaper();
         }
+
+        // Keep the mutex rooted until the very end. `using var` guarantees disposal at method exit but
+        // does NOT keep the object reachable — once the last read is behind us the GC may finalize it
+        // and release the mutex while the VD thread and the wallpaper write are still in flight, which
+        // is exactly the window this guard exists to close.
+        GC.KeepAlive(mutex);
     }
 
     private static IConfiguration BuildConfiguration()
