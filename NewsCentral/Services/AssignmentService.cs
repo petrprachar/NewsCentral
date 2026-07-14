@@ -107,10 +107,7 @@ public class AssignmentService
         string presentationVersion,
         string scheduleId,
         string targetTeamFolderName,
-        bool requiresApproval,
-        bool isNewsOfWeek,
-        bool isWallpaper,
-        bool isLogonScreen)
+        bool requiresApproval)
     {
         var currentUser = _authService.GetCurrentUser()
             ?? throw new UnauthorizedAccessException("Not authenticated");
@@ -127,9 +124,6 @@ public class AssignmentService
                                     ? AssignmentStatus.PendingApproval
                                     : AssignmentStatus.Approved,
             RequiresApproval    = requiresApproval,
-            IsNewsOfWeek        = isNewsOfWeek,
-            IsWallpaper         = isWallpaper,
-            IsLogonScreen       = isLogonScreen,
             CreatedBy           = currentUser.UserID,
             DateCreated         = DateTime.UtcNow
         };

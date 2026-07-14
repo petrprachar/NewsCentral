@@ -30,7 +30,7 @@
   <data name="Wallpaper" xml:space="preserve"><value>Fond d'écran</value></data>
   <data name="LogonScreen" xml:space="preserve"><value>Écran de connexion</value></data>
   <data name="VirtualDesktop" xml:space="preserve"><value>Bureau virtuel :</value></data>
-  <data name="UseVirtualDesktopLabel" xml:space="preserve"><value>Afficher sur le bureau virtuel (mode AfficherUneFois uniquement)</value></data>
+  <data name="UseVirtualDesktopLabel" xml:space="preserve"><value>Afficher sur le bureau virtuel</value></data>
   <data name="BackgroundColor" xml:space="preserve"><value>Couleur d'arrière-plan :</value></data>
   <data name="OriginalImage" xml:space="preserve"><value>Image originale</value></data>
   <data name="SupportPosterCreation" xml:space="preserve"><value>Prendre en charge la création d'affiche</value></data>

@@ -22,7 +22,6 @@
   <data name="PresentationNotFound" xml:space="preserve"><value>Presentación no encontrada</value></data>
   <data name="BackToPresentations" xml:space="preserve"><value>Volver a presentaciones</value></data>
   <data name="PresentationSection" xml:space="preserve"><value>Presentación</value></data>
-  <data name="WallpaperLogonScreenHint" xml:space="preserve"><value>El fondo de pantalla y la pantalla de inicio de sesión no están activos en el modo de escritorio virtual</value></data>
   <data name="ScheduleSection" xml:space="preserve"><value>1. Horario</value></data>
   <data name="StartDate" xml:space="preserve"><value>Fecha de inicio: *</value></data>
   <data name="EndDate" xml:space="preserve"><value>Fecha de fin: *</value></data>

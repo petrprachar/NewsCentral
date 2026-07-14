@@ -11,10 +11,6 @@ public class Assignment : IEntity
     public AssignmentStatus Status { get; set; } = AssignmentStatus.Draft;
     public bool RequiresApproval { get; set; } = true;
 
-    public bool IsNewsOfWeek { get; set; } = true;
-    public bool IsWallpaper { get; set; } = false;
-    public bool IsLogonScreen { get; set; } = false;
-
     // Reserved for a future priority-display feature; read by nothing today. 0 = normal,
     // ascending = more urgent. Deliberately int, not an enum: JsonStringEnumConverter throws
     // on an unknown enum string, so adding a member later would make older clients reject the

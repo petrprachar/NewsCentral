@@ -22,7 +22,6 @@
   <data name="PresentationNotFound" xml:space="preserve"><value>Présentation introuvable</value></data>
   <data name="BackToPresentations" xml:space="preserve"><value>Retour aux présentations</value></data>
   <data name="PresentationSection" xml:space="preserve"><value>Présentation</value></data>
-  <data name="WallpaperLogonScreenHint" xml:space="preserve"><value>Le fond d'écran et l'écran de connexion ne sont pas actifs en mode bureau virtuel</value></data>
   <data name="ScheduleSection" xml:space="preserve"><value>1. Planification</value></data>
   <data name="StartDate" xml:space="preserve"><value>Date de début : *</value></data>
   <data name="EndDate" xml:space="preserve"><value>Date de fin : *</value></data>

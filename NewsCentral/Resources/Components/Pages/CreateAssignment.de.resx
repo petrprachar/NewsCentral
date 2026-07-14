@@ -22,7 +22,6 @@
   <data name="PresentationNotFound" xml:space="preserve"><value>Präsentation nicht gefunden</value></data>
   <data name="BackToPresentations" xml:space="preserve"><value>Zurück zu Präsentationen</value></data>
   <data name="PresentationSection" xml:space="preserve"><value>Präsentation</value></data>
-  <data name="WallpaperLogonScreenHint" xml:space="preserve"><value>Hintergrundbild und Anmeldebildschirm sind im virtuellen Desktop-Modus nicht aktiv</value></data>
   <data name="ScheduleSection" xml:space="preserve"><value>1. Zeitplan</value></data>
   <data name="StartDate" xml:space="preserve"><value>Startdatum: *</value></data>
   <data name="EndDate" xml:space="preserve"><value>Enddatum: *</value></data>

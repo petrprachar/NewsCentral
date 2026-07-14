@@ -65,19 +65,19 @@
 
                                 @* Display Type Badges *@
                                 <div class="display-badges">
-                                    @if (assignment.IsNewsOfWeek)
+                                    @if (presentation?.IsNewsOfWeek == true)
                                     {
                                         <span class="display-badge news-badge">
                                             <i class="bi bi-newspaper"></i> News of the Week
                                         </span>
                                     }
-                                    @if (assignment.IsWallpaper)
+                                    @if (presentation?.IsWallpaper == true)
                                     {
                                         <span class="display-badge wallpaper-badge">
                                             <i class="bi bi-image-fill"></i> Wallpaper
                                         </span>
                                     }
-                                    @if (assignment.IsLogonScreen)
+                                    @if (presentation?.IsLogonScreen == true)
                                     {
                                         <span class="display-badge logon-badge">
                                             <i class="bi bi-lock-fill"></i> Logon Screen
@@ -153,19 +153,19 @@
 
                                 @* Display Type Badges *@
                                 <div class="display-badges">
-                                    @if (assignment.IsNewsOfWeek)
+                                    @if (presentation?.IsNewsOfWeek == true)
                                     {
                                         <span class="display-badge news-badge">
                                             <i class="bi bi-star-fill"></i> News of Week
                                         </span>
                                     }
-                                    @if (assignment.IsWallpaper)
+                                    @if (presentation?.IsWallpaper == true)
                                     {
                                         <span class="display-badge wallpaper-badge">
                                             <i class="bi bi-image"></i> Wallpaper
                                         </span>
                                     }
-                                    @if (assignment.IsLogonScreen)
+                                    @if (presentation?.IsLogonScreen == true)
                                     {
                                         <span class="display-badge logon-badge">
                                             <i class="bi bi-lock"></i> Logon Screen
@@ -257,19 +257,19 @@
 
                                 @* Display Type Badges *@
                                 <div class="display-badges">
-                                    @if (assignment.IsNewsOfWeek)
+                                    @if (presentation?.IsNewsOfWeek == true)
                                     {
                                         <span class="display-badge news-badge">
                                             <i class="bi bi-star-fill"></i> News of Week
                                         </span>
                                     }
-                                    @if (assignment.IsWallpaper)
+                                    @if (presentation?.IsWallpaper == true)
                                     {
                                         <span class="display-badge wallpaper-badge">
                                             <i class="bi bi-image"></i> Wallpaper
                                         </span>
                                     }
-                                    @if (assignment.IsLogonScreen)
+                                    @if (presentation?.IsLogonScreen == true)
                                     {
                                         <span class="display-badge logon-badge">
                                             <i class="bi bi-lock"></i> Logon Screen

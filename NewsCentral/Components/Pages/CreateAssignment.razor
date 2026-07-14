@@ -40,15 +40,11 @@
 
                     @if (presentation.IsNewsOfWeek || presentation.IsWallpaper || presentation.IsLogonScreen)
                     {
-                        <div class="display-badges-container @(presentation.UseVirtualDesktop ? "badges-dimmed" : "")">
+                        <div class="display-badges-container">
                             <DisplayTypeBadges ShowNewsOfWeek="@presentation.IsNewsOfWeek"
-                                               ShowWallpaper="@(presentation.IsWallpaper && !presentation.UseVirtualDesktop)"
-                                               ShowLogonScreen="@(presentation.IsLogonScreen && !presentation.UseVirtualDesktop)" />
+                                               ShowWallpaper="@presentation.IsWallpaper"
+                                               ShowLogonScreen="@presentation.IsLogonScreen" />
                         </div>
-                        @if (presentation.UseVirtualDesktop && (presentation.IsWallpaper || presentation.IsLogonScreen))
-                        {
-                            <small class="mode-hint">@Localizer["WallpaperLogonScreenHint"]</small>
-                        }
                     }
                 </div>
             </div>
@@ -442,15 +438,6 @@
         cursor: not-allowed;
     }
 
-    .badges-dimmed {
-        opacity: 0.45;
-    }
-
-    .mode-hint {
-        color: #999;
-        font-style: italic;
-        font-size: 12px;
-    }
 </style>
 
 @code
@@ -665,10 +652,7 @@
                     presentation.Version.ToString(),
                     schedule.ScheduleID,
                     targetTeam.FolderName,
-                    requiresApproval,
-                    presentation.IsNewsOfWeek,
-                    presentation.IsWallpaper,
-                    presentation.IsLogonScreen
+                    requiresApproval
                 );
 
                 createdCount++;
