@@ -24,7 +24,7 @@ Each component reads from its own subkey. Values set for one component do not af
 ```
 HKLM\Software\[Company]\NewsCentral\NewsService\
 ├── Service\
-│       PollIntervalSeconds   DWORD     (poll interval in seconds)
+│       PollIntervalSeconds   REG_SZ    (int poll interval in seconds; MUST be REG_SZ — DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 │       CacheRootPath         REG_SZ    (overrides Service:CacheRootPath)
 ├── Repository\
 │       StorageMode   REG_SZ   ("Share" or "Azure")
@@ -48,7 +48,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
 ├── Entra\
 │       Enabled              REG_SZ    "true" or "false"  (default false; gates the whole feature)
-│       GracePeriodMinutes   DWORD     (retention window for the last resolved team while Graph is unreachable; default 240)
+│       GracePeriodMinutes   REG_SZ    (int retention window in minutes for the last resolved team while Graph is unreachable; default 240; MUST be REG_SZ — 0 = "no grace" is deliberate, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 │       Mappings\
 │           FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
 │           VDE   REG_SZ   "extensionAttribute3"
@@ -90,7 +90,7 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 ```
 HKLM\Software\[Company]\NewsCentral\NewsCentral\
 │   DataPath               REG_SZ    (root for IStorageService)
-│   LockExpirationMinutes  DWORD
+│   LockExpirationMinutes  REG_SZ    (int minutes; MUST be REG_SZ — a 1-minute lock is valid, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 ├── Authentication\
 │       EnableAutoLogin   DWORD     (dev/test only — not for registry deployment)
 │       UseMockUPN        DWORD     (dev/test only — not for registry deployment)
@@ -276,7 +276,7 @@ NewsService can resolve **one dynamic team** per machine from the machine's own 
 ```
 HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
     Enabled              REG_SZ   "true" / "false"
-    GracePeriodMinutes   DWORD
+    GracePeriodMinutes   REG_SZ   (int minutes; MUST be REG_SZ — 0 = "no grace" is deliberate; DWORD 0/1 coerce to "False"/"True" and the int binder throws)
     Mappings\
         FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
         VDE   REG_SZ   "extensionAttribute3"

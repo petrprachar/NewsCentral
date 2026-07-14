@@ -13,7 +13,7 @@ Key registry values for NewsService:
 | Registry path | Type | Effect |
 |---|---|---|
 | `Repository\StorageMode` | `REG_SZ` | `Share` (default) or `Azure` |
-| `Service\PollIntervalSeconds` | `DWORD` | Overrides `Service:PollIntervalSeconds` |
+| `Service\PollIntervalSeconds` | `REG_SZ` | Overrides `Service:PollIntervalSeconds` (int; MUST be REG_SZ — DWORD 0/1 coerce to `"False"`/`"True"` and the int binder throws) |
 | `AzureUploadEnabled` | `DWORD` | `1` to enable telemetry upload to Azure Blob |
 | `teams\{teamFolderName}` | `REG_SZ` | Each value name is a team folder name |
 | `Signing\{teamFolderName}\PublicKey` | `REG_SZ` | Base64 SPKI for ECDSA `index.json` verification |
