@@ -7,12 +7,14 @@ namespace NewsViewer.Forms;
 
 public sealed class ViewerForm : Form
 {
-    private const int ImageWidth = 1600;
-    private const int ImageHeight = 900;
+    // Image-area bounds: the area takes the content's exact aspect ratio fitted within
+    // MaxImgW×MaxImgH (16:9 content reproduces the classic 1600×900). The Min clamps only
+    // bite for extreme aspect ratios; the PictureBox stays SizeMode.Zoom so those rare
+    // cases letterbox gracefully instead of producing a degenerate window.
+    private const int MaxImgW = 1600, MaxImgH = 900;
+    private const int MinImgW = 960, MinImgH = 540;
     private const int SidePanelWidth = 200;
     private const int PosterStripHeight = 44;
-    private const int FormWidth = ImageWidth + SidePanelWidth;       // 1800
-    private const int FormHeight = ImageHeight + PosterStripHeight;   // 944
     private const int PanelMargin = 16;
     private const int ContentWidth = SidePanelWidth - (PanelMargin * 2);   // 168
     private const int ProgressWidth = 144;
@@ -20,6 +22,12 @@ public sealed class ViewerForm : Form
 
     private static readonly Color FrameBand = Color.FromArgb(150, 150, 150);
     private static readonly Color FrameEdge = Color.FromArgb(105, 105, 105);
+
+    // Per-instance geometry, computed in the constructor from the loaded bitmap.
+    private readonly int _imageW;
+    private readonly int _imageH;
+    private readonly int _formW;
+    private readonly int _formH;
 
     private readonly PublishedAssignmentIndex _assignment;
     private readonly string _imagePath;
@@ -60,9 +68,43 @@ public sealed class ViewerForm : Form
         _isOnline = isOnline;
         _effectiveDurationSeconds = effectiveDurationSeconds;
 
+        // ── Image — loaded FIRST so the window can adapt to the content's aspect ratio ──
+        // Missing file / decode failure → null bitmap → 1600×900 fallback area and continue
+        // (the pre-adaptive silent-tolerance behavior, preserved).
+        Bitmap? bmp = null;
+        if (File.Exists(_imagePath))
+        {
+            try
+            {
+                var bytes = File.ReadAllBytes(_imagePath);
+                using var ms = new MemoryStream(bytes);
+                bmp = new Bitmap(ms);
+            }
+            catch { }
+        }
+
+        // Image area = the bitmap's aspect ratio fitted within MaxImgW×MaxImgH (upscaling
+        // small images to fit the box is intended), clamped to the Min bounds for extreme
+        // ratios — where SizeMode.Zoom letterboxes gracefully.
+        if (bmp is not null)
+        {
+            double scale = Math.Min((double)MaxImgW / bmp.Width, (double)MaxImgH / bmp.Height);
+            _imageW = Math.Clamp((int)Math.Round(bmp.Width * scale), MinImgW, MaxImgW);
+            _imageH = Math.Clamp((int)Math.Round(bmp.Height * scale), MinImgH, MaxImgH);
+        }
+        else
+        {
+            _imageW = MaxImgW;
+            _imageH = MaxImgH;
+        }
+        _formW = _imageW + SidePanelWidth;
+        _formH = _imageH + PosterStripHeight;
+
         // ── Form — solid 5px frame around the whole window ───────────────────
         FormBorderStyle = FormBorderStyle.None;
-        ClientSize = new Size(FormWidth + FrameThickness * 2, FormHeight + FrameThickness * 2);
+        ClientSize = new Size(
+            _imageW + SidePanelWidth + 2 * FrameThickness,
+            _imageH + PosterStripHeight + 2 * FrameThickness);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = FrameBand;
         TopMost = true;
@@ -73,26 +115,27 @@ public sealed class ViewerForm : Form
         var root = new Panel
         {
             Location = new Point(FrameThickness, FrameThickness),
-            Size = new Size(FormWidth, FormHeight),
+            Size = new Size(_formW, _formH),
             BackColor = FluentTheme.PanelBg
         };
         Controls.Add(root);
 
-        // ── PictureBox — fixed 1600×900, gray stage backing ─────────────────
+        // ── PictureBox — sized to the content's aspect ratio, gray stage backing ──
         _pictureBox = new PictureBox
         {
             Location = new Point(0, 0),
-            Size = new Size(ImageWidth, ImageHeight),
+            Size = new Size(_imageW, _imageH),
             SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = FluentTheme.Stage
+            BackColor = FluentTheme.Stage,
+            Image = bmp
         };
         root.Controls.Add(_pictureBox);
 
         // ── Side panel — fixed column, gray surface, left separator ─────────
         _pnlSide = new Panel
         {
-            Location = new Point(ImageWidth, 0),
-            Size = new Size(SidePanelWidth, FormHeight),
+            Location = new Point(_imageW, 0),
+            Size = new Size(SidePanelWidth, _formH),
             BackColor = FluentTheme.PanelBg
         };
         _pnlSide.Paint += (_, e) =>
@@ -246,8 +289,8 @@ public sealed class ViewerForm : Form
         // ── Caption bar — hairline divider ties it to the image above ────────
         var pnlPoster = new Panel
         {
-            Location = new Point(0, ImageHeight),
-            Size = new Size(ImageWidth, PosterStripHeight),
+            Location = new Point(0, _imageH),
+            Size = new Size(_imageW, PosterStripHeight),
             BackColor = FluentTheme.PanelBg
         };
         pnlPoster.Paint += (_, e) =>
@@ -269,7 +312,7 @@ public sealed class ViewerForm : Form
             BackColor = Color.Transparent,
             AutoSize = false,
             Location = new Point(0, 1),
-            Size = new Size(ImageWidth, PosterStripHeight - 1),
+            Size = new Size(_imageW, PosterStripHeight - 1),
             TextAlign = ContentAlignment.MiddleCenter,
             Padding = new Padding(0)
         };
@@ -297,8 +340,6 @@ public sealed class ViewerForm : Form
         }
 
         FormClosed += OnFormClosed;
-
-        LoadImage();
     }
 
     // ── Frame ────────────────────────────────────────────────────────────────
@@ -311,20 +352,6 @@ public sealed class ViewerForm : Form
         e.Graphics.DrawRectangle(edge, 0, 0, w - 1, h - 1);
         e.Graphics.DrawRectangle(edge, FrameThickness - 1, FrameThickness - 1,
             w - 2 * (FrameThickness - 1) - 1, h - 2 * (FrameThickness - 1) - 1);
-    }
-
-    // ── Image ──────────────────────────────────────────────────────────────────
-
-    private void LoadImage()
-    {
-        if (!File.Exists(_imagePath)) return;
-        try
-        {
-            var bytes = File.ReadAllBytes(_imagePath);
-            using var ms = new MemoryStream(bytes);
-            _pictureBox.Image = new Bitmap(ms);
-        }
-        catch { }
     }
 
     // ── Countdown ──────────────────────────────────────────────────────────────
