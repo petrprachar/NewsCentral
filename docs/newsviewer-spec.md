@@ -1,7 +1,7 @@
 # NewsViewer — Component Specification
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass. Desktop wallpaper application added (user-session, `SystemParametersInfo` + HKCU; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
+**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass, and to the themed 220px branded panel (adaptive image-fit window, Dark/Light themes, resx strings) in the UI v3 pass. Desktop wallpaper application added (user-session, `SystemParametersInfo` + HKCU; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
 NewsViewer is a **one-shot process**: launch → evaluate the daily gate → render the poster (or not) → apply the wallpaper → exit. There is no resident process, no `FileSystemWatcher`, and no held-open message pump. Each display decision is made afresh at launch.
 
@@ -50,31 +50,59 @@ Content published **after** the day's poster has already shown **waits for the n
 
 ## Window Layout
 
-Borderless, top-most, centered frame sized **1810×954** = image area (1600 × 900)
-+ 200px side panel + 44px caption bar, wrapped in a 5px solid gray frame.
+Borderless, top-most, centered frame: **adaptive image area + 220px side panel + 44px caption
+bar**, wrapped in a 5px solid theme-colored frame. The image area takes the **content's exact
+aspect ratio**, fitted within **1600×900** (upscaling smaller images to fit is intended),
+clamped at **960×540** for extreme ratios — the PictureBox stays `SizeMode.Zoom`, so clamped
+cases letterbox gracefully. A missing or undecodable image falls back to a 1600×900 area.
+Client size = `(imageW + 220 + 2×5) × (imageH + 44 + 2×5)`: 16:9 content yields the classic
+1600×900 area (window **1830×954**); 4:3 content (e.g. 1200×900) gets a 1200×900 area with
+**no letterbox bars**.
 
-┌─ 5px gray frame ─────────────────────────────┬──────────┐
-│                                              │ ● Online │
-│            Image — fixed size                │ [Close]  │
-│            (Zoom, #606060 stage mat)         │ [More..] │
-│                                              │ [card]   │
-├──────────────────────────────────────────────┤          │
-│  Caption bar — PosterText / PresentationName │          │
-└──────────────────────────────────────────────┴──────────┘
+┌─ 5px frame ──────────────────────────────────┬────────────┐
+│                                              │ NewsCentral│
+│            Image — adaptive size             │ (● Online) │
+│            (Zoom, themed stage mat)          │ [ Close  ] │
+│                                              │ [ More.. ] │
+│                                              │ [  card  ] │
+├──────────────────────────────────────────────┤            │
+│  Caption bar — PosterText / PresentationName │            │
+└──────────────────────────────────────────────┴────────────┘
 
-The side panel is a **fixed, always-visible column** (the earlier hover-reveal /
-slide-in trigger and the 8px trigger strip have been removed). Top to bottom:
-Online/Offline indicator, `Close`, `Click to see more information..` (opens
-`Content.MoreInfoUrl`), and the auto-close card.
+### Side panel (220px)
+
+A **fixed, always-visible column** (the earlier hover-reveal / slide-in trigger and the 8px
+trigger strip have been removed); 16px outer margins, 12px between items. Top to bottom: the
+**NewsCentral wordmark** (13pt SemiBold-weight — Segoe UI Variable Display, Segoe UI fallback;
+GDI+ has no SemiBold `FontStyle`, so Bold is the nearest weight), the **status pill** (rounded
+surface chip showing `● Online` / `● Offline` in the theme's OnlineFg/OfflineFg), **Close** —
+the accent-filled primary action (`RoundedButton.IsPrimary`), **More information** — a
+ghost/surface secondary button (opens `Content.MoreInfoUrl`), and the auto-close card.
 
 ### Auto-close card
 
 A checkbox ("Form closes in") + countdown number + "seconds" label + a
-progress bar, laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
+progress bar (5px), laid out in a `TableLayoutPanel` with auto-sizing rows (rows cannot
 overlap regardless of font/DPI). The checkbox is checked by default; unchecking
 **stops** the countdown and grays the number, unit, and bar; re-checking resumes
 from the current value. Counts down from the **resolved** `DisplayDurationSeconds`
 (see Display Duration below), closes at zero with reason `Timeout`.
+
+### Theme selection — Ui\Theme
+
+Two `Theme` palettes are defined in `FluentControls.cs`: **Dark (the default)** and **Light**
+(the classic Fluent gray look). Selection is per machine via registry —
+`HKLM\Software\{Company}\NewsCentral\NewsViewer\Ui\Theme`, REG_SZ `"Dark"` | `"Light"`
+(`"light"` case-insensitive → Light; anything else, including an absent value → Dark). It is
+resolved **once** in `Program.cs` into `Theme.Current` before any Form is constructed — the
+same resolve-once-then-pass pattern as display duration. Registry-only; there is **no**
+appsettings key.
+
+### Strings — Resources/UiStrings.resx
+
+All user-facing viewer strings live in `NewsViewer/Resources/UiStrings.resx` (default EN),
+read through the `UiStrings` accessor class (`ResourceManager` + `CurrentUICulture`) — adding
+`UiStrings.<culture>.resx` satellite files (ES/FR/DE) localizes the viewer with no code change.
 
 ## Display Duration
 
@@ -92,11 +120,14 @@ Resolution happens **once**, in `Program.cs`, via `PresentationDefaults.ResolveD
 
 ### Styling — FluentControls.cs
 
-`NewsViewer/Forms/FluentControls.cs` defines `FluentTheme` (Windows light-gray
-palette: #F0F0F0 surfaces, #E1E1E1 button faces, #ADADAD borders, #0078D7 accent,
-black text) plus two custom-painted controls: `RoundedPanel` and `RoundedButton`
-(`Radius = 0` → square; buttons have hover/press fill and a blue hover/press
-border). All public properties carry
+`NewsViewer/Forms/FluentControls.cs` defines `Theme` — an instance palette with the static
+**Light** (classic Fluent gray) and **Dark** (default) instances and the startup-selected
+`Theme.Current` — plus two custom-painted controls: `RoundedPanel` and `RoundedButton`
+(`Radius = 0` → square; buttons have hover/press fill and an accent hover/press border;
+`IsPrimary = true` renders the accent-filled primary style — hover/press shaded ±12%, white
+text, no contrasting border). Every control font comes from one private helper
+(`Ui.Font` in `ViewerForm`): Segoe UI Variable Text (Display at ≥13pt) with Segoe UI fallback —
+no scattered `new Font(...)`. All public control properties carry
 `[DesignerSerializationVisibility(Hidden)]` to satisfy analyzer WFO1000.
 
 ## Virtual Desktop (overview)

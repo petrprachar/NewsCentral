@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using NewsCentral.Models;
 using NewsCentral.Models.IndexFile;
+using NewsViewer.Resources;
 using NewsViewer.Services;
 
 namespace NewsViewer.Forms;
@@ -13,7 +14,7 @@ public sealed class ViewerForm : Form
     // cases letterbox gracefully instead of producing a degenerate window.
     private const int MaxImgW = 1600, MaxImgH = 900;
     private const int MinImgW = 960, MinImgH = 540;
-    private const int SidePanelWidth = 200;
+    private const int SidePanelWidth = 220;
     private const int PosterStripHeight = 44;
     private const int PanelMargin = 16;
     private const int ContentWidth = SidePanelWidth - (PanelMargin * 2);   // 168
@@ -34,7 +35,6 @@ public sealed class ViewerForm : Form
 
     private readonly PictureBox _pictureBox;
     private readonly Label _lblPosterText;
-    private readonly Label _lblOnlineStatus;
     private readonly Panel _pnlSide;
     private readonly RoundedPanel _pnlAutoClose;
     private readonly CheckBox _chkAutoClose;
@@ -142,34 +142,56 @@ public sealed class ViewerForm : Form
         };
         root.Controls.Add(_pnlSide);
 
-        // Online / Offline indicator
-        _lblOnlineStatus = new Label
+        // ── Branding block (~64px): wordmark + status pill ───────────────────
+        // Rhythm: 16px outer margins, 12px between items.
+        var lblWordmark = new Label
         {
-            Text = _isOnline ? "● Online" : "● Offline",
-            Font = new Font("Segoe UI", 9.5f),
-            ForeColor = _isOnline ? Theme.Current.OnlineFg : Theme.Current.OfflineFg,
+            Text = UiStrings.AppName,
+            Font = Ui.Font(13f, FontStyle.Bold),   // GDI+ has no SemiBold FontStyle; Bold is the nearest weight
+            ForeColor = Theme.Current.TextPrimary,
             BackColor = Color.Transparent,
             AutoSize = true,
             Location = new Point(PanelMargin, 16)
         };
-        _pnlSide.Controls.Add(_lblOnlineStatus);
+        _pnlSide.Controls.Add(lblWordmark);
 
+        // Status pill — rounded surface chip; the text is drawn in its Paint handler so no
+        // opaque child rectangle can cover the rounded corners.
+        var statusText = _isOnline ? UiStrings.Online : UiStrings.Offline;
+        var statusColor = _isOnline ? Theme.Current.OnlineFg : Theme.Current.OfflineFg;
+        var pillFont = Ui.Font(8.5f);
+        var statusPill = new RoundedPanel
+        {
+            Radius = 10,
+            FillColor = Theme.Current.Surface,
+            BorderColor = Theme.Current.Border,
+            Location = new Point(PanelMargin, 48),
+            Size = new Size(TextRenderer.MeasureText(statusText, pillFont).Width + 20, 22)
+        };
+        statusPill.Paint += (_, e) => TextRenderer.DrawText(
+            e.Graphics, statusText, pillFont, statusPill.ClientRectangle, statusColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        _pnlSide.Controls.Add(statusPill);
+
+        // Primary action — accent-filled Close.
         var btnClose = new RoundedButton
         {
-            Text = "Close",
-            Font = new Font("Segoe UI", 11),
+            IsPrimary = true,
+            Text = UiStrings.Close,
+            Font = Ui.Font(11f),
             Size = new Size(ContentWidth, 40),
-            Location = new Point(PanelMargin, 44)
+            Location = new Point(PanelMargin, 84)
         };
         btnClose.Click += (_, _) => { _closeReason = "UserClose"; Close(); };
         _pnlSide.Controls.Add(btnClose);
 
+        // Secondary action — ghost/surface button.
         var btnMoreInfo = new RoundedButton
         {
-            Text = "Click to see more information..",
-            Font = new Font("Segoe UI", 8.5f),
+            Text = UiStrings.MoreInformation,
+            Font = Ui.Font(8.5f),
             Size = new Size(ContentWidth, 48),
-            Location = new Point(PanelMargin, 96)
+            Location = new Point(PanelMargin, 136)
         };
         btnMoreInfo.Click += OnMoreInfoClicked;
         _pnlSide.Controls.Add(btnMoreInfo);
@@ -177,7 +199,7 @@ public sealed class ViewerForm : Form
         // ── Auto-close card — TableLayoutPanel guarantees no row overlap ─────
         _pnlAutoClose = new RoundedPanel
         {
-            Location = new Point(PanelMargin, 156),
+            Location = new Point(PanelMargin, 196),
             Size = new Size(ContentWidth, 126),
             FillColor = Theme.Current.Surface,
             BorderColor = Theme.Current.Border,
@@ -224,9 +246,9 @@ public sealed class ViewerForm : Form
 
         var lblAutoCloseCaption = new Label
         {
-            Text = "Form closes in",
+            Text = UiStrings.FormClosesIn,
             AutoSize = true,
-            Font = new Font("Segoe UI", 9.5f),
+            Font = Ui.Font(9.5f),
             ForeColor = Theme.Current.TextPrimary,
             BackColor = Theme.Current.Surface,
             Margin = new Padding(0, 2, 0, 0),
@@ -242,7 +264,7 @@ public sealed class ViewerForm : Form
         {
             Text = string.Empty,
             AutoSize = true,
-            Font = new Font("Segoe UI", 11, FontStyle.Regular),
+            Font = Ui.Font(11f),
             ForeColor = Theme.Current.TextPrimary,
             BackColor = Theme.Current.Surface,
             Anchor = AnchorStyles.None,
@@ -252,9 +274,9 @@ public sealed class ViewerForm : Form
 
         _lblCountdownUnit = new Label
         {
-            Text = "seconds",
+            Text = UiStrings.Seconds,
             AutoSize = true,
-            Font = new Font("Segoe UI", 8.5f),
+            Font = Ui.Font(8.5f),
             ForeColor = Theme.Current.TextSecondary,
             BackColor = Theme.Current.Surface,
             Anchor = AnchorStyles.None,
@@ -264,7 +286,7 @@ public sealed class ViewerForm : Form
 
         var progressTrack = new Panel
         {
-            Size = new Size(ProgressWidth, 4),
+            Size = new Size(ProgressWidth, 5),
             BackColor = Theme.Current.Border,
             Anchor = AnchorStyles.None,
             Margin = new Padding(0)
@@ -272,16 +294,14 @@ public sealed class ViewerForm : Form
         _progressFill = new Panel
         {
             Location = new Point(0, 0),
-            Size = new Size(ProgressWidth, 4),
+            Size = new Size(ProgressWidth, 5),
             BackColor = Theme.Current.Accent
         };
         progressTrack.Controls.Add(_progressFill);
         cardLayout.Controls.Add(progressTrack, 0, 3);
 
-        _toolTip.SetToolTip(_chkAutoClose,
-            "Uncheck to stop the timer and keep this window open");
-        _toolTip.SetToolTip(lblAutoCloseCaption,
-            "Uncheck to stop the timer and keep this window open");
+        _toolTip.SetToolTip(_chkAutoClose, UiStrings.AutoCloseTooltip);
+        _toolTip.SetToolTip(lblAutoCloseCaption, UiStrings.AutoCloseTooltip);
 
         // ── Caption bar — hairline divider ties it to the image above ────────
         var pnlPoster = new Panel
@@ -304,7 +324,7 @@ public sealed class ViewerForm : Form
         _lblPosterText = new Label
         {
             Text = posterText,
-            Font = new Font("Segoe UI", 12.5f),
+            Font = Ui.Font(12.5f),
             ForeColor = Theme.Current.TextPrimary,
             BackColor = Color.Transparent,
             AutoSize = false,
@@ -422,5 +442,26 @@ public sealed class ViewerForm : Form
             _sessionStart,
             DateTime.UtcNow,
             _closeReason);
+    }
+
+    // ── Fonts — the single source for every control font in this form ─────────
+    // Segoe UI Variable with Segoe UI fallback when not installed: the Display
+    // optical variant at wordmark sizes (≥ 13pt), the Text variant for body sizes.
+    // No other `new Font(...)` may appear in this form.
+    private static class Ui
+    {
+        private static readonly string TextFamily = Resolve("Segoe UI Variable Text");
+        private static readonly string DisplayFamily = Resolve("Segoe UI Variable Display");
+
+        private static string Resolve(string family)
+        {
+            using var installed = new System.Drawing.Text.InstalledFontCollection();
+            return installed.Families.Any(f => string.Equals(f.Name, family, StringComparison.OrdinalIgnoreCase))
+                ? family
+                : "Segoe UI";
+        }
+
+        internal static Font Font(float size, FontStyle style = FontStyle.Regular)
+            => new(size >= 13f ? DisplayFamily : TextFamily, size, style);
     }
 }

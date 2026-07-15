@@ -70,6 +70,8 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
 ├── Display\
 │       LogicalDayStartHour  REG_SZ   (int 0..23; default 0 = calendar day — see below; MUST be REG_SZ)
+├── Ui\
+│       Theme   REG_SZ   ("Dark" | "Light"; default Dark — viewer color theme, resolved once at launch; "light" case-insensitive selects Light, anything else Dark; registry-only, no appsettings key)
 ├── Hmac\
 │       SecretKey   REG_SZ
 ├── Signing\

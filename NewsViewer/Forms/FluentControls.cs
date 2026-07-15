@@ -126,6 +126,14 @@ internal sealed class RoundedButton : Button
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Theme Theme { get; set; } = Theme.Current;
 
+    /// <summary>
+    /// Accent-filled primary action: fill = Theme.Accent, hover/press shaded ±12%, white
+    /// text, no contrasting border (the outline is painted in the fill color). When false,
+    /// the button renders as the standard ghost/surface style from the color properties.
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public bool IsPrimary { get; set; }
+
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public int Radius { get; set; } = Theme.Radius;
 
@@ -171,11 +179,32 @@ internal sealed class RoundedButton : Button
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
         using var path = Theme.RoundedRect(rect, Radius);
-        var fill = _press ? PressColor : _hover ? HoverColor : NormalColor;
-        var bord = _press ? PressBorderColor : _hover ? HoverBorderColor : BorderColor;
+        Color fill, bord;
+        var text = ForeColor;
+        if (IsPrimary)
+        {
+            var accent = Theme.Accent;
+            fill = _press ? Shade(accent, -0.12f) : _hover ? Shade(accent, 0.12f) : accent;
+            bord = fill;
+            text = Color.White;
+        }
+        else
+        {
+            fill = _press ? PressColor : _hover ? HoverColor : NormalColor;
+            bord = _press ? PressBorderColor : _hover ? HoverBorderColor : BorderColor;
+        }
         using (var b = new SolidBrush(fill)) e.Graphics.FillPath(b, path);
         using (var p = new Pen(bord)) e.Graphics.DrawPath(p, path);
-        TextRenderer.DrawText(e.Graphics, Text, Font, rect, ForeColor,
+        TextRenderer.DrawText(e.Graphics, Text, Font, rect, text,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
     }
+
+    // Positive amount blends toward white, negative toward black (fraction of the distance).
+    private static Color Shade(Color c, float amount) => amount >= 0
+        ? Color.FromArgb(c.R + (int)((255 - c.R) * amount),
+                         c.G + (int)((255 - c.G) * amount),
+                         c.B + (int)((255 - c.B) * amount))
+        : Color.FromArgb((int)(c.R * (1 + amount)),
+                         (int)(c.G * (1 + amount)),
+                         (int)(c.B * (1 + amount)));
 }

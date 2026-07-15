@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Default (EN) user-facing strings for NewsViewer. Accessed via the UiStrings accessor
+    class (ResourceManager, CurrentUICulture). Satellite cultures (ES/FR/DE) are added as
+    UiStrings.<culture>.resx next to this file.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppName" xml:space="preserve">
+    <value>NewsCentral</value>
+  </data>
+  <data name="AutoCloseTooltip" xml:space="preserve">
+    <value>Uncheck to stop the timer and keep this window open</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="FormClosesIn" xml:space="preserve">
+    <value>Form closes in</value>
+  </data>
+  <data name="MoreInformation" xml:space="preserve">
+    <value>Click to see more information..</value>
+  </data>
+  <data name="Offline" xml:space="preserve">
+    <value>● Offline</value>
+  </data>
+  <data name="Online" xml:space="preserve">
+    <value>● Online</value>
+  </data>
+  <data name="Seconds" xml:space="preserve">
+    <value>seconds</value>
+  </data>
+</root>

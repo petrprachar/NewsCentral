@@ -105,9 +105,12 @@ NewsViewer\
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper
 │   └── TelemetryWriter.cs            HMAC-signs and writes session-{guid}.json to uploads\ on close
 ├── Forms\
-│   ├── ViewerForm.cs                 1810×954 borderless WinForms window; fixed Fluent gray side panel
-│   ├── FluentControls.cs             FluentTheme palette + RoundedPanel/RoundedButton (custom-painted, square, hover/press states)
+│   ├── ViewerForm.cs                 adaptive borderless WinForms window (image AR fitted in 1600×900, clamps 960×540); themed 220px side panel — wordmark, status pill, primary Close; Ui.Font helper (Segoe UI Variable, Segoe UI fallback)
+│   ├── FluentControls.cs             Theme (Light/Dark palettes; Theme.Current selected via Ui\Theme registry, default Dark) + RoundedPanel/RoundedButton (custom-painted; IsPrimary accent fill)
 │   └── BackgroundForm.cs             fullscreen solid-colour background for virtual desktop
+├── Resources\
+│   ├── UiStrings.resx                user-facing strings, default EN (satellite UiStrings.<culture>.resx per language)
+│   └── UiStrings.cs                  static accessor — ResourceManager + CurrentUICulture
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
 ├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then applies wallpaper as the terminal step (after poster/VD teardown); one-shot, exits after
