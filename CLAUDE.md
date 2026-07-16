@@ -27,6 +27,7 @@
 - ECDSA P-256 per-team `index.json` signing — Phases A, B1 & C complete: signing core in `NewsCentral.Shared`, `IndexGenerationService` signs with team key, `SyncService` and `PresentationSelector` verify via `SigningKeyConfigurationReader`. B2 (Key Management page) complete; D (registry scripts) parked indefinitely; see `docs/security.md`.
 - All domain models live in **NewsCentral.Shared** — no model duplication across projects.
 - NativeAOT migration path is preserved for NewsViewer.
+- Fleet components ship **framework-dependent** — .NET 9 Desktop Runtime (x64) required on every target machine (declared prerequisite, not bundled). See `docs/packaging.md`.
 - **Entra dynamic-team resolution (NewsService-only, behind `Entra:Enabled`; default off)** — resolves dynamic teams from **two independent sources**: the device's Entra `extensionAttributes` (attribute source) and group membership (group source, when `Entra:GroupTeam:InclusionGroup` is set), unioning them with the static registry team list on both consuming tiers. Each source is tagged in `resolved-teams.json` (`Source: Attribute|Group`) and graces independently. End-to-end complete (Phases 1–3b + group G1/G2). See the **Entra Device Team Resolution** section below.
 
 ### Data Flow
@@ -158,4 +159,5 @@ No direct inter-process communication. All coordination is via the shared cache 
 @docs/newsviewer-spec.md
 @docs/security.md
 @docs/anti-tamper.md
+@docs/packaging.md
 @docs/future.md
