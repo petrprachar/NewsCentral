@@ -65,10 +65,6 @@
     it defines the registry hive path, is NOT registry-overridable, and a mismatch fails silently
     (OpenSubKey returns null), quietly discarding every override.
 
-.PARAMETER ApplicationName
-    Kept for documentation only — no longer used for registry path construction.
-    The registry path is now HKLM\Software\<Company>\NewsCentral\<ComponentName>\.
-
 .PARAMETER ComponentName
     The component whose registry subkey to write.
     Must be one of: NewsCentral, NewsService, NewsViewer, NewsTester.
@@ -154,7 +150,6 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string] $Company,
-    [string] $ApplicationName = "NewsCentral",
 
     [Parameter(Mandatory)]
     [ValidateSet("NewsCentral","NewsService","NewsViewer","NewsTester")]
