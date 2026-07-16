@@ -14,8 +14,6 @@ public class Schedule : IEntity
     public string CreatedBy { get; set; } = string.Empty;
     public DateTime LastModified { get; set; } = DateTime.UtcNow;
 
-    public string? Signature { get; set; }
-
     public string GetId() => ScheduleID;
     public void SetId(string id) => ScheduleID = id;
 }

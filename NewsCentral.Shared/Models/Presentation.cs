@@ -1,6 +1,6 @@
 namespace NewsCentral.Models
 {
-    public class Presentation : IEntity, NewsCentral.Security.ISignable
+    public class Presentation : IEntity
     {
         public string PresentationID { get; set; } = Guid.NewGuid().ToString();
         public string Name { get; set; } = string.Empty;
@@ -24,7 +24,6 @@ namespace NewsCentral.Models
         public bool UseVirtualDesktop { get; set; }
 
         public string VirtualDesktopBackgroundColor { get; set; } = "#000000";
-        public string? Signature { get; set; }
 
         public string ContentImageBase64 { get; set; } = string.Empty;
 

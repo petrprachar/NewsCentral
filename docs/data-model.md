@@ -86,7 +86,7 @@ public static class SigningKeyTool
 The core content unit distributed to NewsViewer.
 
 ```csharp
-public class Presentation : IEntity, ISignable
+public class Presentation : IEntity
 {
     public string PresentationID { get; set; }
     public string Name { get; set; }
@@ -117,12 +117,10 @@ public class Presentation : IEntity, ISignable
     public string ModifiedBy { get; set; }
     public DateTime LastModified { get; set; }
     public int Version { get; set; }
-
-    public string? Signature { get; set; }
 }
 ```
 
-`DisplayDurationSeconds` defaults to `PresentationDefaults.DisplayDurationSeconds` (see below). `Signature` is inert — see "Inert Signature plumbing" under Assignment.
+`DisplayDurationSeconds` defaults to `PresentationDefaults.DisplayDurationSeconds` (see below). `Presentation` is a plain `IEntity` — it no longer declares `ISignable` (its dead `Signature` property was removed; only `TeamIndexFile` and `SessionTelemetry` are signable).
 
 ## PresentationDefaults
 
@@ -156,8 +154,6 @@ public class Schedule : IEntity
     public bool IsActive { get; set; }
     public string CreatedBy { get; set; }
     public DateTime LastModified { get; set; }
-
-    public string? Signature { get; set; }   // inert — see "Inert Signature plumbing" below
 }
 ```
 
@@ -194,8 +190,6 @@ public class Assignment : IEntity
     public string? RejectedBy { get; set; }
     public DateTime? RejectedDate { get; set; }
     public string? RejectionReason { get; set; }
-
-    public string? Signature { get; set; }              // inert — see "Inert Signature plumbing"
 }
 
 public enum AssignmentStatus
@@ -209,10 +203,6 @@ The display-type flags (`IsNewsOfWeek` / `IsWallpaper` / `IsLogonScreen`) were r
 ### Reserved `Priority`
 
 `Priority` is **RESERVED**: `0` = normal, ascending = more urgent. It is emitted by `IndexGenerationService` **inside the signed index payload** (so its bytes are signature-covered) and **read by nothing** today. It is deliberately an `int` and **not** an enum, because `JsonStringEnumConverter` throws on an unknown enum string — adding a member later would make older clients reject the *entire* index. Reserving it in the `6010cd1` schema break means the future priority-display feature ships as a **pure behaviour change with no wire break and no fleet coordination**.
-
-### Inert `Signature` plumbing
-
-`Assignment`, `Presentation`, and `Schedule` each carry a `Signature` property, but **none of them is ever signed or verified** — only `TeamIndexFile` (ECDSA P-256) and `SessionTelemetry` (HMAC-SHA256) are signed. (`Presentation` still declares `ISignable`; `Assignment` and `Schedule` no longer do.) These `Signature` members are **known dead plumbing**, pending a later cleanup pass.
 
 ## Team / User
 

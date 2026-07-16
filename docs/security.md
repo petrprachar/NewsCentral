@@ -38,7 +38,7 @@
 
 **Key management:** `Hmac:SecretKey` is a Base64-encoded 32-byte key configured in `appsettings.json` or overridden via registry (`Hmac\SecretKey`). An empty key disables HMAC system-wide — all content is treated as `Disabled` and passes through. This enables phased rollout: deploy the key to all machines before enabling signing in NewsCentral.
 
-**`Signature` field** is present in: `Presentation`, `Schedule`, `Assignment`, `TeamIndexFile`, `SessionTelemetry`.
+**`Signature` field** is present in: `TeamIndexFile`, `SessionTelemetry` — the only signable types. (`Presentation`, `Schedule`, and `Assignment` carried an inert `Signature` property that was never signed or verified; it has been removed.)
 
 ## Per-Team Asymmetric Signing — ECDSA P-256 (Phases A, B1 & C — implemented and tested)
 
