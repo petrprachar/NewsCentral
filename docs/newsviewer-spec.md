@@ -102,7 +102,10 @@ appsettings key.
 
 All user-facing viewer strings live in `NewsViewer/Resources/UiStrings.resx` (default EN),
 read through the `UiStrings` accessor class (`ResourceManager` + `CurrentUICulture`) — adding
-`UiStrings.<culture>.resx` satellite files (ES/FR/DE) localizes the viewer with no code change.
+`UiStrings.<culture>.resx` satellite files localizes the viewer with no code change. Culture
+satellites **es / fr / de** exist (`UiStrings.es.resx` etc.); the culture is resolved from
+`CurrentUICulture` at each lookup, and a further culture is added by dropping in another
+`UiStrings.<culture>.resx` — no code change.
 
 ## Display Duration
 
