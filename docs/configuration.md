@@ -30,7 +30,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       StorageMode   REG_SZ   ("Share" or "Azure")
 │       SharePath     REG_SZ   (UNC or local path to the file-share repository)
 ├── AzureBlob\
-│       AuthMode               REG_SZ   ("Certificate" or "ClientSecret")
+│       AuthMode               REG_SZ   ("Certificate", "ClientSecret", or "ClientSecretEnv")
 │       TenantId               REG_SZ
 │       ClientId               REG_SZ
 │       AccountName            REG_SZ
@@ -245,18 +245,21 @@ NewsViewer resolves configuration across three layers (registry always wins):
 
 ## Azure Authentication Modes — NewsService only
 
-NewsService runs as an unattended Windows Service with no interactive user. It authenticates to Azure Blob using one of two modes selected by `AzureBlob:AuthMode`:
+NewsService runs as an unattended Windows Service with no interactive user. It authenticates to Azure Blob using one of three modes selected by `AzureBlob:AuthMode`:
 
 | Mode | Credential type | Required keys |
 |---|---|---|
 | `Certificate` | `ClientCertificateCredential(tenantId, clientId, cert)` | `TenantId`, `ClientId`, `CertificateThumbprint` |
 | `ClientSecret` | `ClientSecretCredential(tenantId, clientId, secret)` | `TenantId`, `ClientId`, `ClientSecret` |
+| `ClientSecretEnv` | `ClientSecretCredential(tenantId, clientId, secret)` | `TenantId`, `ClientId`; secret from machine env var `NEWSSERVICE_AZURE_CLIENTSECRET` |
 
 **Certificate mode** — the certificate is loaded from `Cert:\LocalMachine\My` by thumbprint (`X509Store(StoreName.My, StoreLocation.LocalMachine)`). Local System has access to `LocalMachine\My` by default; no additional key permission grants are required when the service runs as Local System. Preferred for production.
 
 **ClientSecret mode** — uses a plain client secret string. Simpler to configure for development and testing.
 
-NewsCentral does **not** use these modes. It authenticates via an interactive MSAL user session.
+**ClientSecretEnv mode (NewsService only)** — same `ClientSecretCredential` as ClientSecret, but the secret is read from the **machine-scope environment variable `NEWSSERVICE_AZURE_CLIENTSECRET`** (constant `SolutionConstants.NewsServiceAzureClientSecretEnvVar`) instead of configuration/registry. **Fail-closed:** if the variable is missing **or** empty, NewsService logs an error and refuses to authenticate — there is no fallback to `AzureBlob:ClientSecret`. Read behaviour: the code uses the Machine-scope read (`EnvironmentVariableTarget.Machine`), which reads the value **live from the registry** — a running service picks up a newly set or changed value on its next authentication attempt, so a restart is **not strictly required**. Contrast: a process-inherited (non-Machine-scope) read would see only the environment captured at service start and would require a restart — the general Windows expectation for env-var changes. Guidance: restarting NewsService after setting the variable remains the **recommended, unambiguous practice** — it matches normal admin expectations and stays robust if the read behaviour ever changes. **Convenience, not security:** a machine environment variable is clear text readable by any SYSTEM process, exactly like the registry `REG_SZ` secret — Azure Key Vault remains the intended secure path.
+
+NewsCentral does **not** use these modes. It authenticates via an interactive MSAL user session. In particular, NewsCentral does **not** support `ClientSecretEnv`: it is an interactive per-user app with no LocalSystem context, so a machine-scoped SYSTEM variable is the wrong mechanism for it, and its config manifest does not offer the mode.
 
 **`AzureBlob:UseWinHttpProxy`** (bool, default `false`) — when `true`, NewsService routes **all** its cloud SDK traffic (Azure Blob **and** Microsoft Graph) through `WinHttpHandler` with `UseWinHttpProxy`, i.e. the **machine WinHTTP proxy** (`netsh winhttp` / WPAD) that the Intune client and Windows Update use. Default `false` keeps today's behavior — the SDKs use the default .NET HTTP stack, which resolves its proxy via **WinINet** (per-user, unreliable under Local System with no user profile loaded). Enable this when NewsService cannot reach Azure/Graph under SYSTEM but the machine otherwise has working cloud connectivity. Shared transport: `AzureProxyTransportFactory` (one set of handlers per process); no per-app proxy config. Registry override: `AzureBlob\UseWinHttpProxy` REG_SZ `"true"`/`"false"`.
 

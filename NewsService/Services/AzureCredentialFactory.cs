@@ -1,6 +1,7 @@
 using Azure.Core;
 using Azure.Core.Pipeline;
 using Azure.Identity;
+using NewsCentral.Configuration;
 using NewsService.Configuration;
 using System.Security.Cryptography.X509Certificates;
 
@@ -21,8 +22,37 @@ public static class AzureCredentialFactory
     /// AAD token calls so they ride the machine WinHTTP proxy too. When null, the credential is
     /// constructed exactly as before — no options object, today's behavior byte-for-byte.
     /// </param>
-    public static TokenCredential Create(AzureBlobSection cfg, HttpClientTransport? transport = null)
+    /// <param name="readEnv">
+    /// Test seam for the ClientSecretEnv mode. When null (production), the secret is read
+    /// machine-scope (EnvironmentVariableTarget.Machine) — live from the registry, not from the
+    /// environment inherited at process start.
+    /// </param>
+    public static TokenCredential Create(AzureBlobSection cfg, HttpClientTransport? transport = null,
+        Func<string, string?>? readEnv = null)
     {
+        if (cfg.AuthMode.Equals("ClientSecretEnv", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(cfg.TenantId) ||
+                string.IsNullOrWhiteSpace(cfg.ClientId))
+                throw new InvalidOperationException(
+                    "AzureBlob:AuthMode=ClientSecretEnv requires TenantId and ClientId.");
+
+            readEnv ??= static name =>
+                Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine);
+            var secret = readEnv(SolutionConstants.NewsServiceAzureClientSecretEnvVar);
+            if (string.IsNullOrWhiteSpace(secret))
+                throw new InvalidOperationException(
+                    $"AzureBlob:AuthMode=ClientSecretEnv: machine environment variable " +
+                    $"{SolutionConstants.NewsServiceAzureClientSecretEnvVar} is not set or empty — " +
+                    "refusing to authenticate (no fallback to the registry ClientSecret).");
+
+            if (transport is null)
+                return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, secret);
+
+            return new ClientSecretCredential(cfg.TenantId, cfg.ClientId, secret,
+                new ClientSecretCredentialOptions { Transport = transport });
+        }
+
         if (cfg.AuthMode.Equals("ClientSecret", StringComparison.OrdinalIgnoreCase))
         {
             if (string.IsNullOrWhiteSpace(cfg.TenantId) ||

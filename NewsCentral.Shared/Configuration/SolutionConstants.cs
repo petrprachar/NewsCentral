@@ -12,6 +12,13 @@ public static partial class SolutionConstants
     /// </summary>
     public const string SolutionName = "NewsCentral";
 
+    /// <summary>
+    /// Machine-scope environment variable holding the Azure client secret for NewsService's
+    /// AzureBlob:AuthMode=ClientSecretEnv. NewsService-only — NewsCentral is an interactive
+    /// per-user app with no LocalSystem context and does not support this mode.
+    /// </summary>
+    public const string NewsServiceAzureClientSecretEnvVar = "NEWSSERVICE_AZURE_CLIENTSECRET";
+
     // Company (the {Company} hive segment) is generated into this partial class from the
     // <Company> MSBuild property — see NewsCentral.Shared.csproj / Directory.Build.props.
 }

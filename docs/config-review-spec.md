@@ -134,7 +134,7 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Service:CacheRootPath` | `C:\ProgramData\NewsCentral` | `Service\CacheRootPath` | S | OV | path | | absolute path |
 | `Repository:StorageMode` | `Share` | `Repository\StorageMode` | S | OV | dropdown | | `Share \| Azure` |
 | `Repository:SharePath` | `""` | `Repository\SharePath` | S | OV | path | | UNC or local path |
-| `AzureBlob:AuthMode` | `Certificate` | `AzureBlob\AuthMode` | S | OV | dropdown | | `Certificate \| ClientSecret` |
+| `AzureBlob:AuthMode` | `Certificate` | `AzureBlob\AuthMode` | S | OV | dropdown | | `Certificate \| ClientSecret \| ClientSecretEnv` |
 | `AzureBlob:TenantId` | `""` | `AzureBlob\TenantId` | S | OV | text | | GUID |
 | `AzureBlob:ClientId` | `""` | `AzureBlob\ClientId` | S | OV | text | | GUID |
 | `AzureBlob:CertificateThumbprint` | `""` | `AzureBlob\CertificateThumbprint` | S | OV | text | | 40 hex chars |

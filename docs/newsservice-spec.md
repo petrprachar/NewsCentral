@@ -2,7 +2,7 @@
 
 **Type:** .NET 9 Windows Service (`Microsoft.NET.Sdk.Worker`)  
 **Target:** `net9.0-windows10.0.19041.0`, `win-x64`  
-**Status:** Implemented — full sync cycle operational in Share mode; Azure Blob mode implemented with Certificate / ClientSecret auth.
+**Status:** Implemented — full sync cycle operational in Share mode; Azure Blob mode implemented with Certificate / ClientSecret / ClientSecretEnv auth.
 
 ## Configuration Resolution
 
@@ -59,7 +59,7 @@ Executed by `Worker` on every interval tick:
 | Implementation | Mode | Notes |
 |---|---|---|
 | `LocalShareRepositoryReader` | `Share` | Reads from UNC/local path; `IsAvailable` checks `Directory.Exists` |
-| `AzureBlobRepositoryReader` | `Azure` | Certificate or ClientSecret auth; reads index.json and images from blob container |
+| `AzureBlobRepositoryReader` | `Azure` | Certificate, ClientSecret, or ClientSecretEnv auth; reads index.json and images from blob container |
 
 ## CacheManager — Hash Sidecar Pattern
 
@@ -82,5 +82,7 @@ A configurable **default lock-screen image** is applied when no lock-screen cont
 - Machine certificate from local machine certificate store
 - Proactive token refresh; exponential backoff on transient failures; cert-expiry logging
 - Handles weeks-long uptime without restart
+
+**ClientSecretEnv mode (NewsService only).** A third `AzureBlob:AuthMode` alongside Certificate and ClientSecret: `AzureCredentialFactory` builds the same `ClientSecretCredential`, but the secret comes from the **machine-scope environment variable `NEWSSERVICE_AZURE_CLIENTSECRET`** (constant `SolutionConstants.NewsServiceAzureClientSecretEnvVar`) instead of `AzureBlob:ClientSecret`. **Fail-closed:** a missing or empty variable throws `InvalidOperationException` (message names the variable) and the callers log at Error — no fallback to the registry secret, no unauthenticated run. Read behaviour: the code reads with `EnvironmentVariableTarget.Machine`, which reads the value **live from the registry**, so a running service picks up a newly set or changed value on its next authentication attempt — a restart is not strictly required. A process-inherited (non-Machine-scope) read, by contrast, would see only the environment captured at service start and would require a restart (the general Windows expectation for env-var changes); restarting after setting the variable therefore remains the recommended, unambiguous practice, robust if the read behaviour ever changes. **Convenience, not security** — a machine env var is clear text readable by any SYSTEM process, exactly like the registry `REG_SZ` secret; Azure Key Vault remains the intended secure path. NewsCentral is excluded by design (interactive per-user app, no LocalSystem context) and its manifest does not offer the mode. Hermetic unit tests inject the env read through the factory's `readEnv` seam (`NewsService.Tests/AzureCredentialFactoryTests.cs`).
 
 **Optional WinHTTP transport (`AzureProxyTransportFactory`).** A singleton, gated by `AzureBlob:UseWinHttpProxy` (default `false`). When on, it builds one shared `WinHttpHandler`-backed transport for Azure.Core (`HttpClientTransport`, used by the credential + blob reader) and one Graph `HttpClient` (`GraphClientFactory.Create(finalHandler: WinHttpHandler{UseWinHttpProxy})`, preserving Graph's retry/redirect/throttling middleware, used by the device + group clients) — so all blob + Graph traffic rides the machine WinHTTP proxy under Local System (see `docs/configuration.md` / `docs/azure-setup.md`). When off, both members are null, `WinHttpHandler` is never instantiated, and every SDK is constructed exactly as before. Only transport construction is affected — credential selection, resolvers, `checkMemberGroups`, and team selection are unchanged.
