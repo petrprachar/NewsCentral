@@ -8,9 +8,15 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddWindowsService(options => options.ServiceName = "NewsService");
 
-// ── Load appsettings, then apply registry overrides ──────────────────────────
+// ── Load appsettings, then the optional dev overlay, then registry overrides ─
+// The overlay is wired explicitly and unconditionally (optional: true — its mere presence
+// activates it), NOT via DOTNET_ENVIRONMENT: the host runs as Production, so the built-in
+// appsettings.{Environment}.json mechanism would never load it. It is gitignored and excluded
+// from publish (CopyToPublishDirectory=Never), so nothing in it can reach the fleet. The
+// registry provider must stay LAST — registry always wins over both JSON layers.
 // Company defines the registry path itself and is therefore not registry-overridable; it is the
 // compile-time constant SolutionConstants.Company. The solution segment is SolutionConstants.SolutionName.
+builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true);
 builder.Configuration.AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsService");
 
 // Bind typed POCOs from the merged (appsettings + registry) configuration.

@@ -29,4 +29,16 @@
     <InternalsVisibleTo Include="NewsService.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Optional developer overlay: copied to output for F5, but NEVER published.
+         Update (not Include) — Microsoft.NET.Sdk.Worker's default content glob already covers
+         appsettings.*.json AND WOULD PUBLISH IT; this metadata override is what keeps a
+         developer's personal values (e.g. a Repository:SharePath) out of the fleet artifact. -->
+    <Content Update="appsettings.Development.json" Condition="Exists('appsettings.Development.json')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
+
 </Project>

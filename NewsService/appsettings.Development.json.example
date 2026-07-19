@@ -1,0 +1,21 @@
+// appsettings.Development.json  (SAMPLE — copy to appsettings.Development.json, then edit)
+//
+// This is an OPTIONAL developer overlay. Copy this file to
+//   NewsService/appsettings.Development.json
+// and it is picked up automatically at startup — no environment variable required (the host
+// runs as Production, so the built-in appsettings.{Environment}.json mechanism is deliberately
+// not used; the overlay is added explicitly in Program.cs).
+//
+// Layering (registry always wins):
+//   appsettings.json  ->  appsettings.Development.json (optional)  ->  registry overrides
+//
+// The real appsettings.Development.json is gitignored and is EXCLUDED FROM PUBLISH
+// (CopyToPublishDirectory=Never in NewsService.csproj — required, because the Worker SDK's
+// default content glob would otherwise publish it), so nothing you put here can ever ship to
+// the fleet. Only override the keys you actually need; everything else falls through to
+// appsettings.json.
+{
+  "Repository": {
+    "SharePath": "C:\\Download\\NewsCentralDist"
+  }
+}

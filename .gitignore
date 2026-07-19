@@ -377,3 +377,6 @@ NewsCentral.Shared.Tests.zip
 
 # Optional per-developer NewsViewer config overlay — never shipped (see appsettings.Development.json.example)
 NewsViewer/appsettings.Development.json
+
+# Optional per-developer NewsService config overlay — never shipped (see appsettings.Development.json.example)
+NewsService/appsettings.Development.json
