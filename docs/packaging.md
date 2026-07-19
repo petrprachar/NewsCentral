@@ -17,9 +17,18 @@ Out of scope:
   not part of the fleet package.
 - **NewsTester** — a planned preview tool, not yet built. Not in this package.
 
-The two components may be delivered as one package with two feature groups, or two separate
-packages. Two separate packages is recommended: the components install differently (machine-wide
-service vs. per-user launch plumbing) and may be serviced independently.
+**Recommended: a single package installing both components** (two feature groups if the tooling
+supports it). The two components MUST move together: both read the same ECDSA-signed `index.json`,
+and the signature covers the exact shape of the JSON, so a schema change is not backward or forward
+compatible in either direction — an older client rejects a newer index outright. If NewsService is
+upgraded on a machine and NewsViewer is not, NewsService will cache content that the older
+NewsViewer then refuses to verify: it skips the team and displays nothing, SILENTLY, with no error
+visible to the user. A single package makes that lockstep structural rather than a deployment
+discipline that must be remembered on every future release.
+
+If the components are delivered as two packages anyway, they MUST always be deployed as a pair, in
+the same deployment action. Never upgrade one without the other. (The requirements below are stated
+per component and are correct whichever package shape is chosen.)
 
 ## Runtime prerequisite (critical)
 
@@ -66,7 +75,10 @@ e.g. `C:\Program Files\Contoso\NewsCentral\NewsService\` and `...\NewsViewer\`.
 
 **Files:** deploy the framework-dependent publish output to
 `%ProgramFiles%\{Company}\NewsCentral\NewsService\`. `appsettings.json` is included and must sit beside
-the executable.
+the executable. `appsettings.Development.json` is a developer-only file, excluded from the publish
+output, and must never appear in the package (the exclusion relies on the csproj's
+`<Content Update>` suppressing the Worker SDK's default publish of `appsettings.*.json` — see
+`docs/configuration.md`).
 
 **Service registration:**
 
@@ -89,7 +101,9 @@ runtime by retrying on its next poll cycle.
 **EventLog source:** NewsService writes to the Windows Application log using source name `NewsService`.
 The installer must register this EventLog source (creation requires the elevated installer context;
 the service running as LocalSystem can write to it but must not be relied on to create it).
-Log name: Application.
+Log name: Application. The shipped `appsettings.json` names this same source and log in its
+`Logging:EventLog` section (`SourceName`/`LogName`) — the two must stay in step; do not edit either
+side alone.
 
 Start the service at the end of installation.
 
@@ -97,6 +111,33 @@ Start the service at the end of installation.
 configuration (team lists, signing public keys, Azure/proxy settings). That is provisioned
 separately by Group Policy into `HKLM\Software\{Company}\NewsCentral\NewsService\`. The installer lays
 down binaries and the service; GPO owns configuration. Keep this separation.
+
+## NewsService — provisioning the Azure client secret (ClientSecretEnv mode)
+
+If a site sets `AzureBlob:AuthMode = ClientSecretEnv`, the Azure client secret is NOT in the
+registry — NewsService reads it from a **machine-level environment variable**:
+
+```
+NEWSSERVICE_AZURE_CLIENTSECRET
+```
+
+This is the **only configuration item that does not arrive through GPO/registry**, which is why it
+is called out here: without it, that auth mode simply fails.
+
+- **This is provisioning, not an installer action.** The installer must NOT set it. It is
+  provisioned alongside the GPO registry configuration, by whatever mechanism the fleet uses for
+  machine environment variables.
+- **Machine scope is required.** The service runs as LocalSystem and does not see user variables.
+- **Required only when `AuthMode = ClientSecretEnv`.** Certificate and ClientSecret modes ignore it.
+- **Failure is fail-closed and self-diagnosing:** if the variable is missing or empty, NewsService
+  throws with an error message naming the variable, and does not fall back to the registry secret.
+- **A restart is not strictly required** — the value is read live from the machine scope on each
+  authentication attempt — but restarting the service after setting it is the recommended,
+  unambiguous practice.
+- **Security honesty: this is a CONVENIENCE delivery, not a secure one.** A machine environment
+  variable is clear text readable by any SYSTEM process, exactly like the registry `REG_SZ` secret.
+  Azure Key Vault remains the intended secure path. Do not present this mechanism as more secure
+  than the registry secret.
 
 ## NewsViewer — installation
 
@@ -217,3 +258,9 @@ privilege).
 
 **Uninstall:** remove files, service, Run value, task, ProgramData cache; leave GPO config, per-user
 state, and EventLog source.
+
+**Hand-off verification:** inspect the ACTUAL publish output for BOTH components — do not infer it
+from project files. Confirm `appsettings.json` IS present and `appsettings.Development.json` is NOT.
+For NewsService this exclusion depends on the csproj's `<Content Update>` suppressing the Worker
+SDK's default publish of `appsettings.*.json`; if that override is ever lost, a developer's personal
+configuration ships to the fleet silently.

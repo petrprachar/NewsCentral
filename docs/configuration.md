@@ -58,6 +58,12 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
 ├── Telemetry\
 │       UploadEnabled   DWORD   (0 = do not forward session telemetry to the repository; the fixed 30-day local retention sweep still runs; default 1)
+├── Logging\
+│   ├── LogLevel\
+│   │       Default   REG_SZ   ("Trace" | "Debug" | "Information" | "Warning" | "Error" | "Critical" | "None"; default Information)
+│   └── EventLog\
+│       └── LogLevel\
+│               Default   REG_SZ   (same values; EventLog provider only; default Information)
 └── teams\
         (one REG_SZ value per team; value name = team folder name; data = "")
         e.g.  cz-its   REG_SZ   ""
@@ -164,6 +170,18 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
 
 ## appsettings.json — NewsService
 
+NewsService resolves configuration across the **same three layers as NewsViewer** (registry always wins):
+
+| Layer | File / source | Status |
+|---|---|---|
+| Base | `appsettings.json` | **Shipped, neutral, committed** — a tracked artifact (never gitignored). Every key explicit. This is the base layer the installer lays down; GPO overrides sit on top of it. |
+| Dev overlay | `appsettings.Development.json` | **Optional, gitignored, dev-only** — added explicitly in `Program.cs` with `optional: true`; its mere presence activates it (no environment variable — the host runs as Production, so the built-in `appsettings.{Environment}.json` mechanism would never load it). **Never published** (`CopyToPublishDirectory=Never`), so nothing in it can reach the fleet. Documented shape: `appsettings.Development.json.example`. |
+| Override | Registry (GPO) | **Always wins** — `HKLM\Software\{Company}\NewsCentral\NewsService`. The registry provider is the last configuration source. |
+
+`appsettings.json` is a committed base artifact, not a hand-maintained local file; GPO sits on top of it.
+
+> ⚠️ **Worker-SDK trap — the overlay exclusion must use `<Content Update>`, not `<Content Include>`.** NewsService uses `Microsoft.NET.Sdk.Worker`, whose **default content items already glob `appsettings.json` AND `appsettings.*.json` — and those defaults PUBLISH**. The overlay is therefore suppressed in `NewsService.csproj` with `<Content Update="appsettings.Development.json">` carrying `CopyToPublishDirectory=Never`; a `<Content Include>` would double-include the SDK's own glob item and would **not** suppress publishing. Without the `Update`, a developer's `appsettings.Development.json` — personal share paths and all — would ship to the fleet automatically. NewsViewer uses plain `Microsoft.NET.Sdk`, which has no such glob, which is why **its** csproj uses `Include` instead.
+
 ```json
 {
   "Service": {
@@ -193,16 +211,35 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   "Entra": {
     "Enabled": false,
     "GracePeriodMinutes": 240,
-    "Mappings": {}
+    "Mappings": {},
+    "GroupTeam": {
+      "InclusionGroup": "",
+      "ExclusionGroup": ""
+    }
   },
   "Delivery": {
     "DefaultLockScreenPath": ""
   },
   "Telemetry": {
     "UploadEnabled": true
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.Hosting.Lifetime": "Information"
+    },
+    "EventLog": {
+      "SourceName": "NewsService",
+      "LogName": "Application",
+      "LogLevel": {
+        "Default": "Information"
+      }
+    }
   }
 }
 ```
+
+`Logging:EventLog:SourceName` / `LogName` name the **same EventLog source the installer registers** (`NewsService` in the Application log — see `docs/packaging.md`); the two must stay in step, so do not edit either side alone.
 
 `Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default: the last-applied lock screen is left in place (sticky). NewsService-only; not shared with other components.
 
