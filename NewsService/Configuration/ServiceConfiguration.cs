@@ -12,6 +12,17 @@ public class ServiceConfiguration
     public HmacOptions Hmac { get; set; } = new();
     public EntraOptions Entra { get; set; } = new();
     public DeliverySection Delivery { get; set; } = new();
+    public TelemetrySection Telemetry { get; set; } = new();
+}
+
+public class TelemetrySection
+{
+    /// <summary>
+    /// False = consume-only deployment: session-*.json files are not forwarded to the repository.
+    /// The local retention sweep (TelemetryDefaults.RetentionDays) still runs — NewsViewer always
+    /// writes telemetry; NewsService alone decides what becomes of it. Default true.
+    /// </summary>
+    public bool UploadEnabled { get; set; } = true;
 }
 
 public class DeliverySection

@@ -153,6 +153,7 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Entra:GroupTeam:InclusionGroup` | `""` | `Entra\GroupTeam\InclusionGroup` | S | OV | text | | Entra group id/name |
 | `Entra:GroupTeam:ExclusionGroup` | `""` | `Entra\GroupTeam\ExclusionGroup` | S | OV | text | | Entra group id/name |
 | `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default lock screen (sticky) |
+| `Telemetry:UploadEnabled` | `true` | `Telemetry\UploadEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1 — genuine bool, DWORD is safe); false = session telemetry is not forwarded to the repository; the fixed 30-day local retention sweep still runs |
 | `Logging:LogLevel:Default` | `Information` | `Logging\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 | `Logging:EventLog:LogLevel:Default` | `Information` | `Logging\EventLog\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 

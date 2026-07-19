@@ -56,6 +56,8 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │       (selector → rule; surfaced as Entra:Enabled / Entra:GracePeriodMinutes / Entra:Mappings:FAT via the recursive walk)
 ├── Delivery\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
+├── Telemetry\
+│       UploadEnabled   DWORD   (0 = do not forward session telemetry to the repository; the fixed 30-day local retention sweep still runs; default 1)
 └── teams\
         (one REG_SZ value per team; value name = team folder name; data = "")
         e.g.  cz-its   REG_SZ   ""
@@ -195,11 +197,16 @@ NewsCentral authenticates to Azure using an **interactive MSAL user session** (`
   },
   "Delivery": {
     "DefaultLockScreenPath": ""
+  },
+  "Telemetry": {
+    "UploadEnabled": true
   }
 }
 ```
 
 `Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default: the last-applied lock screen is left in place (sticky). NewsService-only; not shared with other components.
+
+`Telemetry:UploadEnabled` (bool, default `true`) — when `false`, NewsService does not forward `session-*.json` telemetry to the repository (a read-only deployment: consume content, write nothing back). NewsViewer is unaffected and always writes session files; NewsService alone decides what becomes of them, so re-enabling upload immediately flushes whatever is still inside the retention window. Independently of this setting, local session files older than a **fixed 30-day window** (`TelemetryDefaults.RetentionDays`, by file `LastWriteTime`) are deleted every cycle — deliberately a constant, not a config key: the rationale is data hygiene (the records describe what a specific user saw and when), not disk space, and a configurable `0` would be ambiguous between delete-everything and keep-forever. Registry override: `Telemetry\UploadEnabled` DWORD `0`/`1`. See `docs/newsservice-spec.md` → Step 4.
 
 ## appsettings.json — NewsViewer
 
