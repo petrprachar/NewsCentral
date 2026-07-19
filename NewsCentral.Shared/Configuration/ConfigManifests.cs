@@ -73,7 +73,7 @@ public static class ConfigManifests
                 "Trace | Debug | Information | Warning | Error | Critical | None (registry: REG_SZ); standard .NET logging key, honoured by the generic host",
                 options: new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" },
                 displayName: "Log level"),
-            Key("Logging:EventLog:LogLevel:Default", "Warning", @"Logging\EventLog\LogLevel\Default", RegistryValueType.RegSz,
+            Key("Logging:EventLog:LogLevel:Default", "Information", @"Logging\EventLog\LogLevel\Default", RegistryValueType.RegSz,
                 ControlKind.Dropdown, OverridableState.Overridable,
                 "Trace | Debug | Information | Warning | Error | Critical | None (registry: REG_SZ); standard .NET logging key, honoured by the generic host",
                 options: new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" },
