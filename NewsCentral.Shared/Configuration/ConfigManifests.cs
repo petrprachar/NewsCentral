@@ -26,7 +26,8 @@ public static class ConfigManifests
             Key("Repository:StorageMode", "Share", @"Repository\StorageMode", RegistryValueType.RegSz,
                 ControlKind.Dropdown, OverridableState.Overridable, "Share | Azure", options: new[] { "Share", "Azure" }),
             Key("Repository:SharePath", "", @"Repository\SharePath", RegistryValueType.RegSz,
-                ControlKind.Path, OverridableState.Overridable, "UNC or local path"),
+                ControlKind.Path, OverridableState.Overridable,
+                "UNC or local path; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings path with empty and disables the share repository"),
             Key("AzureBlob:AuthMode", "Certificate", @"AzureBlob\AuthMode", RegistryValueType.RegSz,
                 ControlKind.Dropdown, OverridableState.Overridable, "Certificate | ClientSecret | ClientSecretEnv",
                 options: new[] { "Certificate", "ClientSecret", "ClientSecretEnv" }),
@@ -38,6 +39,10 @@ public static class ConfigManifests
                 ControlKind.Text, OverridableState.Overridable, "40 hex chars"),
             Key("AzureBlob:ClientSecret", "", @"AzureBlob\ClientSecret", RegistryValueType.RegSz,
                 ControlKind.Redacted, OverridableState.Overridable, "client secret", isSecret: true),
+            Key(SolutionConstants.NewsServiceAzureClientSecretEnvVar, "", null, RegistryValueType.None,
+                ControlKind.Redacted, OverridableState.EnvironmentSourced,
+                "machine-scope environment variable (EnvironmentVariableTarget.Machine) read when AzureBlob:AuthMode = ClientSecretEnv; presence only — the value is never displayed; not registry-overridable",
+                isSecret: true, envVar: SolutionConstants.NewsServiceAzureClientSecretEnvVar),
             Key("AzureBlob:AccountName", "", @"AzureBlob\AccountName", RegistryValueType.RegSz,
                 ControlKind.Text, OverridableState.Overridable, "storage account, no suffix"),
             Key("AzureBlob:ContainerName", "newscentral", @"AzureBlob\ContainerName", RegistryValueType.RegSz,
@@ -45,7 +50,9 @@ public static class ConfigManifests
             Key("AzureBlob:UseWinHttpProxy", "false", @"AzureBlob\UseWinHttpProxy", RegistryValueType.RegSz,
                 ControlKind.Toggle, OverridableState.Overridable, "true | false (registry: REG_SZ)"),
             Key("Hmac:SecretKey", "", @"Hmac\SecretKey", RegistryValueType.RegSz,
-                ControlKind.Redacted, OverridableState.Overridable, "Base64, 32 bytes", isSecret: true),
+                ControlKind.Redacted, OverridableState.Overridable,
+                "Base64, 32 bytes; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings key with empty and disables HMAC",
+                isSecret: true),
             Key("Signing:RequireSignedIndex", "false", @"Signing\RequireSignedIndex", RegistryValueType.RegSz,
                 ControlKind.Toggle, OverridableState.Overridable,
                 "true | false (registry: REG_SZ); ad-hoc read, not on POCO"),
@@ -59,7 +66,18 @@ public static class ConfigManifests
             Key("Entra:GroupTeam:ExclusionGroup", "", @"Entra\GroupTeam\ExclusionGroup", RegistryValueType.RegSz,
                 ControlKind.Text, OverridableState.Overridable, "Entra group id/name"),
             Key("Delivery:DefaultLockScreenPath", "", @"Delivery\DefaultLockScreenPath", RegistryValueType.RegSz,
-                ControlKind.Path, OverridableState.Overridable, "absolute; SYSTEM-readable"),
+                ControlKind.Path, OverridableState.Overridable,
+                "absolute; SYSTEM-readable; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings path with empty and disables the default lock screen (sticky)"),
+            Key("Logging:LogLevel:Default", "Information", @"Logging\LogLevel\Default", RegistryValueType.RegSz,
+                ControlKind.Dropdown, OverridableState.Overridable,
+                "Trace | Debug | Information | Warning | Error | Critical | None (registry: REG_SZ); standard .NET logging key, honoured by the generic host",
+                options: new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" },
+                displayName: "Log level"),
+            Key("Logging:EventLog:LogLevel:Default", "Warning", @"Logging\EventLog\LogLevel\Default", RegistryValueType.RegSz,
+                ControlKind.Dropdown, OverridableState.Overridable,
+                "Trace | Debug | Information | Warning | Error | Critical | None (registry: REG_SZ); standard .NET logging key, honoured by the generic host",
+                options: new[] { "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None" },
+                displayName: "EventLog log level"),
         }
     };
 
@@ -80,12 +98,15 @@ public static class ConfigManifests
             Key("BypassImageIntegrityCheck", "false", "BypassImageIntegrityCheck", RegistryValueType.Dword,
                 ControlKind.Toggle, OverridableState.Overridable, "true | false (registry: DWORD 0/1)"),
             Key("Hmac:SecretKey", "", @"Hmac\SecretKey", RegistryValueType.RegSz,
-                ControlKind.Redacted, OverridableState.Overridable, "Base64, 32 bytes", isSecret: true),
+                ControlKind.Redacted, OverridableState.Overridable,
+                "Base64, 32 bytes; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings key with empty and disables HMAC",
+                isSecret: true),
             Key("Signing:RequireSignedIndex", "false", @"Signing\RequireSignedIndex", RegistryValueType.RegSz,
                 ControlKind.Toggle, OverridableState.Overridable,
                 "true | false (registry: REG_SZ); ad-hoc read, not on POCO"),
             Key("Delivery:DefaultWallpaperPath", "", @"Delivery\DefaultWallpaperPath", RegistryValueType.RegSz,
-                ControlKind.Path, OverridableState.Overridable, "absolute; \"\" = sticky"),
+                ControlKind.Path, OverridableState.Overridable,
+                "absolute; \"\" = sticky; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings path with empty and disables the default wallpaper (sticky)"),
             Key("Delivery:WallpaperStyle", "Fit", @"Delivery\WallpaperStyle", RegistryValueType.RegSz,
                 ControlKind.Dropdown, OverridableState.Overridable, "Fill | Fit | Stretch | Center | Tile",
                 options: new[] { "Fill", "Fit", "Stretch", "Center", "Tile" }),
@@ -138,7 +159,9 @@ public static class ConfigManifests
             Key("AzureBlob:AccountName", "", @"AzureBlob\AccountName", RegistryValueType.RegSz,
                 ControlKind.Text, OverridableState.Overridable, "storage account, no suffix"),
             Key("Hmac:SecretKey", "", @"Hmac\SecretKey", RegistryValueType.RegSz,
-                ControlKind.Redacted, OverridableState.Overridable, "Base64, 32 bytes", isSecret: true),
+                ControlKind.Redacted, OverridableState.Overridable,
+                "Base64, 32 bytes; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings key with empty and disables HMAC",
+                isSecret: true),
         }
     };
 
@@ -148,7 +171,8 @@ public static class ConfigManifests
     private static ConfigKeyDescriptor Key(
         string canonicalKey, string @default, string? subkey, RegistryValueType regType,
         ControlKind control, OverridableState ovr, string valueHint,
-        bool isSecret = false, string[]? options = null, string? displayName = null) => new()
+        bool isSecret = false, string[]? options = null, string? displayName = null,
+        string? envVar = null) => new()
     {
         CanonicalKey = canonicalKey,
         DisplayName = displayName ?? Leaf(canonicalKey),
@@ -159,6 +183,7 @@ public static class ConfigManifests
         Options = options ?? System.Array.Empty<string>(),
         IsSecret = isSecret,
         OverridableState = ovr,
+        EnvironmentVariableName = envVar,
         ValueHint = valueHint
     };
 

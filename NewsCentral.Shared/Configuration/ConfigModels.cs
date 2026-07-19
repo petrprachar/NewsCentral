@@ -9,7 +9,7 @@ public enum RegistryValueType { RegSz, Dword, None }
 /// </summary>
 public enum ControlKind { Text, Toggle, Number, Dropdown, Path, Redacted, Structural }
 
-/// <summary>Tri-state overridable flag (spec §5.2).</summary>
+/// <summary>Overridable flag (spec §5.2).</summary>
 public enum OverridableState
 {
     /// <summary>appsettings key with a registry mapping — registry wins.</summary>
@@ -17,7 +17,9 @@ public enum OverridableState
     /// <summary>Defines the hive path (Company) — cannot itself be a registry value.</summary>
     DefinesPath,
     /// <summary>No appsettings counterpart; settable only via registry.</summary>
-    RegistryOnly
+    RegistryOnly,
+    /// <summary>Sourced from a machine environment variable — not in appsettings, not registry-overridable.</summary>
+    EnvironmentSourced
 }
 
 /// <summary>
@@ -49,6 +51,12 @@ public sealed record ConfigKeyDescriptor
     public bool IsSecret { get; init; }
 
     public OverridableState OverridableState { get; init; }
+
+    /// <summary>
+    /// Machine environment variable backing this row (<see cref="OverridableState.EnvironmentSourced"/>);
+    /// null for ordinary config keys. The page shows PRESENCE only — the value is never read for display.
+    /// </summary>
+    public string? EnvironmentVariableName { get; init; }
 
     /// <summary>The ⓘ tooltip text (spec §7.1) — copied verbatim from the manifest tables.</summary>
     public required string ValueHint { get; init; }

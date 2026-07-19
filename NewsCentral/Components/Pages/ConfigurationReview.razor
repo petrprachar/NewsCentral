@@ -39,6 +39,14 @@
             </div>
             <div class="card-body">
 
+                @* Developer-overlay notice — NewsViewer only; rendered ONLY when the file exists. *@
+                @if (HasDevOverlay(r))
+                {
+                    <div class="alert alert-warning py-2">
+                        <i class="bi bi-exclamation-triangle me-2"></i>@Localizer["DevOverlayNotice"]
+                    </div>
+                }
+
                 @* ── Install-dir override (§4, session-only diagnostic pointer) ─ *@
                 <div class="row mb-3">
                     <label class="col-sm-3 col-form-label">@Localizer["InstallDirOverride"]</label>
@@ -138,10 +146,30 @@
                                         </div>
                                         <small class="text-muted"><code>@row.Descriptor.CanonicalKey</code></small>
                                     </td>
-                                    <td>@SubkeyCell(row.Descriptor)</td>
-                                    <td>@DefaultCell(row.Descriptor)</td>
-                                    <td>@ValueCell(row.Descriptor, row.AppSettingsValue)</td>
-                                    <td>@ValueCell(row.Descriptor, row.RegistryValue)</td>
+                                    @if (row.Descriptor.EnvironmentVariableName is string envVar)
+                                    {
+                                        @* Environment-sourced row (presence only — the value is NEVER displayed). *@
+                                        <td><span class="text-muted">@Localizer["MachineEnvironmentVariable"]</span></td>
+                                        <td><span class="text-muted">—</span></td>
+                                        <td colspan="2">
+                                            @Localizer["MachineEnvironment"]:
+                                            @if (EnvVarPresent(envVar))
+                                            {
+                                                <span class="badge bg-success">@Localizer["EnvSet"]</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">@Localizer["EnvNotSet"]</span>
+                                            }
+                                        </td>
+                                    }
+                                    else
+                                    {
+                                        <td>@SubkeyCell(row.Descriptor)</td>
+                                        <td>@DefaultCell(row.Descriptor)</td>
+                                        <td>@ValueCell(row.Descriptor, row.AppSettingsValue)</td>
+                                        <td>@ValueCell(row.Descriptor, row.RegistryValue)</td>
+                                    }
                                     <td>@OverridableBadge(row.Descriptor.OverridableState)</td>
                                 </tr>
                             }
@@ -278,7 +306,13 @@
 
     private RenderFragment DefaultCell(ConfigKeyDescriptor d) => __builder =>
     {
-        if (d.Default.Length == 0)
+        if (d.OverridableState == OverridableState.DefinesPath)
+        {
+            @* Not a default — a build-time constant (SolutionConstants.Company, since 76d5235). *@
+            <code>@d.Default</code>
+            <span class="text-muted ms-1">@Localizer["BuildConstant"]</span>
+        }
+        else if (d.Default.Length == 0)
         {
             <span class="text-muted">@Localizer["Empty"]</span>
         }
@@ -333,6 +367,10 @@
         {
             <span class="badge bg-secondary">@Localizer["NotOverridable"]</span>
         }
+        else if (state == OverridableState.EnvironmentSourced)
+        {
+            <span class="badge bg-warning text-dark">@Localizer["EnvironmentSourced"]</span>
+        }
         else
         {
             <span class="badge bg-info">@Localizer["RegistryOnly"]</span>
@@ -352,6 +390,28 @@
     private static bool PathExists(string p)
     {
         try { return File.Exists(p) || Directory.Exists(p); }
+        catch { return false; }
+    }
+
+    // NewsViewer only: its config layers include an optional appsettings.Development.json overlay
+    // (activated by mere presence — see NewsViewer.Program.BuildConfiguration). The page does not
+    // resolve that layer; when the file exists, a notice says its values are not shown.
+    private static bool HasDevOverlay(ComponentResolution r)
+    {
+        if (r.ComponentName != "NewsViewer" || r.InstallDir is null) return false;
+        try { return File.Exists(Path.Combine(r.InstallDir, "appsettings.Development.json")); }
+        catch { return false; }
+    }
+
+    // Presence only — the value itself is never read into the UI. Machine scope + whitespace check
+    // match AzureCredentialFactory's ClientSecretEnv read, so "(set)" here means auth will find it.
+    private static bool EnvVarPresent(string name)
+    {
+        try
+        {
+            return !string.IsNullOrWhiteSpace(
+                Environment.GetEnvironmentVariable(name, EnvironmentVariableTarget.Machine));
+        }
         catch { return false; }
     }
 }

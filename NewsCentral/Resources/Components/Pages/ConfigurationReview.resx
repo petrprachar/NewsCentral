@@ -57,4 +57,11 @@
   <data name="EntraMappings" xml:space="preserve"><value>Entra Mappings</value></data>
   <data name="ColSelector" xml:space="preserve"><value>Selector</value></data>
   <data name="ColRule" xml:space="preserve"><value>Rule</value></data>
+  <data name="BuildConstant" xml:space="preserve"><value>(build constant)</value></data>
+  <data name="EnvironmentSourced" xml:space="preserve"><value>Environment-sourced</value></data>
+  <data name="MachineEnvironment" xml:space="preserve"><value>Machine environment</value></data>
+  <data name="MachineEnvironmentVariable" xml:space="preserve"><value>N/A — machine environment variable</value></data>
+  <data name="EnvSet" xml:space="preserve"><value>(set)</value></data>
+  <data name="EnvNotSet" xml:space="preserve"><value>(not set)</value></data>
+  <data name="DevOverlayNotice" xml:space="preserve"><value>An appsettings.Development.json overlay exists in the install directory and is in effect. Its values are not displayed on this page — the appsettings column shows the base file only.</value></data>
 </root>

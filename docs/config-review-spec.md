@@ -102,8 +102,11 @@ Driven by the manifest `IsSecret` flag (keys under `Hmac`, `*Secret`, `*Password
 | Registry-overridable | appsettings key with a registry mapping | shows the subkey path |
 | Not overridable | defines the hive path (`Company`) | **N/A — defines the registry path** |
 | Registry-only | no appsettings counterpart; settable only via registry | shows the subkey path |
+| Environment-sourced | machine environment variable; not in appsettings, not registry-overridable | **N/A — machine environment variable** |
 
 This disambiguates a blank appsettings column (`Company` blank because it is a build-time constant, `SolutionConstants.Company`, and *can't* be in any appsettings file, vs a registry-only key blank in appsettings because no such JSON key exists).
+
+Path-defining rows (`Company`) render their Default cell as `Contoso (build constant)` — it is a build-time constant from `Directory.Build.props`, not a default anything else could replace. Environment-sourced rows (currently only `NEWSSERVICE_AZURE_CLIENTSECRET`, read machine-scope by `AzureCredentialFactory` when `AzureBlob:AuthMode = ClientSecretEnv`) show **presence only** — `(set)` / `(not set)` in place of the two layer columns; the value is never displayed.
 
 ## 6. Structural Hives
 
@@ -133,22 +136,25 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Service:PollIntervalSeconds` | `60` | `Service\PollIntervalSeconds` | S | OV | number | | integer seconds, 10–86400; MUST be REG_SZ (DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Service:CacheRootPath` | `C:\ProgramData\NewsCentral` | `Service\CacheRootPath` | S | OV | path | | absolute path |
 | `Repository:StorageMode` | `Share` | `Repository\StorageMode` | S | OV | dropdown | | `Share \| Azure` |
-| `Repository:SharePath` | `""` | `Repository\SharePath` | S | OV | path | | UNC or local path |
+| `Repository:SharePath` | `""` | `Repository\SharePath` | S | OV | path | | UNC or local path; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the share repository |
 | `AzureBlob:AuthMode` | `Certificate` | `AzureBlob\AuthMode` | S | OV | dropdown | | `Certificate \| ClientSecret \| ClientSecretEnv` |
 | `AzureBlob:TenantId` | `""` | `AzureBlob\TenantId` | S | OV | text | | GUID |
 | `AzureBlob:ClientId` | `""` | `AzureBlob\ClientId` | S | OV | text | | GUID |
 | `AzureBlob:CertificateThumbprint` | `""` | `AzureBlob\CertificateThumbprint` | S | OV | text | | 40 hex chars |
 | `AzureBlob:ClientSecret` | `""` | `AzureBlob\ClientSecret` | S | OV | redacted | ✔ | client secret |
+| `NEWSSERVICE_AZURE_CLIENTSECRET` | — | — | — | ENV | redacted | ✔ | machine-scope environment variable (`EnvironmentVariableTarget.Machine`) read when `AzureBlob:AuthMode = ClientSecretEnv`; presence only — the value is never displayed |
 | `AzureBlob:AccountName` | `""` | `AzureBlob\AccountName` | S | OV | text | | storage account, no suffix |
 | `AzureBlob:ContainerName` | `newscentral` | `AzureBlob\ContainerName` | S | OV | text | | container name |
 | `AzureBlob:UseWinHttpProxy` | `false` | `AzureBlob\UseWinHttpProxy` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
-| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes |
+| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
 | `Entra:Enabled` | `false` | `Entra\Enabled` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Entra:GracePeriodMinutes` | `240` | `Entra\GracePeriodMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (0 = "no grace" is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Entra:GroupTeam:InclusionGroup` | `""` | `Entra\GroupTeam\InclusionGroup` | S | OV | text | | Entra group id/name |
 | `Entra:GroupTeam:ExclusionGroup` | `""` | `Entra\GroupTeam\ExclusionGroup` | S | OV | text | | Entra group id/name |
-| `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable |
+| `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default lock screen (sticky) |
+| `Logging:LogLevel:Default` | `Information` | `Logging\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
+| `Logging:EventLog:LogLevel:Default` | `Warning` | `Logging\EventLog\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 
 Structural: `Entra\Mappings\{selector}` (dict); `Signing\{team}\PublicKey` + `PublicKeyPrevious` (RO, **not secret**); `teams\{team}` (RO).
 
@@ -162,9 +168,9 @@ Hive: `…\NewsCentral\NewsViewer\`.
 | `CacheRootPath` | `C:\ProgramData\NewsCentral` | `CacheRootPath` (hive root) | S | OV | path | | absolute path |
 | `BypassDailyGate` | `false` | `BypassDailyGate` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `BypassImageIntegrityCheck` | `false` | `BypassImageIntegrityCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
-| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes |
+| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
-| `Delivery:DefaultWallpaperPath` | `""` | `Delivery\DefaultWallpaperPath` | S | OV | path | | absolute; `""` = sticky |
+| `Delivery:DefaultWallpaperPath` | `""` | `Delivery\DefaultWallpaperPath` | S | OV | path | | absolute; `""` = sticky; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default wallpaper (sticky) |
 | `Delivery:WallpaperStyle` | `Fit` | `Delivery\WallpaperStyle` | S | OV | dropdown | | `Fill \| Fit \| Stretch \| Center \| Tile` |
 | `Delivery:WallpaperBackgroundColor` | `0 0 0` | `Delivery\WallpaperBackgroundColor` | S | OV | text | | `"R G B"`, each 0–255 |
 
@@ -191,7 +197,7 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 | `AzureBlob:TenantId` | `""` | `AzureBlob\TenantId` | S | OV | text | | GUID |
 | `AzureBlob:ClientId` | `""` | `AzureBlob\ClientId` | S | OV | text | | GUID |
 | `AzureBlob:AccountName` | `""` | `AzureBlob\AccountName` | S | OV | text | | storage account, no suffix |
-| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes |
+| `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |
 
 ## 8. Data Resolution
 
@@ -224,7 +230,8 @@ A drift guard, one-directional (manifest is deliberately a superset — it carri
 
 - Any editing (v1 is read-only throughout, including install dir).
 - The dropped `%PROGRAMDATA%` external `appsettings.json` layer.
-- `Logging:*` (NewsService) — host-consumed framework logging, not app config.
+- `Logging:*` beyond the two NewsService `LogLevel:Default` keys in §7.2 (NewsViewer and NewsCentral have no logging framework — rows there would display controls that do nothing).
+- Resolving the NewsViewer `appsettings.Development.json` overlay as a layer — when the file exists, the page shows a notice that an un-displayed overlay is in effect; its values are not rendered.
 - `Storage:DefaultStorageType` — phantom key (MauiProgram fallback only); excluded.
 - Refreshing stale test-count figures in other docs (separate cleanup).
 - De-duplicating the two default-admin seed paths (separate cleanup).
