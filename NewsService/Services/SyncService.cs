@@ -32,6 +32,14 @@ public sealed class SyncService(
 {
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
 
+    // Per-team verification result from the previous cycle. SyncService is a singleton and Worker
+    // runs cycles sequentially, so a plain Dictionary is safe and survives across cycles. Lets
+    // acceptance follow the cycle-wide "log on change" rule: loud only when the index or the
+    // verification result changed, so a misconfigured team (Unsigned/Disabled) is reported at least
+    // once per service start instead of flooding every cycle — or being silent forever.
+    private readonly Dictionary<string, VerifyResult> _lastVerifyResult =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public async Task RunCycleAsync(string[] teams, CancellationToken ct)
     {
         bool online = false;
@@ -126,7 +134,7 @@ public sealed class SyncService(
         return allOk;
     }
 
-    private async Task SyncTeamAsync(string teamFolder, bool isDynamic, CancellationToken ct)
+    internal async Task SyncTeamAsync(string teamFolder, bool isDynamic, CancellationToken ct)
     {
         var remoteJson = await repository.ReadTextAsync($"{teamFolder}/index.json", ct);
         if (remoteJson is null)
@@ -141,19 +149,38 @@ public sealed class SyncService(
         var keys          = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolder);
         var result        = SignatureGate.VerifyWithPrecedence(remoteIndex, keys, isDynamic);
         var requireSigned = configuration.GetValue<bool>("Signing:RequireSignedIndex");
+
+        // Tracked for rejected results too, so a later recovery (e.g. Invalid → Valid after a key
+        // is provisioned) counts as a change and logs at its natural level.
+        var resultChanged = !_lastVerifyResult.TryGetValue(teamFolder, out var previous)
+                            || previous != result;
+        _lastVerifyResult[teamFolder] = result;
+
         if (SignatureGate.ShouldReject(result, requireSigned, out var reason))
         {
+            // Security outcome — always Error, never demoted or gated on change.
             logger.LogError("Team {Team}: index rejected — {Reason}", teamFolder, reason);
             return;
         }
-        if (result == VerifyResult.Unsigned)
-            logger.LogWarning("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+
+        var cachedIndex  = await cache.ReadJsonAsync<TeamIndexFile>($"{teamFolder}/index.json");
+        var indexChanged = cachedIndex?.IndexHash != remoteIndex.IndexHash;
+
+        // Acceptance logs at its natural level only when something changed — the index bytes or the
+        // verification result — and at Debug on the steady state, matching every other cycle path.
+        if (indexChanged || resultChanged)
+        {
+            if (result == VerifyResult.Unsigned)
+                logger.LogWarning("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+            else
+                logger.LogInformation("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+        }
         else
-            logger.LogInformation("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+        {
+            logger.LogDebug("Team {Team}: index accepted — {Reason}", teamFolder, reason);
+        }
 
-        var cachedIndex = await cache.ReadJsonAsync<TeamIndexFile>($"{teamFolder}/index.json");
-
-        if (cachedIndex?.IndexHash == remoteIndex.IndexHash)
+        if (!indexChanged)
         {
             logger.LogDebug("Team {Team}: index unchanged", teamFolder);
             return;

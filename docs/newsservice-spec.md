@@ -17,6 +17,8 @@ Key registry values for NewsService:
 | `teams\{teamFolderName}` | `REG_SZ` | Each value name is a team folder name |
 | `Signing\{teamFolderName}\PublicKey` | `REG_SZ` | Base64 SPKI for ECDSA `index.json` verification |
 | `Signing\{teamFolderName}\PublicKeyPrevious` | `REG_SZ` | Base64 SPKI — rotation window (optional) |
+| `Logging\LogLevel\Default` | `REG_SZ` | Overrides `Logging:LogLevel:Default` (`Trace` \| `Debug` \| `Information` \| `Warning` \| `Error` \| `Critical` \| `None`) |
+| `Logging\EventLog\LogLevel\Default` | `REG_SZ` | Overrides `Logging:EventLog:LogLevel:Default` (same values; EventLog provider only) |
 
 `Company` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`, generated into `NewsCentral.Shared`) — **not** an appsettings value — and is not registry-overridable (it defines the hive path; a mismatch fails silently as `OpenSubKey` returns `null`). The solution segment is likewise the fixed constant `SolutionConstants.SolutionName`, not a config value.
 
@@ -26,7 +28,7 @@ Executed by `Worker` on every interval tick:
 
 **Step 1 — Index sync (per team)**
 - Reads `{teamFolder}/index.json` from the repository
-- **ECDSA verification** — calls `EcdsaSignatureService.Verify(remoteIndex, keys)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`: `Invalid` → logs error and skips the team entirely; `Unsigned` → logs warning and continues; `Valid` / `Disabled` → continues. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
+- **ECDSA verification** — calls `SignatureGate.VerifyWithPrecedence(remoteIndex, keys, isDynamic)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`, then `SignatureGate.ShouldReject`. Rejection → **always logs Error** and skips the team entirely (security outcomes are never demoted or gated on change). Acceptance follows the cycle-wide "log on change, stay quiet otherwise" rule: it logs at its natural level (`Unsigned` → Warning, otherwise Information) only when the index changed **or** the verification result changed since the previous cycle for that team, and at Debug otherwise. The per-team last result is held by the singleton `SyncService`, so every team's verification state is reported at least once per service start; the verification itself still runs before the cached index is read and before any content is trusted — only the logging is positioned after the hash comparison. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
 - Compares `IndexHash` with the cached copy
 - If unchanged: skips the team entirely (O(1) check, no I/O)
 - If changed: for each `PublishedAssignmentIndex`, checks the locally stored SHA-256 sidecar (`{imagePath}.hash`) against `Content.ImageHash`; downloads only changed or missing images
