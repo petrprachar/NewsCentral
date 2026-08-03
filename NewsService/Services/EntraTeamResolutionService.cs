@@ -29,6 +29,16 @@ public sealed class EntraTeamResolutionService(
 
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
 
+    // The configured instance set. Fixed to the two legacy singletons for now; a later change
+    // derives it from Entra:AttributeSchemes / Entra:GroupTeams so removing an instance from
+    // configuration prunes its entries.
+    private static readonly IReadOnlySet<EntraSourceKey> ActiveKeys =
+        new HashSet<EntraSourceKey>
+        {
+            EntraSourceKey.Legacy(ResolvedTeamSource.Attribute),
+            EntraSourceKey.Legacy(ResolvedTeamSource.Group)
+        };
+
     private string FilePath =>
         Path.Combine(config.Service.CacheRootPath, ResolvedTeamsFileName);
 
@@ -54,7 +64,7 @@ public sealed class EntraTeamResolutionService(
 
             // 6. Merge both per-source outcomes through the grace state machine.
             var merged = EntraResolvedTeamsMerger.Merge(
-                existing, outcomes,
+                existing, outcomes, ActiveKeys,
                 DateTime.UtcNow, TimeSpan.FromMinutes(config.Entra.GracePeriodMinutes));
 
             // 7. Atomic write.
@@ -136,6 +146,9 @@ public sealed class EntraTeamResolutionService(
 
     // ── Attribute source ──────────────────────────────────────────────────────
 
+    private static readonly EntraSourceKey AttributeKey = EntraSourceKey.Legacy(ResolvedTeamSource.Attribute);
+    private static readonly EntraSourceKey GroupKey     = EntraSourceKey.Legacy(ResolvedTeamSource.Group);
+
     private EntraSourceOutcome ResolveAttributeOutcome(EntraDeviceFetch fetch)
     {
         var outcome = EntraTeamNameResolver.Resolve(fetch.Attributes!, config.Entra.Mappings);
@@ -143,17 +156,17 @@ public sealed class EntraTeamResolutionService(
         {
             case EntraResolutionReason.Resolved:
                 logger.LogInformation("Entra attribute team resolved {Team}.", outcome.TeamFolderName);
-                return new(ResolvedTeamSource.Attribute, EntraCycleResult.ResolvedTeam, outcome.TeamFolderName);
+                return new(AttributeKey, EntraCycleResult.ResolvedTeam, outcome.TeamFolderName);
 
             case EntraResolutionReason.UnknownSelector:
             case EntraResolutionReason.InvalidRule:
             case EntraResolutionReason.EmptyRequiredAttribute:
                 logger.LogWarning("Entra device read OK but no attribute team — {Reason}.", outcome.Reason);
-                return new(ResolvedTeamSource.Attribute, EntraCycleResult.NoTeam, null);
+                return new(AttributeKey, EntraCycleResult.NoTeam, null);
 
             default: // NoSelector
                 logger.LogInformation("Entra device has no attribute selector — {Reason}.", outcome.Reason);
-                return new(ResolvedTeamSource.Attribute, EntraCycleResult.NoTeam, null);
+                return new(AttributeKey, EntraCycleResult.NoTeam, null);
         }
     }
 
@@ -169,18 +182,18 @@ public sealed class EntraTeamResolutionService(
         if (string.IsNullOrWhiteSpace(inclusion))
         {
             logger.LogDebug("Entra group team disabled (no inclusion group) — emitting Group NoTeam.");
-            return new(ResolvedTeamSource.Group, EntraCycleResult.NoTeam, null);
+            return new(GroupKey, EntraCycleResult.NoTeam, null);
         }
 
         // checkMemberGroups needs the device object id; absent on Found is unexpected → transient.
         if (string.IsNullOrWhiteSpace(fetch.DeviceObjectId))
         {
             logger.LogWarning("Entra device found but object id missing — group check treated as Unreachable.");
-            return new(ResolvedTeamSource.Group, EntraCycleResult.Unreachable, null);
+            return new(GroupKey, EntraCycleResult.Unreachable, null);
         }
 
         var eval   = await groupClient.EvaluateAsync(fetch.DeviceObjectId, inclusion, exclusion, ct);
-        var mapped = GroupOutcomeMapper.Map(eval, inclusion, exclusion);
+        var mapped = GroupOutcomeMapper.Map(eval, GroupKey, inclusion, exclusion);
 
         switch (eval.Status)
         {
@@ -209,14 +222,14 @@ public sealed class EntraTeamResolutionService(
 
     private static IReadOnlyList<EntraSourceOutcome> BothUnreachable() =>
     [
-        new(ResolvedTeamSource.Attribute, EntraCycleResult.Unreachable, null),
-        new(ResolvedTeamSource.Group,     EntraCycleResult.Unreachable, null)
+        new(AttributeKey, EntraCycleResult.Unreachable, null),
+        new(GroupKey,     EntraCycleResult.Unreachable, null)
     ];
 
     private static IReadOnlyList<EntraSourceOutcome> BothNoTeam() =>
     [
-        new(ResolvedTeamSource.Attribute, EntraCycleResult.NoTeam, null),
-        new(ResolvedTeamSource.Group,     EntraCycleResult.NoTeam, null)
+        new(AttributeKey, EntraCycleResult.NoTeam, null),
+        new(GroupKey,     EntraCycleResult.NoTeam, null)
     ];
 
     // ── Persistence ──────────────────────────────────────────────────────────

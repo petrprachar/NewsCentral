@@ -10,7 +10,8 @@ namespace NewsService.Services;
 /// </summary>
 public static class GroupOutcomeMapper
 {
-    public static EntraSourceOutcome Map(EntraGroupEvaluation eval, string? inclusion, string? exclusion)
+    public static EntraSourceOutcome Map(
+        EntraGroupEvaluation eval, EntraSourceKey key, string? inclusion, string? exclusion)
     {
         switch (eval.Status)
         {
@@ -18,15 +19,15 @@ public static class GroupOutcomeMapper
                 var team = GroupTeamDecision.Resolve(
                     inclusion, exclusion, eval.InInclusion, eval.InExclusion);
                 return team is not null
-                    ? new EntraSourceOutcome(ResolvedTeamSource.Group, EntraCycleResult.ResolvedTeam, team)
-                    : new EntraSourceOutcome(ResolvedTeamSource.Group, EntraCycleResult.NoTeam, null);
+                    ? new EntraSourceOutcome(key, EntraCycleResult.ResolvedTeam, team)
+                    : new EntraSourceOutcome(key, EntraCycleResult.NoTeam, null);
 
             case EntraGroupStatus.Unreachable:
-                return new EntraSourceOutcome(ResolvedTeamSource.Group, EntraCycleResult.Unreachable, null);
+                return new EntraSourceOutcome(key, EntraCycleResult.Unreachable, null);
 
             // NameNotFound / NameAmbiguous / PermissionDenied — all persistent → remove promptly.
             default:
-                return new EntraSourceOutcome(ResolvedTeamSource.Group, EntraCycleResult.NoTeam, null);
+                return new EntraSourceOutcome(key, EntraCycleResult.NoTeam, null);
         }
     }
 }

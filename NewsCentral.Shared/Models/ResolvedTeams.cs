@@ -30,6 +30,15 @@ public sealed class ResolvedTeamEntry
     /// correctly. NewsViewer ignores this field (it reads only <see cref="TeamFolderName"/>).
     /// </summary>
     public ResolvedTeamSource Source { get; set; } = ResolvedTeamSource.Attribute;
+
+    /// <summary>
+    /// Identifies WHICH instance of <see cref="Source"/> produced this entry, so several
+    /// configured instances of the same source each carry an independent grace window.
+    /// Empty string = the legacy single-instance source. Defaults to "" so pre-feature
+    /// resolved-teams.json files (which carry no sourceId) deserialize correctly.
+    /// NewsViewer ignores this field (it reads only <see cref="TeamFolderName"/>).
+    /// </summary>
+    public string SourceId { get; set; } = "";
 }
 
 public enum ResolvedTeamState

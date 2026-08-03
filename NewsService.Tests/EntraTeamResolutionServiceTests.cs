@@ -118,8 +118,9 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
     private static ResolvedTeamEntry Entry(string name, DateTime confirmed,
         ResolvedTeamState state = ResolvedTeamState.Active,
-        ResolvedTeamSource source = ResolvedTeamSource.Attribute) =>
-        new() { TeamFolderName = name, LastConfirmedUtc = confirmed, State = state, Source = source };
+        ResolvedTeamSource source = ResolvedTeamSource.Attribute,
+        string sourceId = "") =>
+        new() { TeamFolderName = name, LastConfirmedUtc = confirmed, State = state, Source = source, SourceId = sourceId };
 
     private static EntraDeviceFetch FoundWith(params (string Key, string? Value)[] attrs)
     {
@@ -475,6 +476,62 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         Assert.Equal("grp-team", grp.TeamFolderName);
         Assert.Equal(ResolvedTeamState.Grace, grp.State);
         Assert.Equal(confirmed, grp.LastConfirmedUtc, TimeSpan.FromSeconds(1));
+    }
+
+    // ── SourceId (key-with-instance) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Found_AttributeAndGroupBothResolve_EntriesCarryEmptySourceId()
+    {
+        var dir = NewTempDir();
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
+            inclusion: "Grp Team");
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.Equal(2, teams.Count);
+        Assert.All(teams, t => Assert.Equal("", t.SourceId));
+    }
+
+    [Fact]
+    public async Task PreExisting_EntryWithUnknownSourceId_IsPruned_LegacyEntriesResolveNormally()
+    {
+        var dir = NewTempDir();
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams = [Entry("stale-team", DateTime.UtcNow.AddMinutes(-5),
+                source: ResolvedTeamSource.Group, sourceId: "stale")]
+        });
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
+            inclusion: "Grp Team");
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.DoesNotContain(teams, t => t.TeamFolderName == "stale-team");
+
+        var attr = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Attribute);
+        Assert.Equal("cz", attr.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Active, attr.State);
+
+        var grp = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Group);
+        Assert.Equal("grp-team", grp.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Active, grp.State);
     }
 
     public void Dispose()
