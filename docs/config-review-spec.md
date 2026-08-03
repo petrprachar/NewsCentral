@@ -114,7 +114,8 @@ Non-scalar registry subtrees, rendered as sub-blocks below the config table. **N
 
 - **`teams\`** — list of team folder names (surfaced by `RegistryConfigurationProvider` as `teams:0…N`). Registry-only.
 - **`Signing\`** — `RequireSignedIndex` renders as a normal scalar row in the config table; the per-team keys render here as a sub-table (`Team` · `PublicKey` · `PublicKeyPrevious`). Public keys are **not secret** — show truncated but copyable, as Key Management already does. Each component maintains its own separate `Signing\` subtree.
-- **`Entra\Mappings\`** (NewsService only) — dictionary; sub-table of `Selector` · `Rule`.
+- **`Entra\AttributeSchemes\`** (NewsService only) — dictionary of named schemes, each with a `Selector` and a `Mappings\` sub-dictionary (selector value → rule); sub-table of `Scheme` · `Selector` · `Selector value` · `Rule`.
+- **`Entra\GroupTeams\Instances\`** (NewsService only) — dictionary of named instances, each with `InclusionGroup` and optional `ExclusionGroup`; sub-table of `Label` · `InclusionGroup` · `ExclusionGroup`. (The fleet-wide `Entra:GroupTeams:ExclusionGroup` is a normal scalar row, not part of this structural block — see §7.2.) Superseded the single `Entra:GroupTeam` pair and the flat `Entra:Mappings` table this section originally specified; see `docs/entra-dynamic-teams.md` for the current model.
 
 ## 7. The Config Manifest
 
@@ -150,14 +151,14 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
 | `Entra:Enabled` | `false` | `Entra\Enabled` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Entra:GracePeriodMinutes` | `240` | `Entra\GracePeriodMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (0 = "no grace" is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
-| `Entra:GroupTeam:InclusionGroup` | `""` | `Entra\GroupTeam\InclusionGroup` | S | OV | text | | Entra group id/name |
-| `Entra:GroupTeam:ExclusionGroup` | `""` | `Entra\GroupTeam\ExclusionGroup` | S | OV | text | | Entra group id/name |
+| `Entra:MaxDynamicTeams` | `16` | `Entra\MaxDynamicTeams` | S | OV | number | | integer count; 0 = no cap; MUST be REG_SZ (DWORD 0/1 coerce to `False`/`True` → int binder throws) |
+| `Entra:GroupTeams:ExclusionGroup` | `""` | `Entra\GroupTeams\ExclusionGroup` | S | OV | text | | fleet-wide exclusion group id/name; suppresses every group instance if set but unresolvable |
 | `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default lock screen (sticky) |
 | `Telemetry:UploadEnabled` | `true` | `Telemetry\UploadEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1 — genuine bool, DWORD is safe); false = session telemetry is not forwarded to the repository; the fixed 30-day local retention sweep still runs |
 | `Logging:LogLevel:Default` | `Information` | `Logging\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 | `Logging:EventLog:LogLevel:Default` | `Information` | `Logging\EventLog\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 
-Structural: `Entra\Mappings\{selector}` (dict); `Signing\{team}\PublicKey` + `PublicKeyPrevious` (RO, **not secret**); `teams\{team}` (RO).
+Structural: `Entra\AttributeSchemes\{scheme}\Selector` + `Mappings\{selectorValue}` (dict); `Entra\GroupTeams\Instances\{label}\InclusionGroup` + `ExclusionGroup` (dict); `Signing\{team}\PublicKey` + `PublicKeyPrevious` (RO, **not secret**); `teams\{team}` (RO).
 
 ### 7.3 NewsViewer manifest
 
@@ -207,7 +208,7 @@ The page must show the two layers **separately**, not merged — so it does **no
 1. **Discover** install dir (§4.1) and derive `{InstallDir}\appsettings.json`.
 2. **appsettings layer:** `new ConfigurationBuilder().AddJsonFile(appsettingsPath, optional: true).Build()` → query per manifest key. `null` → `(not set)`.
 3. **Company for the hive:** `Company` is the compile-time constant `SolutionConstants.Company` (a single `Directory.Build.props` value, identical for all three components) — **not** read from any appsettings layer. This is what each component itself uses to locate its hive; a component built under a different `Company` → hive not-found.
-4. **registry layer:** `new ConfigurationBuilder().AddRegistryOverrides(company, SolutionConstants.SolutionName, component).Build()` → query per manifest key. `null` → `(not set)`. This reuses the shipped `RegistryConfigurationSource`, so `teams:*`, `Signing:{team}:*`, and `Entra:Mappings:*` surface automatically for the structural sub-blocks.
+4. **registry layer:** `new ConfigurationBuilder().AddRegistryOverrides(company, SolutionConstants.SolutionName, component).Build()` → query per manifest key. `null` → `(not set)`. This reuses the shipped `RegistryConfigurationSource`, so `teams:*`, `Signing:{team}:*`, `Entra:AttributeSchemes:*`, and `Entra:GroupTeams:Instances:*` surface automatically for the structural sub-blocks.
 5. **Render** each manifest row from (default, appsettings-value, registry-value), applying redaction and overridable-state.
 
 Factor steps 1–4 into a shared `EffectiveConfigResolver` (name retained from prior design though it now returns the two layers *separately*, not an effective merge) in `NewsCentral.Shared`, so the page and any future consumer resolve identically.

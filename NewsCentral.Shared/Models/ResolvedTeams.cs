@@ -23,8 +23,9 @@ public sealed class ResolvedTeamEntry
     public ResolvedTeamState State { get; set; } = ResolvedTeamState.Active;
 
     /// <summary>
-    /// Which Entra source produced this entry. Drives per-source grace in
-    /// <see cref="NewsCentral.Configuration.EntraResolvedTeamsMerger"/>. Defaults to
+    /// Which Entra source produced this entry. Combined with <see cref="SourceId"/> — not alone —
+    /// this drives grace in <see cref="NewsCentral.Configuration.EntraResolvedTeamsMerger"/>; see
+    /// <see cref="SourceId"/> for why grace is per instance, not per source. Defaults to
     /// <see cref="ResolvedTeamSource.Attribute"/> so pre-feature resolved-teams.json files
     /// (which carry no Source field — every dynamic team was attribute-derived) deserialize
     /// correctly. NewsViewer ignores this field (it reads only <see cref="TeamFolderName"/>).

@@ -37,6 +37,7 @@ NewsCentral.Shared\
 │   ├── Team.cs                        Team, TeamsCollection
 │   ├── TeamSigningKeys.cs             ECDSA key pair for a team: PrivateKey (PKCS#8), PublicKey, PublicKeyPrevious (SPKI)
 │   ├── User.cs                        User, TeamRole, UsersCollection
+│   ├── ResolvedTeams.cs               ResolvedTeamsFile, ResolvedTeamEntry, ResolvedTeamState, ResolvedTeamSource — resolved-teams.json (Entra dynamic teams)
 │   └── IndexFile\
 │       ├── TeamIndexFile.cs           root structure for index.json; implements ISignable
 │       ├── PublishedAssignmentIndex.cs one entry per published assignment
@@ -64,6 +65,12 @@ NewsCentral.Shared\
     ├── TeamConfigurationReader.cs         GetTeams(IConfiguration) helper
     ├── SigningKeyConfigurationReader.cs   GetPublicKeys(IConfiguration, teamFolderName) — reads Signing:{team}:PublicKey / :PublicKeyPrevious for ECDSA verification
     ├── SolutionConstants.cs               SolutionName = "NewsCentral" — fixed hive segment for AddRegistryOverrides(company, SolutionName, component)
+    ├── EntraTeamNameResolver.cs           pure per-scheme attribute resolution: selector → rule → canonicalized team folder name
+    ├── EntraResolvedTeamsMerger.cs        pure grace state machine keyed (Source, SourceId); EntraSourceKey, EntraSourceOutcome
+    ├── GroupTeamDecision.cs               pure group-team membership decision: inclusion ∧ ¬instanceExclusion ∧ ¬globalExclusion
+    ├── TeamFolderNameCanonicalizer.cs     shared canonicalization used by attribute schemes, group teams, and group-instance id derivation
+    ├── ResolvedTeamsReader.cs             ReadDynamicTeamFolders(cacheRootPath) — reads resolved-teams.json
+    ├── EffectiveTeams.cs                  Union(staticTeams, dynamicTeams) — de-duplicated, ordinal-ignore-case
     └── AppConfiguration.cs                typed accessor over IConfiguration for the NewsCentral authoring app (admin creds via Initialization:*, DataPath, distribution, Azure/HMAC)
 ```
 
@@ -82,6 +89,17 @@ NewsService\
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
 │   ├── LockScreenService.cs       ILockScreenService — read/write PersonalizationCSP (lock-screen only; SYSTEM context)
 │   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
+│   ├── IDeviceIdentityProvider.cs   seam for DeviceIdentityProvider
+│   ├── DeviceIdentityProvider.cs    local Entra AD DeviceId read (registry / dsregcmd fallback)
+│   ├── IEntraDeviceClient.cs        seam for EntraDeviceClient
+│   ├── EntraDeviceClient.cs         Graph device fetch — extensionAttributes via AdditionalData (Kiota UntypedObject)
+│   ├── EntraExtensionAttributeMapper.cs   maps device AdditionalData → the 15-attribute dictionary
+│   ├── IEntraGroupClient.cs         seam for EntraGroupClient; EntraGroupSnapshot / EntraGroupStatus
+│   ├── EntraGroupClient.cs          Graph group name→id resolution + batched checkMemberGroups snapshot
+│   ├── GraphFailureClassifier.cs    pure exception → GraphFailureKind (persistent vs transient)
+│   ├── GroupOutcomeMapper.cs        pure EntraGroupSnapshot → EntraSourceOutcome, incl. global-exclusion fail-closed
+│   ├── GroupMembershipChunker.cs    pure checkMemberGroups 20-id chunking + id→name mapping
+│   ├── EntraTeamResolutionService.cs   orchestrates one Entra resolution cycle; writes resolved-teams.json
 │   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
 ├── Worker.cs                      BackgroundService host; reads interval from configuration

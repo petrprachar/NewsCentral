@@ -49,11 +49,20 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 ├── Entra\
 │       Enabled              REG_SZ    "true" or "false"  (default false; gates the whole feature)
 │       GracePeriodMinutes   REG_SZ    (int retention window in minutes for the last resolved team while Graph is unreachable; default 240; MUST be REG_SZ — 0 = "no grace" is deliberate, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
-│       Mappings\
-│           FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
-│           VDE   REG_SZ   "extensionAttribute3"
-│           VDL   REG_SZ   "extensionAttribute6-extensionAttribute2"
-│       (selector → rule; surfaced as Entra:Enabled / Entra:GracePeriodMinutes / Entra:Mappings:FAT via the recursive walk)
+│       MaxDynamicTeams      REG_SZ    (int cap on total dynamic teams written across both sources; 0 = no cap; default 16; MUST be REG_SZ — DWORD 0/1 coerce to "False"/"True" and the int binder throws)
+│       AttributeSchemes\
+│           <schemeName>\
+│               Selector   REG_SZ   "extensionAttribute1"
+│               Mappings\
+│                   FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
+│       GroupTeams\
+│           ExclusionGroup   REG_SZ   (fleet-wide kill switch; empty = none)
+│           Instances\
+│               <label>\
+│                   InclusionGroup   REG_SZ   (required; activates the instance)
+│                   ExclusionGroup   REG_SZ   (optional, per-instance)
+│       (one attribute scheme per <schemeName>, one group instance per <label>; both multi-instance —
+│        see docs/entra-dynamic-teams.md; surfaced via the same recursive registry walk)
 ├── Delivery\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
 ├── Telemetry\
@@ -211,10 +220,11 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
   "Entra": {
     "Enabled": false,
     "GracePeriodMinutes": 240,
-    "Mappings": {},
-    "GroupTeam": {
-      "InclusionGroup": "",
-      "ExclusionGroup": ""
+    "MaxDynamicTeams": 16,
+    "AttributeSchemes": {},
+    "GroupTeams": {
+      "ExclusionGroup": "",
+      "Instances": {}
     }
   },
   "Delivery": {
