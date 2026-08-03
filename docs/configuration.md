@@ -327,14 +327,19 @@ The attribute source is **multi-instance**: zero or more independently-configure
       }
     }
   },
-  "GroupTeam": {
-    "InclusionGroup": "",
-    "ExclusionGroup": ""
+  "GroupTeams": {
+    "ExclusionGroup": "",
+    "Instances": {
+      "prague-its": {
+        "InclusionGroup": "NewsCentral Prague ITS",
+        "ExclusionGroup": ""
+      }
+    }
   }
 }
 ```
 
-Ship `AttributeSchemes` **empty** in the shipped `appsettings.json` — configuration layers merge dictionaries key-by-key, so a scheme defined in `appsettings.json` cannot be deleted by the registry. Keeping the base file empty leaves the registry/GPO hive authoritative for which schemes exist. The former flat `Entra:Mappings` key is **removed and no longer read** — there is exactly one way to configure the attribute source now.
+Ship `AttributeSchemes` and `GroupTeams:Instances` **empty** in the shipped `appsettings.json` — configuration layers merge dictionaries key-by-key, so an entry defined in `appsettings.json` cannot be deleted by the registry. Keeping the base file empty leaves the registry/GPO hive authoritative for which schemes and group instances exist. The former flat `Entra:Mappings` and `Entra:GroupTeam` keys are **removed and no longer read** — there is exactly one way to configure each source now.
 
 **Registry layout** (override; surfaced via the recursive walk in `RegistryConfigurationProvider`):
 
@@ -347,22 +352,33 @@ HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
             Selector   REG_SZ   "extensionAttribute1"
             Mappings\
                 FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
-    GroupTeam\
-        InclusionGroup   REG_SZ   "NewsCentral Prague ITS"
-        ExclusionGroup   REG_SZ   "Excluded Devices"   (optional; empty = no exclusion)
+    GroupTeams\
+        ExclusionGroup   REG_SZ   (fleet-wide kill switch; empty = none)
+        Instances\
+            <label>\
+                InclusionGroup   REG_SZ   (required; activates the instance)
+                ExclusionGroup   REG_SZ   (optional, per-instance)
 ```
 
-`Entra:AttributeSchemes:{schemeName}:Selector`, `Entra:AttributeSchemes:{schemeName}:Mappings:{selectorValue}`, and `Entra:GroupTeam:InclusionGroup` etc. bind into `EntraOptions` automatically — no provider change; the existing recursive registry walk handles arbitrary nesting.
+`Entra:AttributeSchemes:{schemeName}:Selector`, `Entra:AttributeSchemes:{schemeName}:Mappings:{selectorValue}`, `Entra:GroupTeams:ExclusionGroup`, and `Entra:GroupTeams:Instances:{label}:InclusionGroup` etc. bind into `EntraOptions` automatically — no provider change; the existing recursive registry walk handles arbitrary nesting.
 
 **Scheme naming and validation.** A scheme name (the dictionary key / registry subkey name) is the grace-partition instance id and must match `[A-Za-z0-9._-]+` — a name containing `:` would corrupt the configuration path, and one containing `\` cannot exist as a registry subkey. An invalidly-named scheme is skipped (logged at Warning) and is **not** part of the active instance set, so any team it may previously have produced is pruned without grace on the next cycle. A scheme's `Selector` must be `extensionAttribute1`..`extensionAttribute15`; a blank or malformed `Selector` fails that scheme closed (logged at Warning) rather than falling back to a default. One team max per scheme.
 
-**Group-membership team (`Entra:GroupTeam`):** a second, independent dynamic-team source. When `InclusionGroup` is set, NewsService resolves the device's transitive membership (one `checkMemberGroups` call) and resolves **one** group team when the device is in the inclusion group and **not** in the (optional) exclusion group; the team folder name is the canonicalized inclusion-group display name (same canonicalization as attribute teams). An **empty `InclusionGroup` disables** the source (and removes any previously resolved group team). It contributes to `resolved-teams.json` tagged `Source: Group`, unioned and verified exactly like attribute teams. Requires the `GroupMember.Read.All` Graph permission (below).
+**Group-membership teams (`Entra:GroupTeams`):** the group source is **multi-instance** — zero or more independently-configured named inclusion/exclusion pairs under `Instances`, plus one fleet-wide `ExclusionGroup`. Each instance resolves **at most one** dynamic team when the device is a transitive member of its `InclusionGroup` and **not** a member of its own (optional) `ExclusionGroup` **nor** of the fleet-wide `ExclusionGroup`; the team folder name is the canonicalized `InclusionGroup` display name (same canonicalization as attribute teams). Contributes to `resolved-teams.json` tagged `Source: Group`, unioned and verified exactly like attribute teams. Requires the `GroupMember.Read.All` Graph permission (below).
+
+**The instance label is a diagnostic convenience, not the instance identity.** The dictionary key / registry subkey under `Instances` (e.g. `prague-its`) is an operator-facing label — it locates the instance in regedit/GPO and appears in logs, nothing more. The actual instance id (the grace-partition key, `(Group, {id})`) and the team folder name are **both** `Canonicalize(InclusionGroup)` — the same string, derived, never authored. Renaming the label retargets nothing; changing `InclusionGroup` does. Recommend a short label (`prague-its`) rather than restating the derived id. Two instances whose `InclusionGroup` values canonicalize to the same id **collide**: the first by label (ordinal-ignore-case) wins and is kept active; the rest are skipped with a Warning naming both labels and the derived id.
+
+**A blank `InclusionGroup` on an instance skips that instance** (logged at Warning) — it contributes no key, and any team it may previously have produced is pruned without grace on the next cycle (the same `activeKeys` rule that prunes a removed attribute scheme). This differs from the pre-M3 single-instance behavior, where a blank inclusion actively emitted a clean removal for the singleton key; pruning now does that job.
+
+**The fleet-wide `ExclusionGroup` fails closed.** It is group-scoped (never affects attribute schemes) and applies to **every** active group instance on the machine. If its display name cannot be resolved (not found / ambiguous), NewsService suppresses **all** group instances for that cycle — the safe failure mode for a kill switch is to keep killing, not to silently stop — and logs **exactly one** `Error` line per cycle naming the group, regardless of how many instances are affected.
 
 **Rule format:** each scheme's `Selector` attribute on the device selects a rule from that scheme's `Mappings` (ordinal, case-sensitive match on the selector's value). The mapped rule is a `'-'`-joined, ordered list of attribute names drawn from `extensionAttribute1`..`extensionAttribute15`, **except the scheme's own selector attribute** (a rule may not reference the attribute that selected it; 0 and 16+ are invalid regardless). NewsService reads each referenced attribute, joins the values in **rule order** with `-`, and canonicalizes (lower-case; space/underscore → `-`; strip anything outside `[a-z0-9-]`) into a team folder name — byte-for-byte identical to an authored folder built from the same tokens. Any empty referenced attribute aborts resolution for that scheme this cycle.
 
-**Grace (per key, persistent vs transient):** when the device/Graph is **unreachable** (network/timeout/throttling/5xx), each key's — each attribute scheme's, and the group's — last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer — device read OK but no/invalid mapping for that scheme, or not-in-inclusion/excluded/unresolved group name (group), or device object not found — removes that key's entry **immediately**. A **403** on either the device read or the group check is **persistent**: it removes promptly (logged at Error), never grace. Every scheme and the group source grace independently. A scheme removed from configuration is pruned **without grace** on the next cycle — the configured instance set is read locally and is authoritative even when Graph is unreachable.
+**Grace (per key, persistent vs transient):** when the device/Graph is **unreachable** (network/timeout/throttling/5xx), each key's — each attribute scheme's, and each group instance's — last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer — device read OK but no/invalid mapping for that scheme, or not-in-inclusion/excluded/unresolved group name for that instance, or device object not found — removes that key's entry **immediately**. A **403** on either the device read or the group check is **persistent**: it removes promptly (logged at Error), never grace. Every scheme and every group instance grace independently. An instance removed from configuration, or whose `InclusionGroup` changes (which changes its derived id), is pruned **without grace** on the next cycle and — if retargeted — starts fresh under its new id; the configured instance set is read locally and is authoritative even when Graph is unreachable.
 
-**No configured schemes and no group.** When `AttributeSchemes` is empty (or every entry is invalidly named) and `GroupTeam:InclusionGroup` is blank, NewsService skips the Graph device fetch entirely for that cycle — there is nothing to resolve — and prunes any stale entries.
+**No configured schemes and no group instances.** When `AttributeSchemes` is empty (or every entry is invalidly named) and `GroupTeams:Instances` yields no valid instance (empty, all blank, or all invalidly configured), NewsService skips the Graph device fetch entirely for that cycle — there is nothing to resolve — and prunes any stale entries.
+
+**Batched membership check.** Regardless of how many group instances are active, NewsService resolves the full set of distinct group display names referenced that cycle (every instance's `InclusionGroup` and non-blank `ExclusionGroup`, plus the global `ExclusionGroup` if set) and evaluates the device's membership in one pass — one `checkMemberGroups` Graph call per 20 distinct groups (the Graph limit), not one call per instance. A name that fails to resolve isolates to the instance(s) referencing it; a transport-level failure (unreachable, or 403) is global to the whole batch.
 
 **Credential reuse:** the Microsoft Graph reads use the **same `AzureBlob` credential and app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**.
 

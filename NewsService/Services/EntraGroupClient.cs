@@ -6,12 +6,13 @@ namespace NewsService.Services;
 
 /// <summary>
 /// Resolves group display names to object ids and evaluates the device's transitive group
-/// membership via Microsoft Graph. Reuses the same lazily-built <see cref="GraphServiceClient"/> /
-/// credential as <see cref="EntraDeviceClient"/> — nothing is constructed when Entra is disabled.
+/// membership via Microsoft Graph, for a whole set of names in one batch. Reuses the same
+/// lazily-built <see cref="GraphServiceClient"/> / credential as <see cref="EntraDeviceClient"/> —
+/// nothing is constructed when Entra is disabled or the requested name set is empty.
 ///
 /// This is the only environment-bound part of the group-team feature; the decision logic
-/// (<see cref="GroupTeamDecision"/>, <see cref="GroupOutcomeMapper"/>) and the orchestrator are
-/// pure / fake-tested.
+/// (<see cref="GroupTeamDecision"/>, <see cref="GroupOutcomeMapper"/>), the chunking/mapping helper
+/// (<see cref="GroupMembershipChunker"/>), and the orchestrator are pure / fake-tested.
 /// </summary>
 public sealed class EntraGroupClient(
     AzureBlobSection azureBlob,
@@ -39,63 +40,83 @@ public sealed class EntraGroupClient(
             : new GraphServiceClient(transportFactory.GraphHttpClient, credential, GraphScopes);
     }
 
-    public async Task<EntraGroupEvaluation> EvaluateAsync(
-        string deviceObjectId, string? inclusionName, string? exclusionName, CancellationToken ct)
+    public async Task<EntraGroupSnapshot> EvaluateAsync(
+        string deviceObjectId, IReadOnlyCollection<string> groupNames, CancellationToken ct)
     {
+        var distinctNames = groupNames
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (distinctNames.Count == 0)
+            return Empty(EntraGroupStatus.Success);
+
         try
         {
-            // 1. Resolve the inclusion group (required). The caller (orchestrator) only invokes this
-            //    when an inclusion group is configured; guard defensively all the same.
-            if (string.IsNullOrWhiteSpace(inclusionName))
-                return new EntraGroupEvaluation(EntraGroupStatus.Success, InInclusion: false);
+            // 1. Resolve every distinct name. Names that don't resolve simply carry their failure
+            //    status — they contribute no id to the membership check below.
+            var nameStatus = new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase);
+            var idToName   = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            var (incStatus, inclusionId) = await ResolveGroupIdAsync(inclusionName, ct);
-            if (incStatus != EntraGroupStatus.Success)
-                return new EntraGroupEvaluation(incStatus);
-
-            // 2. Resolve the exclusion group if configured. A misconfigured exclusion name fails
-            //    closed (its resolution status is returned → no team) rather than silently granting.
-            string? exclusionId = null;
-            if (!string.IsNullOrWhiteSpace(exclusionName))
+            foreach (var name in distinctNames)
             {
-                var (excStatus, id) = await ResolveGroupIdAsync(exclusionName, ct);
-                if (excStatus != EntraGroupStatus.Success)
-                    return new EntraGroupEvaluation(excStatus);
-                exclusionId = id;
+                var (status, id) = await ResolveGroupIdAsync(name, ct);
+                nameStatus[name] = status;
+                if (status == EntraGroupStatus.Success && id is not null)
+                    idToName[id] = name;
             }
 
-            // 3. One checkMemberGroups call evaluates both groups (transitive membership).
-            var groupIds = exclusionId is null ? [inclusionId!] : new List<string> { inclusionId!, exclusionId };
+            // 2. If NO name resolved, there is nothing to check membership for — skip the Graph call.
+            var memberOfNames = idToName.Count == 0
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : GroupMembershipChunker.MapMembership(
+                    await CheckMembershipChunksAsync(deviceObjectId, idToName.Keys.ToList(), ct),
+                    idToName);
 
+            return new EntraGroupSnapshot(EntraGroupStatus.Success, nameStatus, memberOfNames);
+        }
+        catch (Exception ex)
+        {
+            // 403 is persistent (missing GroupMember.Read.All consent); everything else — including an
+            // unexpected 404 on these calls — is treated as transient (Unreachable → grace). A failure
+            // in any chunk fails the WHOLE snapshot — never return partial membership, which would
+            // read as "not a member" and could wrongly grant a team past an exclusion.
+            if (GraphFailureClassifier.Classify(ex) == GraphFailureKind.PermissionDenied)
+            {
+                logger.LogError(ex,
+                    "Entra group check denied (403) — check GroupMember.Read.All admin consent.");
+                return Empty(EntraGroupStatus.PermissionDenied);
+            }
+
+            logger.LogWarning(ex, "Entra group check failed (transient) — treated as Unreachable.");
+            return Empty(EntraGroupStatus.Unreachable);
+        }
+    }
+
+    /// <summary>
+    /// Issues one <c>checkMemberGroups</c> call per <see cref="GroupMembershipChunker.ChunkSize"/>
+    /// ids and returns each call's raw member-id result set (unmapped) — <see cref="EvaluateAsync"/>
+    /// unions and maps them back to display names via <see cref="GroupMembershipChunker.MapMembership"/>.
+    /// </summary>
+    private async Task<List<IReadOnlyCollection<string>>> CheckMembershipChunksAsync(
+        string deviceObjectId, IReadOnlyList<string> ids, CancellationToken ct)
+    {
+        var results = new List<IReadOnlyCollection<string>>();
+
+        foreach (var chunk in GroupMembershipChunker.Chunk(ids))
+        {
             var body = new Microsoft.Graph.Devices.Item.CheckMemberGroups.CheckMemberGroupsPostRequestBody
             {
-                GroupIds = groupIds
+                GroupIds = chunk.ToList()
             };
 
             var resp = await Graph.Devices[deviceObjectId].CheckMemberGroups
                 .PostAsCheckMemberGroupsPostResponseAsync(body, cancellationToken: ct);
 
-            var member = resp?.Value ?? [];
-
-            return new EntraGroupEvaluation(
-                EntraGroupStatus.Success,
-                InInclusion: member.Contains(inclusionId!),
-                InExclusion: exclusionId is not null && member.Contains(exclusionId));
+            results.Add(resp?.Value ?? []);
         }
-        catch (Exception ex)
-        {
-            // 403 is persistent (missing GroupMember.Read.All consent); everything else — including an
-            // unexpected 404 on these calls — is treated as transient (Unreachable → grace).
-            if (GraphFailureClassifier.Classify(ex) == GraphFailureKind.PermissionDenied)
-            {
-                logger.LogError(ex,
-                    "Entra group check denied (403) — check GroupMember.Read.All admin consent.");
-                return new EntraGroupEvaluation(EntraGroupStatus.PermissionDenied);
-            }
 
-            logger.LogWarning(ex, "Entra group check failed (transient) — treated as Unreachable.");
-            return new EntraGroupEvaluation(EntraGroupStatus.Unreachable);
-        }
+        return results;
     }
 
     /// <summary>
@@ -123,6 +144,11 @@ public sealed class EntraGroupClient(
         _nameToId[name] = id;                                  // cache only a clean single match
         return (EntraGroupStatus.Success, id);
     }
+
+    private static EntraGroupSnapshot Empty(EntraGroupStatus status) =>
+        new(status,
+            new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase));
 
     /// <summary>Escapes single quotes for an OData string literal ( ' → '' ).</summary>
     private static string EscapeODataLiteral(string value) => value.Replace("'", "''");

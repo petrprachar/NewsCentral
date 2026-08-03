@@ -47,8 +47,11 @@ public class EntraOptions
     /// </summary>
     public Dictionary<string, AttributeSchemeOptions> AttributeSchemes { get; set; } = new();
 
-    /// <summary>Group-membership dynamic team (inclusion ∧ ¬exclusion). Inert until G2 wires the resolver.</summary>
-    public GroupTeamOptions GroupTeam { get; set; } = new();
+    /// <summary>
+    /// Group-membership dynamic teams: a fleet-wide exclusion plus named instances. Each instance
+    /// resolves at most one team, keyed (Group, Canonicalize(InclusionGroup)).
+    /// </summary>
+    public GroupTeamsOptions GroupTeams { get; set; } = new();
 }
 
 public class AttributeSchemeOptions
@@ -58,6 +61,22 @@ public class AttributeSchemeOptions
 
     /// <summary>Selector value → rule (e.g. "FAT" → "extensionAttribute2-extensionAttribute5").</summary>
     public Dictionary<string, string> Mappings { get; set; } = new();
+}
+
+public class GroupTeamsOptions
+{
+    /// <summary>
+    /// Fleet-wide kill switch. Membership suppresses EVERY group instance on this machine.
+    /// Empty = no global exclusion. Group-scoped: never affects attribute schemes.
+    /// </summary>
+    public string ExclusionGroup { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Named group-team instances. The dictionary key is an operator-facing LABEL used for
+    /// diagnostics and collision tie-breaking only — the instance id is derived from
+    /// InclusionGroup, not from this name.
+    /// </summary>
+    public Dictionary<string, GroupTeamOptions> Instances { get; set; } = new();
 }
 
 public class GroupTeamOptions

@@ -54,31 +54,41 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
     private sealed class FakeGroupClient : IEntraGroupClient
     {
-        private readonly EntraGroupEvaluation _eval;
+        private readonly EntraGroupSnapshot _snapshot;
         private readonly bool _failIfCalled;
         public int Calls { get; private set; }
 
-        private FakeGroupClient(EntraGroupEvaluation eval, bool failIfCalled)
+        private FakeGroupClient(EntraGroupSnapshot snapshot, bool failIfCalled)
         {
-            _eval = eval;
+            _snapshot = snapshot;
             _failIfCalled = failIfCalled;
         }
 
-        public static FakeGroupClient With(EntraGroupStatus status, bool inInclusion = false, bool inExclusion = false)
-            => new(new EntraGroupEvaluation(status, inInclusion, inExclusion), failIfCalled: false);
+        public static FakeGroupClient With(EntraGroupSnapshot snapshot) => new(snapshot, failIfCalled: false);
 
-        /// <summary>A group client that must not be invoked (e.g. inclusion group empty).</summary>
+        /// <summary>A group client that must not be invoked (e.g. no group instances configured).</summary>
         public static FakeGroupClient NeverCalled() =>
-            new(new EntraGroupEvaluation(EntraGroupStatus.Unreachable), failIfCalled: true);
+            new(Snapshot(EntraGroupStatus.Unreachable), failIfCalled: true);
 
-        public Task<EntraGroupEvaluation> EvaluateAsync(
-            string deviceObjectId, string? inclusionName, string? exclusionName, CancellationToken ct)
+        public Task<EntraGroupSnapshot> EvaluateAsync(
+            string deviceObjectId, IReadOnlyCollection<string> groupNames, CancellationToken ct)
         {
             Calls++;
             if (_failIfCalled)
                 throw new InvalidOperationException("group client must not be called this cycle");
-            return Task.FromResult(_eval);
+            return Task.FromResult(_snapshot);
         }
+
+        public static EntraGroupSnapshot Snapshot(
+            EntraGroupStatus status,
+            IReadOnlyDictionary<string, EntraGroupStatus>? nameStatus = null,
+            IReadOnlyCollection<string>? memberOf = null) =>
+            new(status,
+                nameStatus ?? new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(memberOf ?? [], StringComparer.OrdinalIgnoreCase));
+
+        public static Dictionary<string, EntraGroupStatus> Resolved(params string[] names) =>
+            names.ToDictionary(n => n, _ => EntraGroupStatus.Success, StringComparer.OrdinalIgnoreCase);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -94,15 +104,16 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     private EntraTeamResolutionService CreateService(
         string dir, bool enabled, IDeviceIdentityProvider identity, IEntraDeviceClient client,
         Dictionary<string, AttributeSchemeOptions>? schemes = null, int graceMinutes = 240,
-        IEntraGroupClient? group = null, string inclusion = "", string exclusion = "")
+        IEntraGroupClient? group = null,
+        Dictionary<string, GroupTeamOptions>? groupInstances = null, string globalExclusion = "")
     {
         var cfg = new ServiceConfiguration();
         cfg.Service.CacheRootPath = dir;
         cfg.Entra.Enabled = enabled;
         cfg.Entra.GracePeriodMinutes = graceMinutes;
         cfg.Entra.AttributeSchemes = schemes ?? new();
-        cfg.Entra.GroupTeam.InclusionGroup = inclusion;
-        cfg.Entra.GroupTeam.ExclusionGroup = exclusion;
+        cfg.Entra.GroupTeams.Instances = groupInstances ?? new();
+        cfg.Entra.GroupTeams.ExclusionGroup = globalExclusion;
 
         return new EntraTeamResolutionService(
             cfg, identity, client, group ?? FakeGroupClient.NeverCalled(),
@@ -116,6 +127,13 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     private static Dictionary<string, AttributeSchemeOptions> OneScheme(
         string name, Dictionary<string, string>? mappings = null, string selector = "extensionAttribute1") =>
         new() { [name] = Scheme(mappings, selector) };
+
+    private static GroupTeamOptions GroupInstance(string inclusion, string exclusion = "") =>
+        new() { InclusionGroup = inclusion, ExclusionGroup = exclusion };
+
+    private static Dictionary<string, GroupTeamOptions> OneGroupInstance(
+        string label, string inclusion, string exclusion = "") =>
+        new() { [label] = GroupInstance(inclusion, exclusion) };
 
     private static void WriteFile(string dir, ResolvedTeamsFile file) =>
         File.WriteAllText(Path.Combine(dir, FileName),
@@ -320,14 +338,16 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     public async Task Found_AttributeAndGroupBothResolve_TwoActiveEntries()
     {
         var dir = NewTempDir();
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("Grp Team"), memberOf: ["Grp Team"]);
+
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId),
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"), group: FakeGroupClient.With(snapshot));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -344,13 +364,13 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Found_InclusionEmpty_EmitsGroupNoTeam_RemovesPriorGroupEntry()
+    public async Task Found_NoGroupInstancesConfigured_RemovesPriorGroupEntry()
     {
         var dir = NewTempDir();
         WriteFile(dir, new ResolvedTeamsFile
         {
             GeneratedUtc = DateTime.UtcNow,
-            Teams = [Entry("old-grp", DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group)]
+            Teams = [Entry("old-grp", DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group, sourceId: "old-grp")]
         });
 
         var svc = CreateService(dir, enabled: true,
@@ -359,8 +379,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.NeverCalled(),   // inclusion empty → group client must not be called
-            inclusion: "");
+            group: FakeGroupClient.NeverCalled());   // no group instances configured → group client must not be called
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -379,8 +398,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.PermissionDenied),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"),
+            group: FakeGroupClient.With(FakeGroupClient.Snapshot(EntraGroupStatus.PermissionDenied)));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -393,14 +412,18 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     public async Task Found_GroupNameAmbiguous_NoGroupEntry_AttributeUnaffected()
     {
         var dir = NewTempDir();
+        var nameStatus = new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Grp Team"] = EntraGroupStatus.NameAmbiguous,
+        };
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId),
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.NameAmbiguous),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"),
+            group: FakeGroupClient.With(FakeGroupClient.Snapshot(EntraGroupStatus.Success, nameStatus)));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -420,15 +443,15 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             Teams =
             [
                 Entry("cz-its",   confirmed, source: ResolvedTeamSource.Attribute, sourceId: "primary"),
-                Entry("grp-team", confirmed, source: ResolvedTeamSource.Group),
+                Entry("grp-team", confirmed, source: ResolvedTeamSource.Group, sourceId: "grp-team"),
             ]
         });
 
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.NeverCalled(),   // device unreachable short-circuits before group
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"),
+            group: FakeGroupClient.NeverCalled());   // device unreachable short-circuits before group
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -450,15 +473,15 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             Teams =
             [
                 Entry("cz-its",   DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Attribute, sourceId: "primary"),
-                Entry("grp-team", DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group),
+                Entry("grp-team", DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group, sourceId: "grp-team"),
             ]
         });
 
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.PermissionDenied),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.NeverCalled(),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"),
+            group: FakeGroupClient.NeverCalled());
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -473,7 +496,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         WriteFile(dir, new ResolvedTeamsFile
         {
             GeneratedUtc = DateTime.UtcNow.AddMinutes(-50),
-            Teams = [Entry("grp-team", confirmed, source: ResolvedTeamSource.Group)]
+            Teams = [Entry("grp-team", confirmed, source: ResolvedTeamSource.Group, sourceId: "grp-team")]
         });
 
         var svc = CreateService(dir, enabled: true,
@@ -482,8 +505,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.Unreachable),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"),
+            group: FakeGroupClient.With(FakeGroupClient.Snapshot(EntraGroupStatus.Unreachable)));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -502,21 +525,23 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
     // ── SourceId (key-with-instance) ──────────────────────────────────────────
 
-    // Before M2, both sources shared the legacy empty SourceId. After M2, the attribute source is
-    // multi-instance and always carries its configured scheme name — only the (still
-    // single-instance) group source keeps the empty legacy id.
+    // Before M3, the group source was a legacy singleton and always carried SourceId "". After M3,
+    // the group source is multi-instance and the SourceId is DERIVED — Canonicalize(InclusionGroup),
+    // identical to the team folder name — so it is never "" for an active instance.
     [Fact]
-    public async Task Found_AttributeAndGroupBothResolve_AttributeCarriesSchemeId_GroupCarriesEmptySourceId()
+    public async Task Found_AttributeAndGroupBothResolve_BothCarryDerivedSourceIds()
     {
         var dir = NewTempDir();
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("Grp Team"), memberOf: ["Grp Team"]);
+
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId),
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"), group: FakeGroupClient.With(snapshot));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -524,10 +549,10 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         Assert.Equal(2, teams.Count);
 
         var attr = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Attribute);
-        Assert.Equal("primary", attr.SourceId);
+        Assert.Equal("primary", attr.SourceId);   // authored scheme name — unchanged from M2
 
         var grp = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Group);
-        Assert.Equal("", grp.SourceId);
+        Assert.Equal("grp-team", grp.SourceId);   // derived from InclusionGroup, not the label "grp"
     }
 
     [Fact]
@@ -541,14 +566,16 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
                 source: ResolvedTeamSource.Group, sourceId: "stale")]
         });
 
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("Grp Team"), memberOf: ["Grp Team"]);
+
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId),
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
             schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
-            group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
-            inclusion: "Grp Team");
+            groupInstances: OneGroupInstance("grp", "Grp Team"), group: FakeGroupClient.With(snapshot));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -775,8 +802,227 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         Assert.Equal(withinGrace, only.LastConfirmedUtc, TimeSpan.FromSeconds(1));
     }
 
+    // ── Multiple named group instances + global exclusion (M3) ────────────────
+
     [Fact]
-    public async Task NoSchemesAndNoGroup_SkipsDeviceFetch()
+    public async Task TwoInstances_BothResolve_EntriesCarryDerivedSourceIds()
+    {
+        var dir = NewTempDir();
+        var groupInstances = new Dictionary<string, GroupTeamOptions>
+        {
+            ["pilot-1"] = GroupInstance("NewsCentral Prague ITS"),
+            ["pilot-2"] = GroupInstance("NewsCentral Brno QA"),
+        };
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success,
+            FakeGroupClient.Resolved("NewsCentral Prague ITS", "NewsCentral Brno QA"),
+            memberOf: ["NewsCentral Prague ITS", "NewsCentral Brno QA"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(FoundWith()),
+            groupInstances: groupInstances, group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.Equal(2, teams.Count);
+
+        const string pragueId = "newscentral-prague-its";
+        const string brnoId   = "newscentral-brno-qa";
+
+        var prague = Assert.Single(teams, t => t.SourceId == pragueId);
+        Assert.Equal(pragueId, prague.TeamFolderName);
+
+        var brno = Assert.Single(teams, t => t.SourceId == brnoId);
+        Assert.Equal(brnoId, brno.TeamFolderName);
+    }
+
+    [Fact]
+    public async Task InstanceLabel_DoesNotAppearInResolvedTeams()
+    {
+        var dir = NewTempDir();
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("NewsCentral Prague ITS"),
+            memberOf: ["NewsCentral Prague ITS"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(FoundWith()),
+            groupInstances: OneGroupInstance("pilot-1", "NewsCentral Prague ITS"),
+            group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var raw = File.ReadAllText(Path.Combine(dir, FileName));
+        Assert.DoesNotContain("pilot-1", raw, StringComparison.OrdinalIgnoreCase);
+
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("newscentral-prague-its", only.TeamFolderName);
+        Assert.Equal("newscentral-prague-its", only.SourceId);
+    }
+
+    [Fact]
+    public async Task GlobalExclusionUnresolvable_AllGroupInstancesGoDark_AttributeUnaffected()
+    {
+        var dir = NewTempDir();
+        var groupInstances = new Dictionary<string, GroupTeamOptions>
+        {
+            ["pilot-1"] = GroupInstance("NewsCentral Prague ITS"),
+            ["pilot-2"] = GroupInstance("NewsCentral Brno QA"),
+        };
+        var nameStatus = new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NewsCentral Prague ITS"] = EntraGroupStatus.Success,
+            ["NewsCentral Brno QA"]    = EntraGroupStatus.Success,
+            ["Fleet Kill Switch"]      = EntraGroupStatus.NameNotFound,
+        };
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, nameStatus,
+            memberOf: ["NewsCentral Prague ITS", "NewsCentral Brno QA"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
+            groupInstances: groupInstances, globalExclusion: "Fleet Kill Switch",
+            group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        var only = Assert.Single(teams);
+        Assert.Equal("cz", only.TeamFolderName);
+        Assert.Equal(ResolvedTeamSource.Attribute, only.Source);
+    }
+
+    [Fact]
+    public async Task InstanceExclusionUnresolvable_OnlyThatInstanceAffected()
+    {
+        var dir = NewTempDir();
+        var groupInstances = new Dictionary<string, GroupTeamOptions>
+        {
+            ["pilot-1"] = GroupInstance("NewsCentral Prague ITS", "Bad Exclusion Name"),
+            ["pilot-2"] = GroupInstance("NewsCentral Brno QA"),
+        };
+        var nameStatus = new Dictionary<string, EntraGroupStatus>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NewsCentral Prague ITS"] = EntraGroupStatus.Success,
+            ["NewsCentral Brno QA"]    = EntraGroupStatus.Success,
+            ["Bad Exclusion Name"]     = EntraGroupStatus.NameNotFound,
+        };
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, nameStatus,
+            memberOf: ["NewsCentral Prague ITS", "NewsCentral Brno QA"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(FoundWith()),
+            groupInstances: groupInstances, group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("newscentral-brno-qa", only.TeamFolderName);
+    }
+
+    [Fact]
+    public async Task InclusionGroupChanged_OldKeyPrunedWithoutGrace_NewKeyStartsActive()
+    {
+        var dir = NewTempDir();
+        const string oldId = "newscentral-prague-its";
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams = [Entry(oldId, DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group, sourceId: oldId)]
+        });
+
+        // Same label, retargeted InclusionGroup — the derived id (and thus the key) changes.
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("NewsCentral Brno QA"),
+            memberOf: ["NewsCentral Brno QA"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(FoundWith()),
+            groupInstances: OneGroupInstance("pilot-1", "NewsCentral Brno QA"),
+            group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.DoesNotContain(teams, t => t.SourceId == oldId);
+        var only = Assert.Single(teams);
+        Assert.Equal("newscentral-brno-qa", only.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Active, only.State);
+    }
+
+    [Fact]
+    public async Task TwoInstancesDerivingSameId_FirstByLabelWins()
+    {
+        var dir = NewTempDir();
+        // Both canonicalize to "newscentral-prague-its"; "alpha" < "beta" ordinally, so alpha wins
+        // and only ITS InclusionGroup ("NewsCentral Prague ITS") is evaluated.
+        var groupInstances = new Dictionary<string, GroupTeamOptions>
+        {
+            ["beta"]  = GroupInstance("newscentral prague its"),
+            ["alpha"] = GroupInstance("NewsCentral Prague ITS"),
+        };
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("NewsCentral Prague ITS"),
+            memberOf: ["NewsCentral Prague ITS"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(FoundWith()),
+            groupInstances: groupInstances, group: FakeGroupClient.With(snapshot));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        // The id collides, so only the first-by-label instance survives — exactly one team.
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("newscentral-prague-its", only.TeamFolderName);
+    }
+
+    [Fact]
+    public async Task BlankInclusionGroup_InstanceSkipped_PriorEntryPruned()
+    {
+        var dir = NewTempDir();
+        var confirmed = DateTime.UtcNow.AddMinutes(-5);
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams = [Entry("stale-grp", confirmed, source: ResolvedTeamSource.Group, sourceId: "stale-grp")]
+        });
+
+        // Blank InclusionGroup → the instance is skipped during validation and contributes no key;
+        // with no attribute schemes either, this also exercises the skip-device-fetch path.
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Throwing(),
+            groupInstances: OneGroupInstance("pilot-1", ""));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        Assert.Empty(ReadFile(dir)!.Teams);
+    }
+
+    [Fact]
+    public async Task NoGroupInstances_GroupClientNeverCalled()
+    {
+        var dir = NewTempDir();
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
+            // groupInstances omitted (empty); group omitted → defaults to FakeGroupClient.NeverCalled()
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("cz", only.TeamFolderName);
+    }
+
+    [Fact]
+    public async Task NoSchemesAndNoGroupInstances_SkipsDeviceFetch()
     {
         var dir = NewTempDir();
         WriteFile(dir, new ResolvedTeamsFile
@@ -786,14 +1032,74 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         });
 
         var client = FakeClient.Throwing();   // would surface as a failure if ever invoked
-        var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(DeviceId), client,
-            schemes: new(), inclusion: "");   // nothing configured
+        var svc = CreateService(dir, enabled: true, new FakeIdentity(DeviceId), client);
+        // schemes and groupInstances both default to empty — nothing configured
 
         await svc.RefreshAsync(CancellationToken.None);
 
         Assert.Equal(0, client.Calls);
         Assert.Empty(ReadFile(dir)!.Teams);
+    }
+
+    [Fact]
+    public async Task DeviceUnreachable_AllInstancesGraceIndependently()
+    {
+        var dir = NewTempDir();
+        var withinGrace = DateTime.UtcNow.AddMinutes(-100);   // within 240
+        var beyondGrace = DateTime.UtcNow.AddMinutes(-300);   // past 240
+
+        const string idA = "newscentral-prague-its";
+        const string idB = "newscentral-brno-qa";
+
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams =
+            [
+                Entry(idA, withinGrace, source: ResolvedTeamSource.Group, sourceId: idA),
+                Entry(idB, beyondGrace, source: ResolvedTeamSource.Group, sourceId: idB),
+            ]
+        });
+
+        var groupInstances = new Dictionary<string, GroupTeamOptions>
+        {
+            ["pilot-1"] = GroupInstance("NewsCentral Prague ITS"),
+            ["pilot-2"] = GroupInstance("NewsCentral Brno QA"),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            groupInstances: groupInstances);   // group client not called — device fetch fails first
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        var only = Assert.Single(teams);
+        Assert.Equal(idA, only.SourceId);
+        Assert.Equal(ResolvedTeamState.Grace, only.State);
+        Assert.Equal(withinGrace, only.LastConfirmedUtc, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task StaleLegacyGroupEntry_IsPruned()
+    {
+        var dir = NewTempDir();
+        var confirmed = DateTime.UtcNow.AddMinutes(-5);   // well within grace
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams = [Entry("old-legacy-grp", confirmed, source: ResolvedTeamSource.Group, sourceId: "")]
+        });
+
+        // Entra:GroupTeam (the pre-M3 flat singleton) no longer exists as a concept — "" is not a
+        // configured group instance id.
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            groupInstances: OneGroupInstance("pilot-1", "NewsCentral Prague ITS"));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(ReadFile(dir)!.Teams, t => t.TeamFolderName == "old-legacy-grp");
     }
 
     public void Dispose()

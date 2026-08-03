@@ -68,27 +68,11 @@ public static class EntraTeamNameResolver
         }
 
         // 5. Join in token order, then canonicalize.
-        var canonical = Canonicalize(string.Join('-', values));
+        var canonical = TeamFolderNameCanonicalizer.Canonicalize(string.Join('-', values));
         if (string.IsNullOrEmpty(canonical))
             return new EntraResolutionOutcome(EntraResolutionReason.InvalidRule);
 
         return new EntraResolutionOutcome(EntraResolutionReason.Resolved, canonical);
-    }
-
-    /// <summary>
-    /// Mirrors <c>TeamService.GenerateFolderName</c> (post prefix-removal) byte-for-byte:
-    /// lower-invariant, ' ' and '_' → '-', then strip anything outside [a-z0-9-]. No
-    /// hyphen collapsing or trimming — a resolved name must equal an authored folder
-    /// built from the same tokens. Kept in sync deliberately; do NOT refactor that method
-    /// from here.
-    /// </summary>
-    private static string Canonicalize(string raw)
-    {
-        var sanitized = raw.ToLowerInvariant()
-            .Replace(" ", "-")
-            .Replace("_", "-");
-
-        return Regex.Replace(sanitized, @"[^a-z0-9\-]", "");
     }
 }
 

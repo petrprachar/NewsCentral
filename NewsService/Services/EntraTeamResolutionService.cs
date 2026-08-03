@@ -9,14 +9,15 @@ namespace NewsService.Services;
 /// <summary>
 /// Orchestrates one Entra resolution cycle across two independent sources — the device
 /// extensionAttributes, resolved per **named attribute scheme** (<see cref="EntraOptions.AttributeSchemes"/>),
-/// and group membership (group source) — applies the per-key grace state machine, and atomically
+/// and group membership, resolved per **named group instance** (<see cref="GroupTeamsOptions.Instances"/>)
+/// plus a fleet-wide global exclusion — applies the per-key grace state machine, and atomically
 /// writes {CacheRootPath}\resolved-teams.json.
 ///
 /// Per-key / persistent-vs-transient grace: a 403 on either read is persistent (clean removal +
 /// Error), a device-not-found is authoritative (removal), and transient failures ride the grace
-/// window per key. All keys are evaluated from the single device fetch (the group source adds one
-/// checkMemberGroups call). The device fetch is skipped entirely when nothing is configured to
-/// resolve (no attribute schemes and no group inclusion).
+/// window per key. All keys are evaluated from the single device fetch; all active group instances
+/// are evaluated from one batched Graph membership check. The device fetch is skipped entirely when
+/// nothing is configured to resolve (no attribute schemes and no group instances).
 ///
 /// Never throws to the caller: any failure is logged and treated as Unreachable so a Graph problem
 /// can never stall or fail blob sync.
@@ -33,10 +34,16 @@ public sealed class EntraTeamResolutionService(
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
 
     // A name containing ':' would corrupt the configuration path, and one containing '\' cannot
-    // exist as a registry subkey — so a scheme's instance id is restricted to a safe charset.
+    // exist as a registry subkey — so an attribute scheme's instance id is restricted to a safe
+    // charset. (Group instances need no such check — their id is DERIVED via canonicalization, not
+    // authored; the dictionary key there is an operator-facing label only.)
     private static readonly Regex SchemeNamePattern = new(@"^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
 
-    private static readonly EntraSourceKey GroupKey = EntraSourceKey.Legacy(ResolvedTeamSource.Group);
+    /// <summary>
+    /// One validated, active group instance: the operator-facing label (diagnostics only), the
+    /// derived (Source, SourceId) instance id, and the resolved inclusion/exclusion group names.
+    /// </summary>
+    private readonly record struct GroupInstance(string Label, string Id, string InclusionGroup, string? ExclusionGroup);
 
     private string FilePath =>
         Path.Combine(config.Service.CacheRootPath, ResolvedTeamsFileName);
@@ -56,22 +63,20 @@ public sealed class EntraTeamResolutionService(
                 return;
             }
 
-            var (activeKeys, schemeNames) = ComputeActiveKeys();
-            var hasGroupSource = !string.IsNullOrWhiteSpace(config.Entra.GroupTeam.InclusionGroup);
+            var (activeKeys, schemeNames, groupInstances) = ComputeActiveKeys();
 
             IReadOnlyList<EntraSourceOutcome> outcomes;
-            if (schemeNames.Count == 0 && !hasGroupSource)
+            if (schemeNames.Count == 0 && groupInstances.Count == 0)
             {
-                // Nothing configured to resolve — skip the Graph round trip entirely. The group key
-                // is still active (it's a configured, if inactive, instance), so it gets an explicit
-                // clean NoTeam rather than being left to pass through unchanged; any stale attribute
-                // entries are pruned by the activeKeys filter in the merger (no attribute key is active).
-                logger.LogDebug("Entra enabled but no attribute scheme and no group configured — skipping device fetch.");
-                outcomes = [new EntraSourceOutcome(GroupKey, EntraCycleResult.NoTeam, null)];
+                // Nothing configured to resolve — skip the Graph round trip entirely. activeKeys is
+                // empty in this case, so the merge below prunes every existing entry regardless of
+                // source with no special-casing needed here.
+                logger.LogDebug("Entra enabled but no attribute scheme and no group instance configured — skipping device fetch.");
+                outcomes = [];
             }
             else
             {
-                outcomes = await DetermineOutcomesAsync(schemeNames, activeKeys, ct);
+                outcomes = await DetermineOutcomesAsync(schemeNames, groupInstances, activeKeys, ct);
             }
 
             // Read existing entries (empty if absent/unreadable).
@@ -103,15 +108,17 @@ public sealed class EntraTeamResolutionService(
 
     /// <summary>
     /// Derives the active (Source, SourceId) key set from configuration: one Attribute key per
-    /// validly-named scheme, plus the Group legacy singleton key (the group source is not yet
-    /// multi-instance). Computed fresh each cycle, before the device fetch, so it is available even
-    /// when Graph is unreachable — a scheme removed from configuration prunes its entries without
-    /// grace on the very next cycle. Schemes are returned in a deterministic (ordinal-ignore-case)
-    /// order.
+    /// validly-named scheme, plus one Group key per validated group instance (id derived from
+    /// <c>InclusionGroup</c> via <see cref="TeamFolderNameCanonicalizer"/>). Computed fresh each
+    /// cycle, before the device fetch, so it is available even when Graph is unreachable — an
+    /// instance removed from (or retargeted in) configuration prunes its old entries without grace
+    /// on the very next cycle. Both scheme and instance ordering is deterministic
+    /// (ordinal-ignore-case by label), which matters for collision tie-breaking.
     /// </summary>
-    private (IReadOnlySet<EntraSourceKey> ActiveKeys, IReadOnlyList<string> SchemeNames) ComputeActiveKeys()
+    private (IReadOnlySet<EntraSourceKey> ActiveKeys, IReadOnlyList<string> SchemeNames, IReadOnlyList<GroupInstance> GroupInstances)
+        ComputeActiveKeys()
     {
-        var keys = new HashSet<EntraSourceKey> { GroupKey };
+        var keys = new HashSet<EntraSourceKey>();
         var schemeNames = new List<string>();
 
         foreach (var name in config.Entra.AttributeSchemes.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -127,13 +134,49 @@ public sealed class EntraTeamResolutionService(
             keys.Add(new EntraSourceKey(ResolvedTeamSource.Attribute, name));
         }
 
-        return (keys, schemeNames);
+        var groupInstances = new List<GroupInstance>();
+        var claimedIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);   // id -> claiming label
+
+        foreach (var (label, options) in config.Entra.GroupTeams.Instances
+                     .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+                     .Select(kv => (kv.Key, kv.Value)))
+        {
+            if (string.IsNullOrWhiteSpace(options.InclusionGroup))
+            {
+                logger.LogWarning("Entra group instance '{Label}' has no InclusionGroup — skipped.", label);
+                continue;
+            }
+
+            var id = TeamFolderNameCanonicalizer.Canonicalize(options.InclusionGroup);
+            if (string.IsNullOrEmpty(id))
+            {
+                logger.LogWarning(
+                    "Entra group instance '{Label}': InclusionGroup '{Group}' canonicalizes to an empty id — skipped.",
+                    label, options.InclusionGroup);
+                continue;
+            }
+
+            if (claimedIds.TryGetValue(id, out var firstLabel))
+            {
+                logger.LogWarning(
+                    "Entra group instance '{Label}' derives the same id '{Id}' as an already-active instance ('{ClaimingLabel}' wins by label order) — skipped.",
+                    label, id, firstLabel);
+                continue;
+            }
+
+            claimedIds[id] = label;
+            groupInstances.Add(new GroupInstance(label, id, options.InclusionGroup, options.ExclusionGroup));
+            keys.Add(new EntraSourceKey(ResolvedTeamSource.Group, id));
+        }
+
+        return (keys, schemeNames, groupInstances);
     }
 
     // ── Determine this cycle's per-key outcomes ───────────────────────────────
 
     private async Task<IReadOnlyList<EntraSourceOutcome>> DetermineOutcomesAsync(
-        IReadOnlyList<string> schemeNames, IReadOnlySet<EntraSourceKey> activeKeys, CancellationToken ct)
+        IReadOnlyList<string> schemeNames, IReadOnlyList<GroupInstance> groupInstances,
+        IReadOnlySet<EntraSourceKey> activeKeys, CancellationToken ct)
     {
         // 2. Device id. Must be present AND a GUID — otherwise skip Graph entirely (all keys Unreachable).
         string? deviceId;
@@ -173,10 +216,10 @@ public sealed class EntraTeamResolutionService(
         switch (fetch.Outcome)
         {
             case EntraFetchOutcome.Found:
-                var outcomes = new List<EntraSourceOutcome>(schemeNames.Count + 1);
+                var outcomes = new List<EntraSourceOutcome>(schemeNames.Count + groupInstances.Count);
                 foreach (var name in schemeNames)
                     outcomes.Add(ResolveAttributeOutcome(fetch, name));
-                outcomes.Add(await ResolveGroupOutcomeAsync(fetch, ct));
+                outcomes.AddRange(await ResolveGroupOutcomesAsync(fetch, groupInstances, ct));
                 return outcomes;
 
             case EntraFetchOutcome.NotFound:
@@ -226,55 +269,90 @@ public sealed class EntraTeamResolutionService(
         }
     }
 
-    // ── Group source ────────────────────────────────────────────────────────────
+    // ── Group source (per instance, one batched Graph call) ──────────────────
 
-    private async Task<EntraSourceOutcome> ResolveGroupOutcomeAsync(EntraDeviceFetch fetch, CancellationToken ct)
+    private async Task<IReadOnlyList<EntraSourceOutcome>> ResolveGroupOutcomesAsync(
+        EntraDeviceFetch fetch, IReadOnlyList<GroupInstance> activeInstances, CancellationToken ct)
     {
-        var inclusion = config.Entra.GroupTeam.InclusionGroup;
-        var exclusion = config.Entra.GroupTeam.ExclusionGroup;
+        if (activeInstances.Count == 0) return [];
 
-        // Disabled/cleared group feature emits Group NoTeam (not omit the source) so any stale group
-        // team is removed promptly.
-        if (string.IsNullOrWhiteSpace(inclusion))
-        {
-            logger.LogDebug("Entra group team disabled (no inclusion group) — emitting Group NoTeam.");
-            return new(GroupKey, EntraCycleResult.NoTeam, null);
-        }
-
-        // checkMemberGroups needs the device object id; absent on Found is unexpected → transient.
+        // checkMemberGroups needs the device object id; absent on Found is unexpected → transient
+        // for every active group instance.
         if (string.IsNullOrWhiteSpace(fetch.DeviceObjectId))
         {
             logger.LogWarning("Entra device found but object id missing — group check treated as Unreachable.");
-            return new(GroupKey, EntraCycleResult.Unreachable, null);
+            return activeInstances
+                .Select(i => new EntraSourceOutcome(
+                    new EntraSourceKey(ResolvedTeamSource.Group, i.Id), EntraCycleResult.Unreachable, null))
+                .ToList();
         }
 
-        var eval   = await groupClient.EvaluateAsync(fetch.DeviceObjectId, inclusion, exclusion, ct);
-        var mapped = GroupOutcomeMapper.Map(eval, GroupKey, inclusion, exclusion);
+        var globalExclusion = config.Entra.GroupTeams.ExclusionGroup;
 
-        switch (eval.Status)
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var inst in activeInstances)
         {
-            case EntraGroupStatus.Success when mapped.Result == EntraCycleResult.ResolvedTeam:
-                logger.LogDebug("Entra group team resolved {Team}.", mapped.Team);
-                break;
-            case EntraGroupStatus.Success:
-                logger.LogInformation(
-                    "Entra group evaluated — no team (inInclusion={Inc}, inExclusion={Exc}).",
-                    eval.InInclusion, eval.InExclusion);
-                break;
-            case EntraGroupStatus.PermissionDenied:
-                logger.LogError("Entra group check denied (403) — removing group team.");
-                break;
-            case EntraGroupStatus.NameAmbiguous:
-            case EntraGroupStatus.NameNotFound:
-                logger.LogWarning("Entra group name unresolved ({Status}) — removing group team.", eval.Status);
-                break;
-            default: // Unreachable
-                logger.LogWarning("Entra group check unreachable — grace window applies.");
-                break;
+            names.Add(inst.InclusionGroup);
+            if (!string.IsNullOrWhiteSpace(inst.ExclusionGroup))
+                names.Add(inst.ExclusionGroup);
+        }
+        if (!string.IsNullOrWhiteSpace(globalExclusion))
+            names.Add(globalExclusion);
+
+        var snapshot = await groupClient.EvaluateAsync(fetch.DeviceObjectId, names, ct);
+
+        // Fail-closed mitigation: exactly one Error line per cycle when the fleet-wide kill switch's
+        // own name can't be resolved — never Debug, never gated on change, never repeated per instance.
+        var globalExclusionUnresolved = NameUnresolved(snapshot, globalExclusion);
+        if (globalExclusionUnresolved)
+            logger.LogError(
+                "Entra global group exclusion '{Group}' could not be resolved — suppressing ALL group instances this cycle.",
+                globalExclusion);
+
+        var outcomes = new List<EntraSourceOutcome>(activeInstances.Count);
+        foreach (var inst in activeInstances)
+        {
+            var key    = new EntraSourceKey(ResolvedTeamSource.Group, inst.Id);
+            var mapped = GroupOutcomeMapper.Map(snapshot, key, inst.InclusionGroup, inst.ExclusionGroup, globalExclusion);
+            LogGroupInstanceOutcome(inst, mapped, snapshot, globalExclusionUnresolved);
+            outcomes.Add(mapped);
         }
 
-        return mapped;
+        return outcomes;
     }
+
+    private void LogGroupInstanceOutcome(
+        GroupInstance inst, EntraSourceOutcome mapped, EntraGroupSnapshot snapshot, bool globalExclusionUnresolved)
+    {
+        switch (mapped.Result)
+        {
+            case EntraCycleResult.ResolvedTeam:
+                logger.LogDebug("Entra group instance '{Label}' → team '{Team}'.", inst.Label, mapped.Team);
+                break;
+
+            case EntraCycleResult.Unreachable:
+                logger.LogDebug("Entra group instance '{Label}': Unreachable this cycle (grace applies).", inst.Label);
+                break;
+
+            case EntraCycleResult.NoTeam:
+                if (globalExclusionUnresolved)
+                    logger.LogDebug("Entra group instance '{Label}': suppressed by the unresolved global exclusion.", inst.Label);
+                else if (NameUnresolved(snapshot, inst.InclusionGroup))
+                    logger.LogWarning("Entra group instance '{Label}': inclusion group unresolved — removing.", inst.Label);
+                else if (NameUnresolved(snapshot, inst.ExclusionGroup))
+                    logger.LogWarning("Entra group instance '{Label}': exclusion group unresolved — removing.", inst.Label);
+                else if (snapshot.Status == EntraGroupStatus.PermissionDenied)
+                    logger.LogDebug("Entra group instance '{Label}': no team (permission denied — see Error above).", inst.Label);
+                else
+                    logger.LogDebug("Entra group instance '{Label}': no team (clean answer).", inst.Label);
+                break;
+        }
+    }
+
+    private static bool NameUnresolved(EntraGroupSnapshot snapshot, string? name) =>
+        !string.IsNullOrWhiteSpace(name) &&
+        snapshot.NameStatus.TryGetValue(name, out var status) &&
+        status is EntraGroupStatus.NameNotFound or EntraGroupStatus.NameAmbiguous;
 
     private static IReadOnlyList<EntraSourceOutcome> AllUnreachable(IReadOnlySet<EntraSourceKey> keys) =>
         keys.Select(k => new EntraSourceOutcome(k, EntraCycleResult.Unreachable, null)).ToList();
