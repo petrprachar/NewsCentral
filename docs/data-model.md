@@ -376,24 +376,26 @@ registry comparison self-heals failed applies without a separate state record.
 
 Model: `NewsCentral.Models.ResolvedTeamsFile` (in `NewsCentral.Shared`). Written by NewsService to `{CacheRootPath}\resolved-teams.json` each poll cycle; read by NewsViewer, which **unions** these entries with the registry static team list.
 
-Lists **only** dynamic teams resolved from the device's Entra `extensionAttributes` (see `EntraTeamNameResolver`). It is a **local-tier file**, **unsigned**, and protected by cache ACLs. It carries no signature fields because dynamic-team `index.json` verification uses a public key **delivered with the team content** (key-with-content model — `TeamIndexFile.SigningPublicKey`, verified via `SignatureGate.VerifyWithPrecedence`; see `docs/security.md`).
+Lists **only** dynamic teams — resolved from either the device's Entra `extensionAttributes` (attribute schemes, see `EntraTeamNameResolver`) or group membership (group teams, see `docs/entra-dynamic-teams.md`); never static (registry-configured) teams. It is a **local-tier file**, **unsigned**, and protected by cache ACLs. It carries no signature fields because dynamic-team `index.json` verification uses a public key **delivered with the team content** (key-with-content model — `TeamIndexFile.SigningPublicKey`, verified via `SignatureGate.VerifyWithPrecedence`; see `docs/security.md`).
 
 ```json
 {
   "GeneratedUtc": "2026-06-12T08:12:00Z",
   "Teams": [
     {
-      "TeamFolderName": "cz-prague-its",
+      "TeamFolderName": "newscentral-prague-its",
       "LastConfirmedUtc": "2026-06-12T08:12:00Z",
       "State": "Active",
-      "Source": "Attribute",
-      "SourceId": ""
+      "Source": "Group",
+      "SourceId": "newscentral-prague-its"
     }
   ]
 }
 ```
 
-`State` values: `Active`, `Grace`. `Source` values: `Attribute` (resolved from device `extensionAttributes`) or `Group` (resolved from group membership — see `docs/entra-group-team.md`). `Source` drives **per-source grace** in `EntraResolvedTeamsMerger` (each source carries its own grace window independently) and **defaults to `Attribute`** so pre-feature files with no `Source` field deserialize correctly. `SourceId` identifies **which configured instance** of `Source` produced the entry — empty string `""` is the legacy single-instance source, and defaults to `""` so pre-feature files (which carry no `sourceId`) deserialize unchanged. Together `(Source, SourceId)` is the grace partition key in `EntraResolvedTeamsMerger`, letting several configured instances of the same source (e.g. multiple attribute mapping schemes, multiple inclusion/exclusion group pairs) each carry an independent grace window. **NewsViewer ignores both `Source` and `SourceId`** — it reads only `TeamFolderName` and unions by name. Serializes with the existing camelCase + `JsonStringEnumConverter` options used across NewsService/NewsViewer; no new serializer options are introduced.
+This example is a **group** team: `SourceId` and `TeamFolderName` are both `Canonicalize(InclusionGroup)`, so for a group entry the two fields are always identical by construction (see "Group teams" in `docs/entra-dynamic-teams.md`). An **attribute** entry's `SourceId` is instead the authored scheme name (e.g. `"fat"`), independent of `TeamFolderName`.
+
+`State` values: `Active`, `Grace`. `Source` values: `Attribute` (resolved from device `extensionAttributes`) or `Group` (resolved from group membership — see `docs/entra-dynamic-teams.md`). `Source` drives **per-source grace** in `EntraResolvedTeamsMerger` (each source carries its own grace window independently) and **defaults to `Attribute`** so pre-feature files with no `Source` field deserialize correctly. `SourceId` identifies **which configured instance** of `Source` produced the entry — empty string `""` is the legacy single-instance source, and defaults to `""` so pre-feature files (which carry no `sourceId`) deserialize unchanged. Together `(Source, SourceId)` is the grace partition key in `EntraResolvedTeamsMerger`, letting several configured instances of the same source (e.g. multiple attribute mapping schemes, multiple inclusion/exclusion group pairs) each carry an independent grace window. **NewsViewer ignores both `Source` and `SourceId`** — it reads only `TeamFolderName` and unions by name. Serializes with the existing camelCase + `JsonStringEnumConverter` options used across NewsService/NewsViewer; no new serializer options are introduced.
 
 ## Session Telemetry (NewsViewer → uploads folder)
 

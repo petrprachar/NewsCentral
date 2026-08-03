@@ -2,7 +2,7 @@ namespace NewsCentral.Configuration;
 
 /// <summary>
 /// Pure, I/O-free decision for an Entra group-membership dynamic team (see
-/// <c>docs/entra-group-team.md</c>): inclusion ∧ ¬exclusion ∧ ¬globalExclusion → a team named after
+/// <c>docs/entra-dynamic-teams.md</c>): inclusion ∧ ¬exclusion ∧ ¬globalExclusion → a team named after
 /// the inclusion group. NewsService-only; no Graph / registry / Windows / Azure dependencies.
 ///
 /// The group-membership lookups (<paramref name="deviceInInclusion"/>,

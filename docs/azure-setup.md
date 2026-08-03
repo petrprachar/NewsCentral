@@ -27,7 +27,7 @@ Only NewsCentral (write) and NewsService (read + Graph) authenticate to Azure, w
 | 2 | App registration — **authoring** (interactive) | NewsCentral blob write | `DistributionMode=AzureBlob` |
 | 3 | **Storage account** + container | The distribution tier (blob) | `DistributionMode=AzureBlob` / `StorageMode=Azure` |
 | 4 | **Entra device data** (extensionAttributes / group membership) | Drive dynamic-team resolution | `Entra:Enabled=true` |
-| 5 | **Entra groups** (inclusion / exclusion) | Drive the group-membership team | `Entra:GroupTeam` configured |
+| 5 | **Entra groups** (inclusion / exclusion) | Drive group teams | at least one `Entra:GroupTeams:Instances` entry configured |
 | 6 | **Certificate** | Agent app-only credential (preferred) | `AzureBlob:AuthMode=Certificate` |
 
 Entities 1 and 2 may be combined into one app registration (configured as both public and confidential
@@ -54,8 +54,9 @@ The unattended identity for blob reads and the Graph device/group reads.
 - `Device.Read.All` — read the device object and its extensionAttributes. Needed for any Entra dynamic
   team; omit if `Entra:Enabled=false`.
 - `GroupMember.Read.All` — resolve group display names and check the device's transitive group
-  membership. Needed **only** for the group-membership team (`Entra:GroupTeam`). `Directory.Read.All` is a
-  broad fallback if `GroupMember.Read.All` proves insufficient at runtime (which surfaces as a `403`).
+  membership. Needed **only** when at least one group team is configured (`Entra:GroupTeams`).
+  `Directory.Read.All` is a broad fallback if `GroupMember.Read.All` proves insufficient at runtime
+  (which surfaces as a `403`).
 - No Azure Storage API permission is required for app-only access — storage is governed by RBAC (§3).
 
 **RBAC:** assign the agent service principal a storage role — see §3.
@@ -114,11 +115,14 @@ per-app proxy config). Default `false` = unchanged behavior. See `docs/configura
 Required only when `Entra:Enabled=true`. Each feature is **inert** until the device data is provisioned.
 Devices must be **Entra-joined or Hybrid-joined**.
 
-### 4a. extensionAttributes (attribute-based team)
+### 4a. extensionAttributes (attribute schemes)
 
-Per device, set `extensionAttribute1` = the machine-type selector (`FAT`/`VDE`/`VDL`, matching a key in
-`Entra:Mappings`), plus the attributes (`extensionAttribute2`..`15`) named by that selector's rule. Setting
-these requires `Device.ReadWrite.All` for the **admin** doing the provisioning:
+Per device, set the target scheme's **selector attribute** (e.g. `extensionAttribute1` — each scheme
+configures its own, see `docs/entra-dynamic-teams.md`) to a value matching a key in that scheme's
+`Entra:AttributeSchemes:{scheme}:Mappings` table, plus the attributes named by that selector value's
+rule. Setting these requires `Device.ReadWrite.All` for the **admin** doing the provisioning. Example
+for a scheme configured with selector `extensionAttribute1` and a mapping `FAT` →
+`extensionAttribute2-extensionAttribute4-extensionAttribute5`:
 
 ```powershell
 Connect-MgGraph -Scopes "Device.ReadWrite.All"
@@ -128,30 +132,39 @@ Update-MgDevice -DeviceId $obj.Id -AdditionalProperties @{
                              extensionAttribute4 = "ITS"; extensionAttribute5 = "Prague" } }
 ```
 
-### 4b. Group membership (group-based team)
+### 4b. Group membership (group teams)
 
-See §5 for the groups. Per the group rule, a device gets a team named after the **inclusion** group when
-it is a transitive member of it and not of the **exclusion** group. Provisioning is simply **adding the
-target devices as members** (direct or nested) of the appropriate groups.
+See §5 for the groups. Per configured instance, a device gets a team named after that instance's
+**inclusion** group when it is a transitive member of it and not of that instance's own **exclusion**
+group nor the fleet-wide exclusion group (if configured). Provisioning is simply **adding the target
+devices as members** (direct or nested) of the appropriate groups.
 
 ---
 
-## 5. Entra groups — inclusion / exclusion (group-membership team only)
+## 5. Entra groups — inclusion / exclusion (group teams)
 
-Required only when `Entra:GroupTeam` is configured.
+Required only when at least one instance under `Entra:GroupTeams:Instances` is configured, or the
+fleet-wide `Entra:GroupTeams:ExclusionGroup` is set.
 
-- Create the **inclusion** group and (optionally) the **exclusion** group in Entra.
+- For each group-team instance, create the **inclusion** group and (optionally) a per-instance
+  **exclusion** group in Entra. Optionally also create one **fleet-wide exclusion** group shared
+  across every instance on the machine (`Entra:GroupTeams:ExclusionGroup`).
 - Add target devices as members — membership is evaluated **transitively** (nested groups count).
-- The inclusion group's **display name** becomes the team folder name, canonicalized (lower-case;
-  space/underscore → `-`; strip non-`[a-z0-9-]`; e.g. `NewsCentral Prague ITS` → `newscentral-prague-its`).
-  Publish content under that exact folder name.
-- **Display names must be unique** — an ambiguous inclusion name (more than one matching group) produces
-  no team and is logged. Use a uniquely-named group.
+- Each instance's inclusion group **display name** becomes both that instance's id and its team
+  folder name, canonicalized (lower-case; space/underscore → `-`; strip non-`[a-z0-9-]`; e.g.
+  `NewsCentral Prague ITS` → `newscentral-prague-its`). Publish content under that exact folder name.
+  The registry subkey name under `Instances` (a label) plays no role in this — see
+  `docs/entra-dynamic-teams.md`.
+- **Display names must be unique** — an ambiguous inclusion name (more than one matching group)
+  produces no team for that instance and is logged. Use uniquely-named groups. An unresolvable
+  fleet-wide exclusion name suppresses **every** group instance (fails closed) — see
+  `docs/entra-dynamic-teams.md`.
 
 | Solution key (NewsService) | Value |
 |---|---|
-| `Entra:GroupTeam:InclusionGroup` | inclusion group display name (activates the feature) |
-| `Entra:GroupTeam:ExclusionGroup` | exclusion group display name (optional) |
+| `Entra:GroupTeams:Instances:{label}:InclusionGroup` | inclusion group display name for that instance (activates it) |
+| `Entra:GroupTeams:Instances:{label}:ExclusionGroup` | per-instance exclusion group display name (optional) |
+| `Entra:GroupTeams:ExclusionGroup` | fleet-wide exclusion group display name (optional; fails closed if set but unresolvable) |
 
 ---
 
@@ -174,9 +187,10 @@ cert to each agent machine's `LocalMachine\My` (via GPO; Local System reads this
 | `AzureBlob:AccountName` / `ContainerName` | storage account / container | §3 |
 | `Entra:Enabled` | `true` to enable dynamic teams | choice |
 | `Entra:GracePeriodMinutes` | grace window (default 240) | choice |
-| `Entra:Mappings:{FAT,VDE,VDL}` | selector → attribute rule | §4a |
-| `Entra:GroupTeam:InclusionGroup` | inclusion group display name | §5 |
-| `Entra:GroupTeam:ExclusionGroup` | exclusion group display name (optional) | §5 |
+| `Entra:MaxDynamicTeams` | cap on total dynamic teams written (default 16, `0` = no cap) | choice |
+| `Entra:AttributeSchemes:{scheme}:Selector` / `:Mappings:{value}` | per-scheme selector attribute and selector→rule table | §4a |
+| `Entra:GroupTeams:Instances:{label}:InclusionGroup` / `:ExclusionGroup` | per-instance inclusion/exclusion group display names | §5 |
+| `Entra:GroupTeams:ExclusionGroup` | fleet-wide exclusion group display name (optional) | §5 |
 
 > When `Entra:Enabled=true`, the `AzureBlob` credential fields must be populated **even if
 > `StorageMode=Share`** — the Graph reads reuse the blob credential.

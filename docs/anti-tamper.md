@@ -4,7 +4,7 @@ This is the single-page reference for the content-integrity system: the integrit
 configuration/registry that governs enforcement, the per-module behavior modes, and the
 static-vs-dynamic (Entra) key-trust model. For the phased implementation history see
 `docs/security.md`; for the full registry layout see `docs/configuration.md`; for dynamic-team
-resolution see `docs/entra-group-team.md`.
+resolution see `docs/entra-dynamic-teams.md`.
 
 ## 1. Overview
 
@@ -127,7 +127,7 @@ whatever result precedence produced (so `RequireSignedIndex = true` rejects a `D
 with no registry key and a dynamic team carrying no delivered key alike).
 
 **Why dynamic teams use key-with-content.** Entra-resolved teams (attribute- or group-derived; see
-`docs/entra-group-team.md`) appear at runtime and cannot be pre-provisioned with a registry public
+`docs/entra-dynamic-teams.md`) appear at runtime and cannot be pre-provisioned with a registry public
 key. Instead NewsCentral emits the team's public key **with the content** in
 `TeamIndexFile.SigningPublicKey` (Base64 SPKI, the same form as the registry key) for **all** teams —
 a static consumer ignores it via precedence, a dynamic consumer verifies against it. Whether a team is
@@ -148,7 +148,7 @@ static team.
 signatures** — it is a local-tier file trusted via **`%programdata%` cache ACLs**, holding only team
 identity + grace state. NewsViewer reads only `TeamFolderName` from it and unions those with its
 registry static team list (`EffectiveTeams.Union`); it never writes the file. See
-`docs/data-model.md` (ResolvedTeams) and `docs/entra-group-team.md`.
+`docs/data-model.md` (ResolvedTeams) and `docs/entra-dynamic-teams.md`.
 
 ## 6. Operational notes
 
