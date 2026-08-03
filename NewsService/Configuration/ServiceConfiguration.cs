@@ -41,6 +41,12 @@ public class EntraOptions
     public int GracePeriodMinutes { get; set; } = 240;
 
     /// <summary>
+    /// Upper bound on dynamic teams written to resolved-teams.json. Each dynamic team costs one
+    /// index.json fetch per sync cycle and one index parse per NewsViewer selection pass. 0 = no cap.
+    /// </summary>
+    public int MaxDynamicTeams { get; set; } = 16;
+
+    /// <summary>
     /// Named attribute schemes. Each entry resolves at most one dynamic team from the device's
     /// extensionAttributes and carries its own grace window, keyed (Attribute, {name}). The
     /// dictionary name is the instance id. Empty = the attribute source is inactive.

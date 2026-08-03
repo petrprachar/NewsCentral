@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using NewsCentral.Models;
 using NewsService;
@@ -91,6 +92,28 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             names.ToDictionary(n => n, _ => EntraGroupStatus.Success, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>Minimal in-memory ILogger capture, local to this test class — the suite has no
+    /// shared logger-capture fixture, and this covers only what the cap/summary tests need.</summary>
+    private sealed class FakeLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add((logLevel, formatter(state, exception)));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private string NewTempDir()
@@ -105,19 +128,21 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         string dir, bool enabled, IDeviceIdentityProvider identity, IEntraDeviceClient client,
         Dictionary<string, AttributeSchemeOptions>? schemes = null, int graceMinutes = 240,
         IEntraGroupClient? group = null,
-        Dictionary<string, GroupTeamOptions>? groupInstances = null, string globalExclusion = "")
+        Dictionary<string, GroupTeamOptions>? groupInstances = null, string globalExclusion = "",
+        int maxDynamicTeams = 16, ILogger<EntraTeamResolutionService>? logger = null)
     {
         var cfg = new ServiceConfiguration();
         cfg.Service.CacheRootPath = dir;
         cfg.Entra.Enabled = enabled;
         cfg.Entra.GracePeriodMinutes = graceMinutes;
+        cfg.Entra.MaxDynamicTeams = maxDynamicTeams;
         cfg.Entra.AttributeSchemes = schemes ?? new();
         cfg.Entra.GroupTeams.Instances = groupInstances ?? new();
         cfg.Entra.GroupTeams.ExclusionGroup = globalExclusion;
 
         return new EntraTeamResolutionService(
             cfg, identity, client, group ?? FakeGroupClient.NeverCalled(),
-            NullLogger<EntraTeamResolutionService>.Instance);
+            logger ?? NullLogger<EntraTeamResolutionService>.Instance);
     }
 
     private static AttributeSchemeOptions Scheme(
@@ -1100,6 +1125,156 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         await svc.RefreshAsync(CancellationToken.None);
 
         Assert.DoesNotContain(ReadFile(dir)!.Teams, t => t.TeamFolderName == "old-legacy-grp");
+    }
+
+    // ── MaxDynamicTeams cap (M4) ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task MaxDynamicTeams_TruncatesToCap_DeterministicOrder()
+    {
+        var dir = NewTempDir();
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }, "extensionAttribute1"),
+            ["beta"]  = Scheme(new() { ["FAT"] = "extensionAttribute3" }, "extensionAttribute7"),
+            ["gamma"] = Scheme(new() { ["FAT"] = "extensionAttribute4" }, "extensionAttribute8"),
+        };
+        var logger = new FakeLogger<EntraTeamResolutionService>();
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"), ("extensionAttribute2", "team-a"),
+                ("extensionAttribute7", "FAT"), ("extensionAttribute3", "team-b"),
+                ("extensionAttribute8", "FAT"), ("extensionAttribute4", "team-c"))),
+            schemes: schemes, maxDynamicTeams: 2, logger: logger);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.Equal(2, teams.Count);
+        Assert.Contains(teams, t => t.SourceId == "alpha");
+        Assert.Contains(teams, t => t.SourceId == "beta");
+        Assert.DoesNotContain(teams, t => t.SourceId == "gamma");
+
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task MaxDynamicTeams_Zero_NoCap()
+    {
+        var dir = NewTempDir();
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }, "extensionAttribute1"),
+            ["beta"]  = Scheme(new() { ["FAT"] = "extensionAttribute3" }, "extensionAttribute7"),
+            ["gamma"] = Scheme(new() { ["FAT"] = "extensionAttribute4" }, "extensionAttribute8"),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"), ("extensionAttribute2", "team-a"),
+                ("extensionAttribute7", "FAT"), ("extensionAttribute3", "team-b"),
+                ("extensionAttribute8", "FAT"), ("extensionAttribute4", "team-c"))),
+            schemes: schemes, maxDynamicTeams: 0);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(3, ReadFile(dir)!.Teams.Count);
+    }
+
+    [Fact]
+    public async Task MaxDynamicTeams_NotExceeded_NoTruncationWarning()
+    {
+        var dir = NewTempDir();
+        var logger = new FakeLogger<EntraTeamResolutionService>();
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"), ("extensionAttribute2", "CZ"))),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
+            maxDynamicTeams: 16, logger: logger);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        Assert.Single(ReadFile(dir)!.Teams);
+        Assert.DoesNotContain(logger.Entries, e => e.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task MaxDynamicTeams_TruncationOrder_AttributeBeforeGroup_ThenBySourceId()
+    {
+        var dir = NewTempDir();
+        // "aaa-group" (Group) would sort first if ordering ignored the Source type; the truncation
+        // order must put every Attribute entry ahead of every Group entry regardless of SourceId, so
+        // "zzz-scheme" (Attribute) survives and "aaa-group" (Group) is dropped even though its
+        // SourceId sorts alphabetically earlier.
+        var schemes = OneScheme("zzz-scheme", new() { ["FAT"] = "extensionAttribute2" });
+        var groupInstances = OneGroupInstance("pilot-1", "Aaa Group");   // canonicalizes to "aaa-group"
+        var snapshot = FakeGroupClient.Snapshot(
+            EntraGroupStatus.Success, FakeGroupClient.Resolved("Aaa Group"), memberOf: ["Aaa Group"]);
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"), ("extensionAttribute2", "CZ"))),
+            schemes: schemes, groupInstances: groupInstances, group: FakeGroupClient.With(snapshot),
+            maxDynamicTeams: 1);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("zzz-scheme", only.SourceId);
+        Assert.Equal(ResolvedTeamSource.Attribute, only.Source);
+    }
+
+    // ── Change-gated summary log (M4) ─────────────────────────────────────────
+
+    [Fact]
+    public async Task SummaryLog_ChangedSet_LogsInformation_UnchangedSet_LogsDebug()
+    {
+        var dir = NewTempDir();
+        var logger = new FakeLogger<EntraTeamResolutionService>();
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"), ("extensionAttribute2", "CZ"))),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
+            logger: logger);
+
+        await svc.RefreshAsync(CancellationToken.None);
+        var first = Assert.Single(logger.Entries, e => e.Message.Contains("Entra dynamic teams"));
+        Assert.Equal(LogLevel.Information, first.Level);
+
+        logger.Entries.Clear();
+        await svc.RefreshAsync(CancellationToken.None);   // identical resolved set
+        var second = Assert.Single(logger.Entries, e => e.Message.Contains("Entra dynamic teams"));
+        Assert.Equal(LogLevel.Debug, second.Level);
+    }
+
+    [Fact]
+    public async Task SummaryLog_TransitionToEmptySet_LogsInformationOnce()
+    {
+        var dir = NewTempDir();
+        var logger = new FakeLogger<EntraTeamResolutionService>();
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.NotFound),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
+            logger: logger);
+
+        await svc.RefreshAsync(CancellationToken.None);   // resolves nothing — empty set from the start
+
+        var first = Assert.Single(logger.Entries, e => e.Message.Contains("Entra dynamic teams"));
+        Assert.Equal(LogLevel.Information, first.Level);
+        Assert.Contains("(none)", first.Message);
+
+        logger.Entries.Clear();
+        await svc.RefreshAsync(CancellationToken.None);   // still empty — unchanged
+
+        var second = Assert.Single(logger.Entries, e => e.Message.Contains("Entra dynamic teams"));
+        Assert.Equal(LogLevel.Debug, second.Level);
     }
 
     public void Dispose()

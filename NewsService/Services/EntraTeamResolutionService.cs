@@ -45,6 +45,11 @@ public sealed class EntraTeamResolutionService(
     /// </summary>
     private readonly record struct GroupInstance(string Label, string Id, string InclusionGroup, string? ExclusionGroup);
 
+    // Previous cycle's written-set summary. EntraTeamResolutionService is a singleton and cycles run
+    // sequentially, so a plain field is safe and survives across cycles — same pattern as
+    // SyncService._lastVerifyResult. Drives the change-gated Information/Debug summary line.
+    private string? _lastSummary;
+
     private string FilePath =>
         Path.Combine(config.Service.CacheRootPath, ResolvedTeamsFileName);
 
@@ -60,6 +65,7 @@ public sealed class EntraTeamResolutionService(
                     File.Delete(FilePath);
                     logger.LogInformation("Entra disabled — removed stale {File}.", ResolvedTeamsFileName);
                 }
+                _lastSummary = null;   // next enable is always reported fresh, not "unchanged"
                 return;
             }
 
@@ -87,11 +93,17 @@ public sealed class EntraTeamResolutionService(
                 existing, outcomes, activeKeys,
                 DateTime.UtcNow, TimeSpan.FromMinutes(config.Entra.GracePeriodMinutes));
 
+            // Policy cap — deliberately applied here, not inside the merger, which stays a pure
+            // grace state machine with no truncation or ordering policy of its own.
+            var capped = ApplyCap(merged);
+
+            LogSummary(capped);
+
             // Atomic write.
             WriteAtomically(new ResolvedTeamsFile
             {
                 GeneratedUtc = DateTime.UtcNow,
-                Teams        = merged
+                Teams        = capped
             });
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -359,6 +371,63 @@ public sealed class EntraTeamResolutionService(
 
     private static IReadOnlyList<EntraSourceOutcome> AllNoTeam(IReadOnlySet<EntraSourceKey> keys) =>
         keys.Select(k => new EntraSourceOutcome(k, EntraCycleResult.NoTeam, null)).ToList();
+
+    // ── Team-count cap ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Truncates to <see cref="EntraOptions.MaxDynamicTeams"/> (0 = no cap) in a deterministic order —
+    /// Attribute entries before Group entries (the <see cref="ResolvedTeamSource"/> declaration
+    /// order), each ordered by <c>SourceId</c> (ordinal-ignore-case) — since the merger's output
+    /// order is not contractual. Dropped entries are simply absent from the written file; their
+    /// grace state is not preserved, so if fewer teams resolve on a later cycle they reappear
+    /// normally with a fresh LastConfirmedUtc rather than resuming a stale grace window.
+    /// </summary>
+    private List<ResolvedTeamEntry> ApplyCap(List<ResolvedTeamEntry> merged)
+    {
+        var cap = config.Entra.MaxDynamicTeams;
+        if (cap <= 0 || merged.Count <= cap) return merged;
+
+        var ordered = merged
+            .OrderBy(e => e.Source)
+            .ThenBy(e => e.SourceId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var kept    = ordered.Take(cap).ToList();
+        var dropped = ordered.Skip(cap).Select(e => $"{e.Source}:{e.SourceId}").ToList();
+
+        logger.LogWarning(
+            "Entra dynamic team cap ({Cap}) exceeded — {Resolved} resolved, dropping: {Dropped}.",
+            cap, ordered.Count, string.Join(", ", dropped));
+
+        return kept;
+    }
+
+    // ── Change-gated summary log ────────────────────────────────────────────
+
+    /// <summary>
+    /// One line per cycle summarizing the written team set, in the same deterministic order as
+    /// <see cref="ApplyCap"/>. Logged at Information when the set (including each entry's
+    /// <see cref="ResolvedTeamState"/>) differs from the previous cycle, Debug otherwise — this is
+    /// the primary operator-facing signal; per-instance Debug lines and all Warning/Error logging
+    /// are unaffected. The empty set is a legitimate state: transitioning to zero dynamic teams
+    /// still logs once at Information.
+    /// </summary>
+    private void LogSummary(List<ResolvedTeamEntry> written)
+    {
+        var summary = string.Join(", ", written
+            .OrderBy(e => e.Source)
+            .ThenBy(e => e.SourceId, StringComparer.OrdinalIgnoreCase)
+            .Select(e => $"{e.Source}/{e.SourceId}={e.TeamFolderName} ({e.State})"));
+
+        var display = summary.Length == 0 ? "(none)" : summary;
+        var changed = !string.Equals(_lastSummary, summary, StringComparison.Ordinal);
+        _lastSummary = summary;
+
+        if (changed)
+            logger.LogInformation("Entra dynamic teams: {Summary}", display);
+        else
+            logger.LogDebug("Entra dynamic teams (unchanged): {Summary}", display);
+    }
 
     // ── Persistence ──────────────────────────────────────────────────────────
 

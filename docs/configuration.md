@@ -311,7 +311,7 @@ NewsCentral does **not** use these modes. It authenticates via an interactive MS
 
 NewsService can resolve **multiple dynamic teams** per machine from the machine's own Entra (Azure AD) device object each poll cycle, writing `{CacheRootPath}\resolved-teams.json`; NewsService and NewsViewer union it with the static team list and consume it (key-with-content verification — see `docs/security.md`). The feature is gated by `Entra:Enabled` (default `false`).
 
-The attribute source is **multi-instance**: zero or more independently-configured **named attribute schemes**, each with its own selector attribute and its own selector→rule mapping table. Each scheme resolves **at most one** dynamic team and carries its **own** grace window — the scheme name is the grace-partition instance id, `(Attribute, {schemeName})`. The group source remains a single instance, `(Group, "")`.
+The attribute source is **multi-instance**: zero or more independently-configured **named attribute schemes**, each with its own selector attribute and its own selector→rule mapping table. Each scheme resolves **at most one** dynamic team and carries its **own** grace window — the scheme name is the grace-partition instance id, `(Attribute, {schemeName})`. The group source is likewise multi-instance (see `Entra:GroupTeams` below) — its instance id is *derived* from `InclusionGroup` rather than authored.
 
 **appsettings.json (NewsService):**
 
@@ -319,6 +319,7 @@ The attribute source is **multi-instance**: zero or more independently-configure
 "Entra": {
   "Enabled": false,
   "GracePeriodMinutes": 240,
+  "MaxDynamicTeams": 16,
   "AttributeSchemes": {
     "Fat": {
       "Selector": "extensionAttribute1",
@@ -347,6 +348,7 @@ Ship `AttributeSchemes` and `GroupTeams:Instances` **empty** in the shipped `app
 HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
     Enabled              REG_SZ   "true" / "false"
     GracePeriodMinutes   REG_SZ   (int minutes; MUST be REG_SZ — 0 = "no grace" is deliberate; DWORD 0/1 coerce to "False"/"True" and the int binder throws)
+    MaxDynamicTeams      REG_SZ   (int count; MUST be REG_SZ — 0 = "no cap" is deliberate; DWORD 0/1 coerce to "False"/"True" and the int binder throws; default 16)
     AttributeSchemes\
         <schemeName>\
             Selector   REG_SZ   "extensionAttribute1"
@@ -379,6 +381,13 @@ HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
 **No configured schemes and no group instances.** When `AttributeSchemes` is empty (or every entry is invalidly named) and `GroupTeams:Instances` yields no valid instance (empty, all blank, or all invalidly configured), NewsService skips the Graph device fetch entirely for that cycle — there is nothing to resolve — and prunes any stale entries.
 
 **Batched membership check.** Regardless of how many group instances are active, NewsService resolves the full set of distinct group display names referenced that cycle (every instance's `InclusionGroup` and non-blank `ExclusionGroup`, plus the global `ExclusionGroup` if set) and evaluates the device's membership in one pass — one `checkMemberGroups` Graph call per 20 distinct groups (the Graph limit), not one call per instance. A name that fails to resolve isolates to the instance(s) referencing it; a transport-level failure (unreachable, or 403) is global to the whole batch.
+
+**`Entra:MaxDynamicTeams`** (int, default `16`; `0` = no cap) bounds the number of dynamic teams written to `resolved-teams.json` across both sources combined. When more teams resolve than the cap, NewsService truncates in a **deterministic order** — every Attribute entry (ordered by `SourceId`, ordinal-ignore-case) before every Group entry (likewise ordered by `SourceId`) — and logs one `Warning` per cycle naming the configured cap, the number resolved, and the dropped ids. Truncation is applied after the grace merge; a dropped entry's grace state is not preserved — if fewer teams resolve on a later cycle it reappears normally with a fresh `LastConfirmedUtc`, not a resumed grace window. The cap is a resource bound, not a resolution-logic change: grace, key derivation, and the Graph call path are unaffected.
+
+**Operational notes.**
+- **Per-team cost.** Each dynamic team resolved into `resolved-teams.json` costs NewsService one `index.json` fetch (and any changed images) per sync cycle, and costs NewsViewer one index parse per presentation-selection pass. `MaxDynamicTeams` exists because this cost is linear in the number of dynamic teams a machine ends up subscribed to.
+- **Presentation selection is still single-winner.** Regardless of how many teams (static or dynamic) a machine is subscribed to, NewsViewer's poster selection picks exactly one active `News-of-the-Week` assignment — the newest by `PresentationLastModified` across **all** verified, schedule-active assignments from every subscribed team (see `docs/newsviewer-spec.md`). Subscribing a machine to N dynamic teams means N publishers are competing for that one poster slot; a device provisioned into many attribute schemes or group instances does not get N posters, it gets whichever one across all of them happens to be newest. This is an authoring/governance consideration for whoever provisions a large instance set, not a defect in the selection logic — worth knowing **before** provisioning a large `AttributeSchemes` / `GroupTeams:Instances` set, not after.
+- **Change-gated summary logging.** Each cycle logs one line summarizing the full written team set (`Source/SourceId=TeamFolderName (State)` per entry, ordered the same way as the truncation above) — at `Information` when that set differs from the previous cycle (including a transition to zero dynamic teams), at `Debug` otherwise. This is the primary operator-facing signal for "what did Entra resolve"; per-scheme/per-instance outcomes remain at `Debug`, and every `Warning`/`Error` (invalid/colliding instances, unresolvable names, the fail-closed global-exclusion suppression, device-level failures) is unconditional and unaffected by this gating.
 
 **Credential reuse:** the Microsoft Graph reads use the **same `AzureBlob` credential and app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**.
 
