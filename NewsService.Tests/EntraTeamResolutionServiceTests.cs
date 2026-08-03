@@ -31,6 +31,10 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         private readonly EntraDeviceFetch? _result;
         private readonly bool _throws;
 
+        /// <summary>Number of times <see cref="FetchAsync"/> was invoked — used to assert the
+        /// device fetch is skipped entirely when nothing is configured to resolve.</summary>
+        public int Calls { get; private set; }
+
         private FakeClient(EntraDeviceFetch? result, bool throws)
         {
             _result = result;
@@ -42,6 +46,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
         public Task<EntraDeviceFetch> FetchAsync(string deviceId, CancellationToken ct)
         {
+            Calls++;
             if (_throws) throw new InvalidOperationException("simulated missing credentials");
             return Task.FromResult(_result!);
         }
@@ -88,14 +93,14 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
     private EntraTeamResolutionService CreateService(
         string dir, bool enabled, IDeviceIdentityProvider identity, IEntraDeviceClient client,
-        Dictionary<string, string>? mappings = null, int graceMinutes = 240,
+        Dictionary<string, AttributeSchemeOptions>? schemes = null, int graceMinutes = 240,
         IEntraGroupClient? group = null, string inclusion = "", string exclusion = "")
     {
         var cfg = new ServiceConfiguration();
         cfg.Service.CacheRootPath = dir;
         cfg.Entra.Enabled = enabled;
         cfg.Entra.GracePeriodMinutes = graceMinutes;
-        cfg.Entra.Mappings = mappings ?? new();
+        cfg.Entra.AttributeSchemes = schemes ?? new();
         cfg.Entra.GroupTeam.InclusionGroup = inclusion;
         cfg.Entra.GroupTeam.ExclusionGroup = exclusion;
 
@@ -103,6 +108,14 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             cfg, identity, client, group ?? FakeGroupClient.NeverCalled(),
             NullLogger<EntraTeamResolutionService>.Instance);
     }
+
+    private static AttributeSchemeOptions Scheme(
+        Dictionary<string, string>? mappings = null, string selector = "extensionAttribute1") =>
+        new() { Selector = selector, Mappings = mappings ?? new() };
+
+    private static Dictionary<string, AttributeSchemeOptions> OneScheme(
+        string name, Dictionary<string, string>? mappings = null, string selector = "extensionAttribute1") =>
+        new() { [name] = Scheme(mappings, selector) };
 
     private static void WriteFile(string dir, ResolvedTeamsFile file) =>
         File.WriteAllText(Path.Combine(dir, FileName),
@@ -129,7 +142,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         return EntraDeviceFetch.Found(d, DeviceObjectId);
     }
 
-    // ── Existing single-source (Attribute) behavior ───────────────────────────
+    // ── Existing single-scheme (Attribute) behavior ───────────────────────────
 
     [Fact]
     public async Task Disabled_DeletesExistingFile_WritesNothing()
@@ -154,7 +167,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     {
         var dir = NewTempDir();
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(null), FakeClient.Throwing());   // client must not even be needed
+            new FakeIdentity(null), FakeClient.Throwing(),   // client must not even be needed
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -168,7 +182,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     {
         var dir = NewTempDir();
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity("not-a-guid"), FakeClient.Throwing());   // client must not be called
+            new FakeIdentity("not-a-guid"), FakeClient.Throwing(),   // client must not be called
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -184,7 +199,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" });
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -193,6 +208,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         Assert.Equal("cz", only.TeamFolderName);
         Assert.Equal(ResolvedTeamState.Active, only.State);
         Assert.Equal(ResolvedTeamSource.Attribute, only.Source);
+        Assert.Equal("primary", only.SourceId);
     }
 
     [Fact]
@@ -202,7 +218,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId),
             FakeClient.Returning(FoundWith(("extensionAttribute1", "ZZZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" });
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -214,7 +230,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     {
         var dir = NewTempDir();
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.NotFound));
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.NotFound),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -229,11 +246,12 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         WriteFile(dir, new ResolvedTeamsFile
         {
             GeneratedUtc = DateTime.UtcNow.AddMinutes(-100),
-            Teams = [Entry("cz-its", confirmed)]
+            Teams = [Entry("cz-its", confirmed, sourceId: "primary")]
         });
 
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable));
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -250,11 +268,12 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         WriteFile(dir, new ResolvedTeamsFile
         {
             GeneratedUtc = DateTime.UtcNow.AddMinutes(-300),
-            Teams = [Entry("cz-its", DateTime.UtcNow.AddMinutes(-300))]   // past 240
+            Teams = [Entry("cz-its", DateTime.UtcNow.AddMinutes(-300), sourceId: "primary")]   // past 240
         });
 
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable));
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -266,7 +285,8 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
     {
         var dir = NewTempDir();
         var svc = CreateService(dir, enabled: true,
-            new FakeIdentity(DeviceId), FakeClient.Throwing());
+            new FakeIdentity(DeviceId), FakeClient.Throwing(),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);   // must not throw
 
@@ -284,7 +304,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" });
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
 
         await svc.RefreshAsync(CancellationToken.None);
 
@@ -305,7 +325,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
             inclusion: "Grp Team");
 
@@ -338,7 +358,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.NeverCalled(),   // inclusion empty → group client must not be called
             inclusion: "");
 
@@ -358,7 +378,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.PermissionDenied),
             inclusion: "Grp Team");
 
@@ -378,7 +398,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.NameAmbiguous),
             inclusion: "Grp Team");
 
@@ -399,13 +419,14 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             GeneratedUtc = DateTime.UtcNow.AddMinutes(-50),
             Teams =
             [
-                Entry("cz-its",   confirmed, source: ResolvedTeamSource.Attribute),
+                Entry("cz-its",   confirmed, source: ResolvedTeamSource.Attribute, sourceId: "primary"),
                 Entry("grp-team", confirmed, source: ResolvedTeamSource.Group),
             ]
         });
 
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.NeverCalled(),   // device unreachable short-circuits before group
             inclusion: "Grp Team");
 
@@ -428,13 +449,14 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             GeneratedUtc = DateTime.UtcNow,
             Teams =
             [
-                Entry("cz-its",   DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Attribute),
+                Entry("cz-its",   DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Attribute, sourceId: "primary"),
                 Entry("grp-team", DateTime.UtcNow.AddMinutes(-5), source: ResolvedTeamSource.Group),
             ]
         });
 
         var svc = CreateService(dir, enabled: true,
             new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.PermissionDenied),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.NeverCalled(),
             inclusion: "Grp Team");
 
@@ -459,7 +481,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.Unreachable),
             inclusion: "Grp Team");
 
@@ -480,8 +502,11 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
     // ── SourceId (key-with-instance) ──────────────────────────────────────────
 
+    // Before M2, both sources shared the legacy empty SourceId. After M2, the attribute source is
+    // multi-instance and always carries its configured scheme name — only the (still
+    // single-instance) group source keeps the empty legacy id.
     [Fact]
-    public async Task Found_AttributeAndGroupBothResolve_EntriesCarryEmptySourceId()
+    public async Task Found_AttributeAndGroupBothResolve_AttributeCarriesSchemeId_GroupCarriesEmptySourceId()
     {
         var dir = NewTempDir();
         var svc = CreateService(dir, enabled: true,
@@ -489,7 +514,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
             inclusion: "Grp Team");
 
@@ -497,7 +522,12 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
 
         var teams = ReadFile(dir)!.Teams;
         Assert.Equal(2, teams.Count);
-        Assert.All(teams, t => Assert.Equal("", t.SourceId));
+
+        var attr = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Attribute);
+        Assert.Equal("primary", attr.SourceId);
+
+        var grp = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Group);
+        Assert.Equal("", grp.SourceId);
     }
 
     [Fact]
@@ -516,7 +546,7 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
             FakeClient.Returning(FoundWith(
                 ("extensionAttribute1", "FAT"),
                 ("extensionAttribute2", "CZ"))),
-            mappings: new() { ["FAT"] = "extensionAttribute2" },
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }),
             group: FakeGroupClient.With(EntraGroupStatus.Success, inInclusion: true),
             inclusion: "Grp Team");
 
@@ -532,6 +562,238 @@ public sealed class EntraTeamResolutionServiceTests : IDisposable
         var grp = Assert.Single(teams, t => t.Source == ResolvedTeamSource.Group);
         Assert.Equal("grp-team", grp.TeamFolderName);
         Assert.Equal(ResolvedTeamState.Active, grp.State);
+    }
+
+    // ── Multiple named attribute schemes (M2) ─────────────────────────────────
+
+    [Fact]
+    public async Task TwoSchemes_BothResolve_TwoActiveEntriesWithSchemeIds()
+    {
+        var dir = NewTempDir();
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }, "extensionAttribute1"),
+            ["beta"]  = Scheme(new() { ["VDE"] = "extensionAttribute3" }, "extensionAttribute7"),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"),
+                ("extensionAttribute7", "VDE"),
+                ("extensionAttribute3", "Berlin"))),
+            schemes: schemes);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.Equal(2, teams.Count);
+
+        var alpha = Assert.Single(teams, t => t.SourceId == "alpha");
+        Assert.Equal("cz", alpha.TeamFolderName);
+        Assert.Equal(ResolvedTeamSource.Attribute, alpha.Source);
+        Assert.Equal(ResolvedTeamState.Active, alpha.State);
+
+        var beta = Assert.Single(teams, t => t.SourceId == "beta");
+        Assert.Equal("berlin", beta.TeamFolderName);
+        Assert.Equal(ResolvedTeamSource.Attribute, beta.Source);
+        Assert.Equal(ResolvedTeamState.Active, beta.State);
+    }
+
+    [Fact]
+    public async Task TwoSchemes_OneResolvesOneDoesNot_OnlyResolvedPersists()
+    {
+        var dir = NewTempDir();
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }, "extensionAttribute1"),
+            ["beta"]  = Scheme(new() { ["VDE"] = "extensionAttribute3" }, "extensionAttribute7"),   // no attr7 on device
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            schemes: schemes);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var only = Assert.Single(ReadFile(dir)!.Teams);
+        Assert.Equal("alpha", only.SourceId);
+        Assert.Equal("cz", only.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Active, only.State);
+    }
+
+    [Fact]
+    public async Task SchemeRemovedFromConfig_PriorEntryPruned()
+    {
+        var dir = NewTempDir();
+        var confirmed = DateTime.UtcNow.AddMinutes(-50);   // within grace
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow.AddMinutes(-50),
+            Teams =
+            [
+                Entry("gone-team",    confirmed, source: ResolvedTeamSource.Attribute, sourceId: "gone"),
+                Entry("primary-team", confirmed, source: ResolvedTeamSource.Attribute, sourceId: "primary"),
+            ]
+        });
+
+        // "gone" is no longer present in configuration — only "primary" remains.
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        var only = Assert.Single(teams);
+        Assert.Equal("primary-team", only.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Grace, only.State);
+        Assert.DoesNotContain(teams, t => t.SourceId == "gone");
+    }
+
+    [Fact]
+    public async Task LegacyEmptySourceIdEntry_IsPruned()
+    {
+        var dir = NewTempDir();
+        var confirmed = DateTime.UtcNow.AddMinutes(-50);   // within grace — would ride grace if still active
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow.AddMinutes(-50),
+            Teams = [Entry("old-legacy-team", confirmed, source: ResolvedTeamSource.Attribute, sourceId: "")]
+        });
+
+        // Entra:Mappings (the pre-M2 flat, unnamed scheme) no longer exists as a concept — "" is
+        // not a configured scheme id.
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: OneScheme("primary", new() { ["FAT"] = "extensionAttribute2" }));
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.DoesNotContain(teams, t => t.TeamFolderName == "old-legacy-team");
+    }
+
+    [Fact]
+    public async Task InvalidSchemeName_IsSkippedWithWarning_AndNotInActiveKeys()
+    {
+        var dir = NewTempDir();
+        var confirmed = DateTime.UtcNow.AddMinutes(-5);   // well within grace
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow.AddMinutes(-5),
+            Teams = [Entry("stale", confirmed, source: ResolvedTeamSource.Attribute, sourceId: "bad:name")]
+        });
+
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["good"]     = Scheme(new() { ["FAT"] = "extensionAttribute2" }),
+            ["bad:name"] = Scheme(new()),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "CZ"))),
+            schemes: schemes);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        var only = Assert.Single(teams);
+        Assert.Equal("good", only.SourceId);
+        Assert.Equal("cz", only.TeamFolderName);
+        Assert.DoesNotContain(teams, t => t.SourceId == "bad:name");
+    }
+
+    [Fact]
+    public async Task TwoSchemes_SameTeamName_BothEntriesKept()
+    {
+        var dir = NewTempDir();
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }, "extensionAttribute1"),
+            ["beta"]  = Scheme(new() { ["FAT"] = "extensionAttribute8" }, "extensionAttribute7"),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId),
+            FakeClient.Returning(FoundWith(
+                ("extensionAttribute1", "FAT"),
+                ("extensionAttribute2", "same-team"),
+                ("extensionAttribute7", "FAT"),
+                ("extensionAttribute8", "same-team"))),
+            schemes: schemes);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        Assert.Equal(2, teams.Count);
+        Assert.All(teams, t => Assert.Equal("same-team", t.TeamFolderName));
+
+        Assert.Contains(teams, t => t.SourceId == "alpha");
+        Assert.Contains(teams, t => t.SourceId == "beta");
+    }
+
+    [Fact]
+    public async Task DeviceUnreachable_AllSchemesGrace_Independently()
+    {
+        var dir = NewTempDir();
+        var withinGrace = DateTime.UtcNow.AddMinutes(-100);    // within 240
+        var beyondGrace = DateTime.UtcNow.AddMinutes(-300);    // past 240
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams =
+            [
+                Entry("alpha-team", withinGrace, source: ResolvedTeamSource.Attribute, sourceId: "alpha"),
+                Entry("beta-team",  beyondGrace, source: ResolvedTeamSource.Attribute, sourceId: "beta"),
+            ]
+        });
+
+        var schemes = new Dictionary<string, AttributeSchemeOptions>
+        {
+            ["alpha"] = Scheme(new() { ["FAT"] = "extensionAttribute2" }),
+            ["beta"]  = Scheme(new() { ["FAT"] = "extensionAttribute2" }),
+        };
+
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), FakeClient.Returning(EntraDeviceFetch.Unreachable),
+            schemes: schemes);
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        var teams = ReadFile(dir)!.Teams;
+        var only = Assert.Single(teams);
+        Assert.Equal("alpha-team", only.TeamFolderName);
+        Assert.Equal(ResolvedTeamState.Grace, only.State);
+        Assert.Equal(withinGrace, only.LastConfirmedUtc, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task NoSchemesAndNoGroup_SkipsDeviceFetch()
+    {
+        var dir = NewTempDir();
+        WriteFile(dir, new ResolvedTeamsFile
+        {
+            GeneratedUtc = DateTime.UtcNow,
+            Teams = [Entry("stale-team", DateTime.UtcNow.AddMinutes(-5))]
+        });
+
+        var client = FakeClient.Throwing();   // would surface as a failure if ever invoked
+        var svc = CreateService(dir, enabled: true,
+            new FakeIdentity(DeviceId), client,
+            schemes: new(), inclusion: "");   // nothing configured
+
+        await svc.RefreshAsync(CancellationToken.None);
+
+        Assert.Equal(0, client.Calls);
+        Assert.Empty(ReadFile(dir)!.Teams);
     }
 
     public void Dispose()

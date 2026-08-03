@@ -4,41 +4,55 @@ namespace NewsCentral.Configuration;
 
 /// <summary>
 /// Pure, I/O-free resolution of a single dynamic team folder name from an Entra
-/// device's extensionAttributes. NewsService-only feature (Phase 1: logic + DTOs only).
+/// device's extensionAttributes, for one named attribute scheme. NewsService-only feature.
 ///
-/// Flow: extensionAttribute1 selects a rule from <paramref name="mappings"/>; the rule
-/// names an ordered set of extensionAttribute2..15; their values are concatenated with
-/// '-' and canonicalized into a team folder name.
+/// Flow: the scheme's <paramref name="selectorAttribute"/> selects a rule from
+/// <paramref name="mappings"/>; the rule names an ordered set of extensionAttribute1..15
+/// (excluding the scheme's own selector); their values are concatenated with '-' and
+/// canonicalized into a team folder name.
 ///
 /// No Graph / registry / Windows / Azure dependencies — keeps NewsCentral.Shared portable.
 /// </summary>
 public static class EntraTeamNameResolver
 {
-    // extensionAttribute2..15 only (attribute1 is reserved as the selector).
-    private static readonly Regex TokenPattern =
-        new(@"^extensionAttribute(?:[2-9]|1[0-5])$", RegexOptions.Compiled);
+    // extensionAttribute1..15 — used both to validate a scheme's selectorAttribute and to
+    // validate each token referenced by a rule.
+    private static readonly Regex ExtensionAttributeNamePattern =
+        new(@"^extensionAttribute(?:[1-9]|1[0-5])$", RegexOptions.Compiled);
 
     public static EntraResolutionOutcome Resolve(
         IReadOnlyDictionary<string, string?> extensionAttributes,
-        IReadOnlyDictionary<string, string> mappings)
+        IReadOnlyDictionary<string, string> mappings,
+        string selectorAttribute)
     {
-        // 1. Selector
-        var selector = extensionAttributes.GetValueOrDefault("extensionAttribute1");
-        if (string.IsNullOrWhiteSpace(selector))
+        // 0. The scheme's selector attribute name must itself be well-formed. Fail closed —
+        // never fall back to a default such as extensionAttribute1.
+        if (string.IsNullOrWhiteSpace(selectorAttribute) ||
+            !ExtensionAttributeNamePattern.IsMatch(selectorAttribute))
+            return new EntraResolutionOutcome(EntraResolutionReason.InvalidScheme);
+
+        // 1. Selector value
+        var selectorValue = extensionAttributes.GetValueOrDefault(selectorAttribute);
+        if (string.IsNullOrWhiteSpace(selectorValue))
             return new EntraResolutionOutcome(EntraResolutionReason.NoSelector);
 
-        // 2. Selector must be a known mapping key (ordinal, case-sensitive).
-        if (!mappings.TryGetValue(selector, out var rule))
+        // 2. Selector value must be a known mapping key (ordinal, case-sensitive).
+        if (!mappings.TryGetValue(selectorValue, out var rule))
             return new EntraResolutionOutcome(EntraResolutionReason.UnknownSelector);
 
-        // 3. Rule → ordered tokens; each must be extensionAttribute2..15.
+        // 3. Rule → ordered tokens; each must be extensionAttribute1..15, and none may be the
+        // scheme's own selector (a rule referencing its own selector is a config error, not a
+        // team — the selector value picked the rule, so it cannot also feed the team name).
         var tokens = rule.Split('-', StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0)
             return new EntraResolutionOutcome(EntraResolutionReason.InvalidRule);
 
         foreach (var token in tokens)
         {
-            if (!TokenPattern.IsMatch(token))
+            if (!ExtensionAttributeNamePattern.IsMatch(token))
+                return new EntraResolutionOutcome(EntraResolutionReason.InvalidRule);
+
+            if (string.Equals(token, selectorAttribute, StringComparison.Ordinal))
                 return new EntraResolutionOutcome(EntraResolutionReason.InvalidRule);
         }
 
@@ -87,5 +101,6 @@ public enum EntraResolutionReason
     NoSelector,
     UnknownSelector,
     InvalidRule,
-    EmptyRequiredAttribute
+    EmptyRequiredAttribute,
+    InvalidScheme
 }

@@ -40,11 +40,24 @@ public class EntraOptions
     public bool Enabled { get; set; } = false;
     public int GracePeriodMinutes { get; set; } = 240;
 
-    /// <summary>Selector (extensionAttribute1 value) → rule (e.g. "FAT" → "extensionAttribute2-extensionAttribute5").</summary>
-    public Dictionary<string, string> Mappings { get; set; } = new();
+    /// <summary>
+    /// Named attribute schemes. Each entry resolves at most one dynamic team from the device's
+    /// extensionAttributes and carries its own grace window, keyed (Attribute, {name}). The
+    /// dictionary name is the instance id. Empty = the attribute source is inactive.
+    /// </summary>
+    public Dictionary<string, AttributeSchemeOptions> AttributeSchemes { get; set; } = new();
 
     /// <summary>Group-membership dynamic team (inclusion ∧ ¬exclusion). Inert until G2 wires the resolver.</summary>
     public GroupTeamOptions GroupTeam { get; set; } = new();
+}
+
+public class AttributeSchemeOptions
+{
+    /// <summary>The extensionAttribute whose value selects a rule from Mappings.</summary>
+    public string Selector { get; set; } = "extensionAttribute1";
+
+    /// <summary>Selector value → rule (e.g. "FAT" → "extensionAttribute2-extensionAttribute5").</summary>
+    public Dictionary<string, string> Mappings { get; set; } = new();
 }
 
 public class GroupTeamOptions

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using NewsCentral.Configuration;
 using NewsCentral.Models;
 using NewsService.Configuration;
@@ -7,13 +8,15 @@ namespace NewsService.Services;
 
 /// <summary>
 /// Orchestrates one Entra resolution cycle across two independent sources — the device
-/// extensionAttributes (attribute source) and group membership (group source) — applies the
-/// per-source grace state machine, and atomically writes {CacheRootPath}\resolved-teams.json.
+/// extensionAttributes, resolved per **named attribute scheme** (<see cref="EntraOptions.AttributeSchemes"/>),
+/// and group membership (group source) — applies the per-key grace state machine, and atomically
+/// writes {CacheRootPath}\resolved-teams.json.
 ///
-/// Per-source / persistent-vs-transient grace: a 403 on either read is persistent (clean removal +
+/// Per-key / persistent-vs-transient grace: a 403 on either read is persistent (clean removal +
 /// Error), a device-not-found is authoritative (removal), and transient failures ride the grace
-/// window per source. Both sources are evaluated from the single device fetch (the group source
-/// adds one checkMemberGroups call).
+/// window per key. All keys are evaluated from the single device fetch (the group source adds one
+/// checkMemberGroups call). The device fetch is skipped entirely when nothing is configured to
+/// resolve (no attribute schemes and no group inclusion).
 ///
 /// Never throws to the caller: any failure is logged and treated as Unreachable so a Graph problem
 /// can never stall or fail blob sync.
@@ -29,15 +32,11 @@ public sealed class EntraTeamResolutionService(
 
     private static readonly JsonSerializerOptions Json = JsonDefaults.Options;
 
-    // The configured instance set. Fixed to the two legacy singletons for now; a later change
-    // derives it from Entra:AttributeSchemes / Entra:GroupTeams so removing an instance from
-    // configuration prunes its entries.
-    private static readonly IReadOnlySet<EntraSourceKey> ActiveKeys =
-        new HashSet<EntraSourceKey>
-        {
-            EntraSourceKey.Legacy(ResolvedTeamSource.Attribute),
-            EntraSourceKey.Legacy(ResolvedTeamSource.Group)
-        };
+    // A name containing ':' would corrupt the configuration path, and one containing '\' cannot
+    // exist as a registry subkey — so a scheme's instance id is restricted to a safe charset.
+    private static readonly Regex SchemeNamePattern = new(@"^[A-Za-z0-9._-]+$", RegexOptions.Compiled);
+
+    private static readonly EntraSourceKey GroupKey = EntraSourceKey.Legacy(ResolvedTeamSource.Group);
 
     private string FilePath =>
         Path.Combine(config.Service.CacheRootPath, ResolvedTeamsFileName);
@@ -57,17 +56,33 @@ public sealed class EntraTeamResolutionService(
                 return;
             }
 
-            var outcomes = await DetermineOutcomesAsync(ct);
+            var (activeKeys, schemeNames) = ComputeActiveKeys();
+            var hasGroupSource = !string.IsNullOrWhiteSpace(config.Entra.GroupTeam.InclusionGroup);
 
-            // 5. Read existing entries (empty if absent/unreadable).
+            IReadOnlyList<EntraSourceOutcome> outcomes;
+            if (schemeNames.Count == 0 && !hasGroupSource)
+            {
+                // Nothing configured to resolve — skip the Graph round trip entirely. The group key
+                // is still active (it's a configured, if inactive, instance), so it gets an explicit
+                // clean NoTeam rather than being left to pass through unchanged; any stale attribute
+                // entries are pruned by the activeKeys filter in the merger (no attribute key is active).
+                logger.LogDebug("Entra enabled but no attribute scheme and no group configured — skipping device fetch.");
+                outcomes = [new EntraSourceOutcome(GroupKey, EntraCycleResult.NoTeam, null)];
+            }
+            else
+            {
+                outcomes = await DetermineOutcomesAsync(schemeNames, activeKeys, ct);
+            }
+
+            // Read existing entries (empty if absent/unreadable).
             var existing = ReadExisting();
 
-            // 6. Merge both per-source outcomes through the grace state machine.
+            // Merge all per-key outcomes through the grace state machine.
             var merged = EntraResolvedTeamsMerger.Merge(
-                existing, outcomes, ActiveKeys,
+                existing, outcomes, activeKeys,
                 DateTime.UtcNow, TimeSpan.FromMinutes(config.Entra.GracePeriodMinutes));
 
-            // 7. Atomic write.
+            // Atomic write.
             WriteAtomically(new ResolvedTeamsFile
             {
                 GeneratedUtc = DateTime.UtcNow,
@@ -84,11 +99,43 @@ public sealed class EntraTeamResolutionService(
         }
     }
 
-    // ── Determine this cycle's per-source outcomes ────────────────────────────
+    // ── Configured instance set ─────────────────────────────────────────────────
 
-    private async Task<IReadOnlyList<EntraSourceOutcome>> DetermineOutcomesAsync(CancellationToken ct)
+    /// <summary>
+    /// Derives the active (Source, SourceId) key set from configuration: one Attribute key per
+    /// validly-named scheme, plus the Group legacy singleton key (the group source is not yet
+    /// multi-instance). Computed fresh each cycle, before the device fetch, so it is available even
+    /// when Graph is unreachable — a scheme removed from configuration prunes its entries without
+    /// grace on the very next cycle. Schemes are returned in a deterministic (ordinal-ignore-case)
+    /// order.
+    /// </summary>
+    private (IReadOnlySet<EntraSourceKey> ActiveKeys, IReadOnlyList<string> SchemeNames) ComputeActiveKeys()
     {
-        // 2. Device id. Must be present AND a GUID — otherwise skip Graph entirely (both Unreachable).
+        var keys = new HashSet<EntraSourceKey> { GroupKey };
+        var schemeNames = new List<string>();
+
+        foreach (var name in config.Entra.AttributeSchemes.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(name) || !SchemeNamePattern.IsMatch(name))
+            {
+                logger.LogWarning(
+                    "Entra attribute scheme name '{Name}' is invalid ([A-Za-z0-9._-]+ required) — skipped.", name);
+                continue;
+            }
+
+            schemeNames.Add(name);
+            keys.Add(new EntraSourceKey(ResolvedTeamSource.Attribute, name));
+        }
+
+        return (keys, schemeNames);
+    }
+
+    // ── Determine this cycle's per-key outcomes ───────────────────────────────
+
+    private async Task<IReadOnlyList<EntraSourceOutcome>> DetermineOutcomesAsync(
+        IReadOnlyList<string> schemeNames, IReadOnlySet<EntraSourceKey> activeKeys, CancellationToken ct)
+    {
+        // 2. Device id. Must be present AND a GUID — otherwise skip Graph entirely (all keys Unreachable).
         string? deviceId;
         try
         {
@@ -96,14 +143,14 @@ public sealed class EntraTeamResolutionService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Device identity lookup failed — both sources Unreachable.");
-            return BothUnreachable();
+            logger.LogError(ex, "Device identity lookup failed — all sources Unreachable.");
+            return AllUnreachable(activeKeys);
         }
 
         if (string.IsNullOrWhiteSpace(deviceId) || !Guid.TryParse(deviceId, out _))
         {
-            logger.LogWarning("Azure AD DeviceId missing or not a GUID — both sources Unreachable (skipping Graph).");
-            return BothUnreachable();
+            logger.LogWarning("Azure AD DeviceId missing or not a GUID — all sources Unreachable (skipping Graph).");
+            return AllUnreachable(activeKeys);
         }
 
         // 3. Fetch device. Missing creds (factory throws) → Error, treat as Unreachable.
@@ -118,55 +165,64 @@ public sealed class EntraTeamResolutionService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Entra device client unavailable (credentials?) — both sources Unreachable.");
-            return BothUnreachable();
+            logger.LogError(ex, "Entra device client unavailable (credentials?) — all sources Unreachable.");
+            return AllUnreachable(activeKeys);
         }
 
-        // 4. Map the device-level result to BOTH sources.
+        // 4. Map the device-level result to ALL keys.
         switch (fetch.Outcome)
         {
             case EntraFetchOutcome.Found:
-                var attribute = ResolveAttributeOutcome(fetch);
-                var group     = await ResolveGroupOutcomeAsync(fetch, ct);
-                return [attribute, group];
+                var outcomes = new List<EntraSourceOutcome>(schemeNames.Count + 1);
+                foreach (var name in schemeNames)
+                    outcomes.Add(ResolveAttributeOutcome(fetch, name));
+                outcomes.Add(await ResolveGroupOutcomeAsync(fetch, ct));
+                return outcomes;
 
             case EntraFetchOutcome.NotFound:
-                logger.LogWarning("Entra device object not found — removing any dynamic team (both sources).");
-                return BothNoTeam();
+                logger.LogWarning("Entra device object not found — removing any dynamic team (all sources).");
+                return AllNoTeam(activeKeys);
 
             case EntraFetchOutcome.PermissionDenied:
-                logger.LogError("Entra device read denied (403) — removing any dynamic team (both sources).");
-                return BothNoTeam();
+                logger.LogError("Entra device read denied (403) — removing any dynamic team (all sources).");
+                return AllNoTeam(activeKeys);
 
             default: // Unreachable
-                logger.LogWarning("Entra device unreachable — grace window applies to both sources.");
-                return BothUnreachable();
+                logger.LogWarning("Entra device unreachable — grace window applies to all sources.");
+                return AllUnreachable(activeKeys);
         }
     }
 
-    // ── Attribute source ──────────────────────────────────────────────────────
+    // ── Attribute source (per scheme) ─────────────────────────────────────────
 
-    private static readonly EntraSourceKey AttributeKey = EntraSourceKey.Legacy(ResolvedTeamSource.Attribute);
-    private static readonly EntraSourceKey GroupKey     = EntraSourceKey.Legacy(ResolvedTeamSource.Group);
-
-    private EntraSourceOutcome ResolveAttributeOutcome(EntraDeviceFetch fetch)
+    private EntraSourceOutcome ResolveAttributeOutcome(EntraDeviceFetch fetch, string schemeName)
     {
-        var outcome = EntraTeamNameResolver.Resolve(fetch.Attributes!, config.Entra.Mappings);
+        var scheme = config.Entra.AttributeSchemes[schemeName];
+        var key    = new EntraSourceKey(ResolvedTeamSource.Attribute, schemeName);
+
+        var outcome = EntraTeamNameResolver.Resolve(fetch.Attributes!, scheme.Mappings, scheme.Selector);
         switch (outcome.Reason)
         {
             case EntraResolutionReason.Resolved:
-                logger.LogInformation("Entra attribute team resolved {Team}.", outcome.TeamFolderName);
-                return new(AttributeKey, EntraCycleResult.ResolvedTeam, outcome.TeamFolderName);
+                logger.LogDebug("Entra attribute scheme {Scheme} resolved {Team}.", schemeName, outcome.TeamFolderName);
+                return new(key, EntraCycleResult.ResolvedTeam, outcome.TeamFolderName);
+
+            case EntraResolutionReason.InvalidScheme:
+                logger.LogWarning(
+                    "Entra attribute scheme {Scheme} has an invalid selector configuration — no team.", schemeName);
+                return new(key, EntraCycleResult.NoTeam, null);
 
             case EntraResolutionReason.UnknownSelector:
             case EntraResolutionReason.InvalidRule:
             case EntraResolutionReason.EmptyRequiredAttribute:
-                logger.LogWarning("Entra device read OK but no attribute team — {Reason}.", outcome.Reason);
-                return new(AttributeKey, EntraCycleResult.NoTeam, null);
+                logger.LogDebug(
+                    "Entra attribute scheme {Scheme}: device read OK but no team — {Reason}.", schemeName, outcome.Reason);
+                return new(key, EntraCycleResult.NoTeam, null);
 
             default: // NoSelector
-                logger.LogInformation("Entra device has no attribute selector — {Reason}.", outcome.Reason);
-                return new(AttributeKey, EntraCycleResult.NoTeam, null);
+                logger.LogDebug(
+                    "Entra attribute scheme {Scheme}: device has no selector value — {Reason}.", schemeName, outcome.Reason);
+                return new(key, EntraCycleResult.NoTeam, null);
         }
     }
 
@@ -220,17 +276,11 @@ public sealed class EntraTeamResolutionService(
         return mapped;
     }
 
-    private static IReadOnlyList<EntraSourceOutcome> BothUnreachable() =>
-    [
-        new(AttributeKey, EntraCycleResult.Unreachable, null),
-        new(GroupKey,     EntraCycleResult.Unreachable, null)
-    ];
+    private static IReadOnlyList<EntraSourceOutcome> AllUnreachable(IReadOnlySet<EntraSourceKey> keys) =>
+        keys.Select(k => new EntraSourceOutcome(k, EntraCycleResult.Unreachable, null)).ToList();
 
-    private static IReadOnlyList<EntraSourceOutcome> BothNoTeam() =>
-    [
-        new(AttributeKey, EntraCycleResult.NoTeam, null),
-        new(GroupKey,     EntraCycleResult.NoTeam, null)
-    ];
+    private static IReadOnlyList<EntraSourceOutcome> AllNoTeam(IReadOnlySet<EntraSourceKey> keys) =>
+        keys.Select(k => new EntraSourceOutcome(k, EntraCycleResult.NoTeam, null)).ToList();
 
     // ── Persistence ──────────────────────────────────────────────────────────
 

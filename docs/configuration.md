@@ -309,7 +309,9 @@ NewsCentral does **not** use these modes. It authenticates via an interactive MS
 
 ## Entra device team resolution (NewsService)
 
-NewsService can resolve **one dynamic team** per machine from the machine's own Entra (Azure AD) device object each poll cycle, writing `{CacheRootPath}\resolved-teams.json`; NewsService and NewsViewer union it with the static team list and consume it (key-with-content verification — see `docs/security.md`). The feature is gated by `Entra:Enabled` (default `false`).
+NewsService can resolve **multiple dynamic teams** per machine from the machine's own Entra (Azure AD) device object each poll cycle, writing `{CacheRootPath}\resolved-teams.json`; NewsService and NewsViewer union it with the static team list and consume it (key-with-content verification — see `docs/security.md`). The feature is gated by `Entra:Enabled` (default `false`).
+
+The attribute source is **multi-instance**: zero or more independently-configured **named attribute schemes**, each with its own selector attribute and its own selector→rule mapping table. Each scheme resolves **at most one** dynamic team and carries its **own** grace window — the scheme name is the grace-partition instance id, `(Attribute, {schemeName})`. The group source remains a single instance, `(Group, "")`.
 
 **appsettings.json (NewsService):**
 
@@ -317,10 +319,13 @@ NewsService can resolve **one dynamic team** per machine from the machine's own 
 "Entra": {
   "Enabled": false,
   "GracePeriodMinutes": 240,
-  "Mappings": {
-    "FAT": "extensionAttribute2-extensionAttribute5-extensionAttribute4",
-    "VDE": "extensionAttribute3",
-    "VDL": "extensionAttribute6-extensionAttribute2"
+  "AttributeSchemes": {
+    "Fat": {
+      "Selector": "extensionAttribute1",
+      "Mappings": {
+        "FAT": "extensionAttribute2-extensionAttribute5-extensionAttribute4"
+      }
+    }
   },
   "GroupTeam": {
     "InclusionGroup": "",
@@ -329,28 +334,35 @@ NewsService can resolve **one dynamic team** per machine from the machine's own 
 }
 ```
 
+Ship `AttributeSchemes` **empty** in the shipped `appsettings.json` — configuration layers merge dictionaries key-by-key, so a scheme defined in `appsettings.json` cannot be deleted by the registry. Keeping the base file empty leaves the registry/GPO hive authoritative for which schemes exist. The former flat `Entra:Mappings` key is **removed and no longer read** — there is exactly one way to configure the attribute source now.
+
 **Registry layout** (override; surfaced via the recursive walk in `RegistryConfigurationProvider`):
 
 ```
 HKLM\Software\[Company]\NewsCentral\NewsService\Entra\
     Enabled              REG_SZ   "true" / "false"
     GracePeriodMinutes   REG_SZ   (int minutes; MUST be REG_SZ — 0 = "no grace" is deliberate; DWORD 0/1 coerce to "False"/"True" and the int binder throws)
-    Mappings\
-        FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
-        VDE   REG_SZ   "extensionAttribute3"
-        VDL   REG_SZ   "extensionAttribute6-extensionAttribute2"
+    AttributeSchemes\
+        <schemeName>\
+            Selector   REG_SZ   "extensionAttribute1"
+            Mappings\
+                FAT   REG_SZ   "extensionAttribute2-extensionAttribute5-extensionAttribute4"
     GroupTeam\
         InclusionGroup   REG_SZ   "NewsCentral Prague ITS"
         ExclusionGroup   REG_SZ   "Excluded Devices"   (optional; empty = no exclusion)
 ```
 
-`Entra:Mappings:FAT` and `Entra:GroupTeam:InclusionGroup` etc. bind into `EntraOptions` automatically — no provider change.
+`Entra:AttributeSchemes:{schemeName}:Selector`, `Entra:AttributeSchemes:{schemeName}:Mappings:{selectorValue}`, and `Entra:GroupTeam:InclusionGroup` etc. bind into `EntraOptions` automatically — no provider change; the existing recursive registry walk handles arbitrary nesting.
+
+**Scheme naming and validation.** A scheme name (the dictionary key / registry subkey name) is the grace-partition instance id and must match `[A-Za-z0-9._-]+` — a name containing `:` would corrupt the configuration path, and one containing `\` cannot exist as a registry subkey. An invalidly-named scheme is skipped (logged at Warning) and is **not** part of the active instance set, so any team it may previously have produced is pruned without grace on the next cycle. A scheme's `Selector` must be `extensionAttribute1`..`extensionAttribute15`; a blank or malformed `Selector` fails that scheme closed (logged at Warning) rather than falling back to a default. One team max per scheme.
 
 **Group-membership team (`Entra:GroupTeam`):** a second, independent dynamic-team source. When `InclusionGroup` is set, NewsService resolves the device's transitive membership (one `checkMemberGroups` call) and resolves **one** group team when the device is in the inclusion group and **not** in the (optional) exclusion group; the team folder name is the canonicalized inclusion-group display name (same canonicalization as attribute teams). An **empty `InclusionGroup` disables** the source (and removes any previously resolved group team). It contributes to `resolved-teams.json` tagged `Source: Group`, unioned and verified exactly like attribute teams. Requires the `GroupMember.Read.All` Graph permission (below).
 
-**Rule format:** `extensionAttribute1` on the device is the **selector** and must equal a mapping key (ordinal, case-sensitive — e.g. `FAT`/`VDE`/`VDL`). Its mapped rule is a `'-'`-joined, ordered list of attribute names drawn from `extensionAttribute2`..`extensionAttribute15` (attribute 1 may not appear in a rule; 0 and 16+ are invalid). NewsService reads each referenced attribute, joins the values in **rule order** with `-`, and canonicalizes (lower-case; space/underscore → `-`; strip anything outside `[a-z0-9-]`) into a team folder name — byte-for-byte identical to an authored folder built from the same tokens. Any empty referenced attribute aborts resolution for that cycle.
+**Rule format:** each scheme's `Selector` attribute on the device selects a rule from that scheme's `Mappings` (ordinal, case-sensitive match on the selector's value). The mapped rule is a `'-'`-joined, ordered list of attribute names drawn from `extensionAttribute1`..`extensionAttribute15`, **except the scheme's own selector attribute** (a rule may not reference the attribute that selected it; 0 and 16+ are invalid regardless). NewsService reads each referenced attribute, joins the values in **rule order** with `-`, and canonicalizes (lower-case; space/underscore → `-`; strip anything outside `[a-z0-9-]`) into a team folder name — byte-for-byte identical to an authored folder built from the same tokens. Any empty referenced attribute aborts resolution for that scheme this cycle.
 
-**Grace (per source, persistent vs transient):** when the device/Graph is **unreachable** (network/timeout/throttling/5xx), each source's last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer — device read OK but no/invalid mapping (attribute) or not-in-inclusion/excluded/unresolved group name (group), or device object not found — removes that source's entry **immediately**. A **403** on either the device read or the group check is **persistent**: it removes promptly (logged at Error), never grace. The attribute and group sources grace independently.
+**Grace (per key, persistent vs transient):** when the device/Graph is **unreachable** (network/timeout/throttling/5xx), each key's — each attribute scheme's, and the group's — last resolved team is retained in `resolved-teams.json` with `State = Grace` for up to `GracePeriodMinutes`, then dropped. An authoritative "no team" answer — device read OK but no/invalid mapping for that scheme, or not-in-inclusion/excluded/unresolved group name (group), or device object not found — removes that key's entry **immediately**. A **403** on either the device read or the group check is **persistent**: it removes promptly (logged at Error), never grace. Every scheme and the group source grace independently. A scheme removed from configuration is pruned **without grace** on the next cycle — the configured instance set is read locally and is authoritative even when Graph is unreachable.
+
+**No configured schemes and no group.** When `AttributeSchemes` is empty (or every entry is invalidly named) and `GroupTeam:InclusionGroup` is blank, NewsService skips the Graph device fetch entirely for that cycle — there is nothing to resolve — and prunes any stale entries.
 
 **Credential reuse:** the Microsoft Graph reads use the **same `AzureBlob` credential and app registration** as blob access (`AzureCredentialFactory.Create`), built lazily only when Entra is enabled. Because of this, **`AzureBlob:{AuthMode, TenantId, ClientId, …}` must be populated even when `Repository:StorageMode = Share`**.
 
