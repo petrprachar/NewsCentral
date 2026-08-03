@@ -62,7 +62,6 @@ public sealed class EffectiveConfigResolverTests
             ComponentName = "Test",
             HasTeamsHive = true,
             HasSigningHive = true,
-            HasEntraMappings = true,
             Keys = new[]
             {
                 Desc("Company"),
@@ -87,8 +86,6 @@ public sealed class EffectiveConfigResolverTests
             ["Signing:team-x:PublicKey"] = "PKX",
             ["Signing:team-x:PublicKeyPrevious"] = "PKXP",
             ["Signing:team-y:PublicKey"] = "PKY",
-            ["Entra:Mappings:FAT"] = "rule-fat",
-            ["Entra:Mappings:VDE"] = "rule-vde"
         }).Build();
 
         var result = EffectiveConfigResolver.Project(manifest, app, reg);
@@ -119,11 +116,6 @@ public sealed class EffectiveConfigResolverTests
         Assert.Equal("PKY", ty.PublicKey);
         Assert.Null(ty.PublicKeyPrevious);
         Assert.DoesNotContain(result.Signing, s => s.Team == "RequireSignedIndex");
-
-        // Entra mappings
-        Assert.Equal(2, result.EntraMappings.Count);
-        Assert.Equal("rule-fat", result.EntraMappings.Single(m => m.Selector == "FAT").Rule);
-        Assert.Equal("rule-vde", result.EntraMappings.Single(m => m.Selector == "VDE").Rule);
     }
 
     [Fact]
@@ -134,7 +126,6 @@ public sealed class EffectiveConfigResolverTests
             ComponentName = "NoStructure",
             HasTeamsHive = false,
             HasSigningHive = false,
-            HasEntraMappings = false,
             Keys = new[] { Desc("Company") }
         };
 
@@ -143,14 +134,93 @@ public sealed class EffectiveConfigResolverTests
         {
             ["teams:0"] = "alpha",
             ["Signing:team-x:PublicKey"] = "PKX",
-            ["Entra:Mappings:FAT"] = "rule-fat"
+            ["Entra:AttributeSchemes:fat:Selector"] = "extensionAttribute1",
+            ["Entra:AttributeSchemes:fat:Mappings:FAT"] = "rule-fat",
+            ["Entra:GroupTeams:ExclusionGroup"] = "Kill Switch",
+            ["Entra:GroupTeams:Instances:prague:InclusionGroup"] = "Prague ITS"
         }).Build();
 
         var result = EffectiveConfigResolver.Project(manifest, empty, reg);
 
         Assert.Empty(result.Teams);
         Assert.Empty(result.Signing);
-        Assert.Empty(result.EntraMappings);
+        Assert.Empty(result.EntraSchemeMappings);
+        Assert.Empty(result.EntraGroupTeamInstances);
+        Assert.Null(result.EntraGlobalExclusionGroup);
+    }
+
+    // ── Entra structural projection (M4) ──────────────────────────────────────
+
+    [Fact]
+    public void Project_AttributeSchemes_ProjectsSchemeSelectorValueAndRulePerMapping()
+    {
+        var manifest = new ComponentManifest
+        {
+            ComponentName = "Test",
+            HasEntraAttributeSchemes = true,
+            Keys = new[] { Desc("Company") }
+        };
+
+        var empty = new ConfigurationBuilder().Build();
+        var reg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Entra:AttributeSchemes:fat:Selector"] = "extensionAttribute1",
+            ["Entra:AttributeSchemes:fat:Mappings:FAT"] = "extensionAttribute2-extensionAttribute4",
+            ["Entra:AttributeSchemes:fat:Mappings:VDE"] = "extensionAttribute3",
+            ["Entra:AttributeSchemes:vde-only:Selector"] = "extensionAttribute7",
+            ["Entra:AttributeSchemes:vde-only:Mappings:VDE"] = "extensionAttribute8",
+        }).Build();
+
+        var result = EffectiveConfigResolver.Project(manifest, empty, reg);
+
+        Assert.Equal(3, result.EntraSchemeMappings.Count);
+
+        var fatFat = result.EntraSchemeMappings.Single(m => m.Scheme == "fat" && m.SelectorValue == "FAT");
+        Assert.Equal("extensionAttribute1", fatFat.Selector);
+        Assert.Equal("extensionAttribute2-extensionAttribute4", fatFat.Rule);
+
+        var fatVde = result.EntraSchemeMappings.Single(m => m.Scheme == "fat" && m.SelectorValue == "VDE");
+        Assert.Equal("extensionAttribute1", fatVde.Selector);
+        Assert.Equal("extensionAttribute3", fatVde.Rule);
+
+        var vdeOnly = result.EntraSchemeMappings.Single(m => m.Scheme == "vde-only");
+        Assert.Equal("extensionAttribute7", vdeOnly.Selector);
+        Assert.Equal("VDE", vdeOnly.SelectorValue);
+        Assert.Equal("extensionAttribute8", vdeOnly.Rule);
+    }
+
+    [Fact]
+    public void Project_GroupTeams_ProjectsInstancesAndGlobalExclusion()
+    {
+        var manifest = new ComponentManifest
+        {
+            ComponentName = "Test",
+            HasEntraGroupTeams = true,
+            Keys = new[] { Desc("Company") }
+        };
+
+        var empty = new ConfigurationBuilder().Build();
+        var reg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Entra:GroupTeams:ExclusionGroup"] = "Fleet Kill Switch",
+            ["Entra:GroupTeams:Instances:prague-its:InclusionGroup"] = "NewsCentral Prague ITS",
+            ["Entra:GroupTeams:Instances:prague-its:ExclusionGroup"] = "Excluded Devices",
+            ["Entra:GroupTeams:Instances:brno-qa:InclusionGroup"] = "NewsCentral Brno QA",
+            // brno-qa has no per-instance ExclusionGroup key at all.
+        }).Build();
+
+        var result = EffectiveConfigResolver.Project(manifest, empty, reg);
+
+        Assert.Equal("Fleet Kill Switch", result.EntraGlobalExclusionGroup);
+        Assert.Equal(2, result.EntraGroupTeamInstances.Count);
+
+        var prague = result.EntraGroupTeamInstances.Single(i => i.Label == "prague-its");
+        Assert.Equal("NewsCentral Prague ITS", prague.InclusionGroup);
+        Assert.Equal("Excluded Devices", prague.ExclusionGroup);
+
+        var brno = result.EntraGroupTeamInstances.Single(i => i.Label == "brno-qa");
+        Assert.Equal("NewsCentral Brno QA", brno.InclusionGroup);
+        Assert.Null(brno.ExclusionGroup);
     }
 
     // ── Resolve install-dir override (spec §4) ────────────────────────────────

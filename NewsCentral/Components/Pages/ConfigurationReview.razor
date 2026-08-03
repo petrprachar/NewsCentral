@@ -215,28 +215,82 @@
                     </div>
                 }
 
-                @if (r.EntraMappings.Count > 0)
+                @if (r.EntraSchemeMappings.Count > 0)
                 {
-                    <h6 class="mt-4">@Localizer["EntraMappings"]</h6>
+                    <h6 class="mt-4">@Localizer["AttributeSchemes"]</h6>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered align-middle">
                             <thead class="table-light">
                                 <tr>
+                                    <th>@Localizer["ColScheme"]</th>
                                     <th>@Localizer["ColSelector"]</th>
+                                    <th>@Localizer["ColSelectorValue"]</th>
                                     <th>@Localizer["ColRule"]</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var m in r.EntraMappings)
+                                @foreach (var m in r.EntraSchemeMappings)
                                 {
                                     <tr>
+                                        <td><code>@m.Scheme</code></td>
                                         <td><code>@m.Selector</code></td>
+                                        <td><code>@m.SelectorValue</code></td>
                                         <td><code>@m.Rule</code></td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
                     </div>
+                }
+
+                @if (r.EntraGroupTeamInstances.Count > 0 || !string.IsNullOrEmpty(r.EntraGlobalExclusionGroup))
+                {
+                    <h6 class="mt-4">@Localizer["GroupTeams"]</h6>
+                    <p class="mb-2">
+                        @Localizer["GlobalExclusionGroup"]:
+                        @if (string.IsNullOrEmpty(r.EntraGlobalExclusionGroup))
+                        {
+                            <span class="text-muted">@Localizer["NoGlobalExclusion"]</span>
+                        }
+                        else
+                        {
+                            <code>@r.EntraGlobalExclusionGroup</code>
+                        }
+                    </p>
+                    @if (r.EntraGroupTeamInstances.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>@Localizer["ColLabel"]</th>
+                                        <th>@Localizer["ColInclusionGroup"]</th>
+                                        <th>@Localizer["ColExclusionGroup"]</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var i in r.EntraGroupTeamInstances)
+                                    {
+                                        <tr>
+                                            <td><code>@i.Label</code></td>
+                                            <td><code>@i.InclusionGroup</code></td>
+                                            <td>
+                                                @if (string.IsNullOrEmpty(i.ExclusionGroup))
+                                                {
+                                                    <span class="text-muted">@Localizer["Empty"]</span>
+                                                }
+                                                else
+                                                {
+                                                    <code>@i.ExclusionGroup</code>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <small class="text-muted">@Localizer["GroupTeamsNote"]</small>
+                    }
                 }
             </div>
         </div>

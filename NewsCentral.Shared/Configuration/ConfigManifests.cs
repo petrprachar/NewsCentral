@@ -13,7 +13,8 @@ public static class ConfigManifests
         ComponentName = "NewsService",
         HasTeamsHive = true,
         HasSigningHive = true,
-        HasEntraMappings = true,
+        HasEntraAttributeSchemes = true,
+        HasEntraGroupTeams = true,
         Keys = new[]
         {
             Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
@@ -95,7 +96,6 @@ public static class ConfigManifests
         ComponentName = "NewsViewer",
         HasTeamsHive = true,
         HasSigningHive = true,
-        HasEntraMappings = false,
         Keys = new[]
         {
             Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
@@ -132,7 +132,6 @@ public static class ConfigManifests
         ComponentName = "NewsCentral",
         HasTeamsHive = false,
         HasSigningHive = false,
-        HasEntraMappings = false,
         Keys = new[]
         {
             Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,

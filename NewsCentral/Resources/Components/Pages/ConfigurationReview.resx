@@ -54,9 +54,18 @@
   <data name="ColTeam" xml:space="preserve"><value>Team</value></data>
   <data name="ColPublicKey" xml:space="preserve"><value>PublicKey</value></data>
   <data name="ColPublicKeyPrevious" xml:space="preserve"><value>PublicKeyPrevious</value></data>
-  <data name="EntraMappings" xml:space="preserve"><value>Entra Mappings</value></data>
+  <data name="AttributeSchemes" xml:space="preserve"><value>Attribute Schemes</value></data>
+  <data name="ColScheme" xml:space="preserve"><value>Scheme</value></data>
   <data name="ColSelector" xml:space="preserve"><value>Selector</value></data>
+  <data name="ColSelectorValue" xml:space="preserve"><value>Selector value</value></data>
   <data name="ColRule" xml:space="preserve"><value>Rule</value></data>
+  <data name="GroupTeams" xml:space="preserve"><value>Group Teams</value></data>
+  <data name="GlobalExclusionGroup" xml:space="preserve"><value>Global exclusion group</value></data>
+  <data name="NoGlobalExclusion" xml:space="preserve"><value>(none configured)</value></data>
+  <data name="ColLabel" xml:space="preserve"><value>Label</value></data>
+  <data name="ColInclusionGroup" xml:space="preserve"><value>Inclusion group</value></data>
+  <data name="ColExclusionGroup" xml:space="preserve"><value>Exclusion group</value></data>
+  <data name="GroupTeamsNote" xml:space="preserve"><value>Label is a display convention only — the team folder name is derived from the inclusion group, not from the label.</value></data>
   <data name="BuildConstant" xml:space="preserve"><value>(build constant)</value></data>
   <data name="EnvironmentSourced" xml:space="preserve"><value>Environment-sourced</value></data>
   <data name="MachineEnvironment" xml:space="preserve"><value>Machine environment</value></data>

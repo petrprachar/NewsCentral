@@ -12,8 +12,14 @@ public sealed record ConfigRow(ConfigKeyDescriptor Descriptor, string? AppSettin
 /// <summary>A team's signing public keys from the registry Signing hive (spec §6). Not secret.</summary>
 public sealed record SigningTeamKeys(string Team, string? PublicKey, string? PublicKeyPrevious);
 
-/// <summary>One Entra selector→rule mapping (spec §6, NewsService only).</summary>
-public sealed record EntraMapping(string Selector, string? Rule);
+/// <summary>One selector→rule mapping within a named attribute scheme (NewsService only).</summary>
+public sealed record EntraSchemeMapping(string Scheme, string Selector, string SelectorValue, string? Rule);
+
+/// <summary>
+/// One configured group-team instance. Label is the registry subkey; the instance id and team
+/// folder name are both derived from InclusionGroup at runtime.
+/// </summary>
+public sealed record EntraGroupTeamInstance(string Label, string? InclusionGroup, string? ExclusionGroup);
 
 /// <summary>
 /// Full resolution for one component: header metadata (§4) + config rows (§5) + structural
@@ -35,7 +41,9 @@ public sealed record ComponentResolution
     public IReadOnlyList<ConfigRow> Rows { get; init; } = System.Array.Empty<ConfigRow>();
     public IReadOnlyList<string> Teams { get; init; } = System.Array.Empty<string>();
     public IReadOnlyList<SigningTeamKeys> Signing { get; init; } = System.Array.Empty<SigningTeamKeys>();
-    public IReadOnlyList<EntraMapping> EntraMappings { get; init; } = System.Array.Empty<EntraMapping>();
+    public IReadOnlyList<EntraSchemeMapping> EntraSchemeMappings { get; init; } = System.Array.Empty<EntraSchemeMapping>();
+    public IReadOnlyList<EntraGroupTeamInstance> EntraGroupTeamInstances { get; init; } = System.Array.Empty<EntraGroupTeamInstance>();
+    public string? EntraGlobalExclusionGroup { get; init; }
 }
 
 /// <summary>
@@ -188,8 +196,11 @@ public static class EffectiveConfigResolver
 
     /// <summary>
     /// PURE projection (spec §8 step 5): per manifest key, pair the raw appsettings and registry
-    /// values (null = absent), and project the structural teams / Signing / Entra:Mappings blocks
-    /// when the manifest flags them. No I/O — the two layers are supplied by the caller.
+    /// values (null = absent), and project the structural teams / Signing / Entra attribute-scheme
+    /// / Entra group-team blocks when the manifest flags them. No I/O — the two layers are supplied
+    /// by the caller. Returns RAW values throughout — redaction is a formatting concern
+    /// (<see cref="ConfigValueFormatter"/>), not done here; none of the Entra structural values are
+    /// secret.
     /// </summary>
     public static ComponentResolution Project(
         ComponentManifest manifest, IConfiguration appsettingsLayer, IConfiguration registryLayer)
@@ -213,11 +224,29 @@ public static class EffectiveConfigResolver
                 .ToList()
             : new List<SigningTeamKeys>();
 
-        var mappings = manifest.HasEntraMappings
-            ? registryLayer.GetSection("Entra:Mappings").GetChildren()
-                .Select(m => new EntraMapping(m.Key, m.Value))
+        // Entra:AttributeSchemes:{scheme}:Selector / Mappings:{selectorValue} → one row per mapping.
+        // A scheme with a Selector but no Mappings children emits nothing — the page renders schemes
+        // via their mappings.
+        var schemeMappings = manifest.HasEntraAttributeSchemes
+            ? registryLayer.GetSection("Entra:AttributeSchemes").GetChildren()
+                .SelectMany(scheme =>
+                {
+                    var selector = scheme["Selector"] ?? "";
+                    return scheme.GetSection("Mappings").GetChildren()
+                        .Select(m => new EntraSchemeMapping(scheme.Key, selector, m.Key, m.Value));
+                })
                 .ToList()
-            : new List<EntraMapping>();
+            : new List<EntraSchemeMapping>();
+
+        var groupInstances = manifest.HasEntraGroupTeams
+            ? registryLayer.GetSection("Entra:GroupTeams:Instances").GetChildren()
+                .Select(i => new EntraGroupTeamInstance(i.Key, i["InclusionGroup"], i["ExclusionGroup"]))
+                .ToList()
+            : new List<EntraGroupTeamInstance>();
+
+        var globalExclusion = manifest.HasEntraGroupTeams
+            ? registryLayer["Entra:GroupTeams:ExclusionGroup"]
+            : null;
 
         return new ComponentResolution
         {
@@ -225,7 +254,9 @@ public static class EffectiveConfigResolver
             Rows = rows,
             Teams = teams,
             Signing = signing,
-            EntraMappings = mappings
+            EntraSchemeMappings = schemeMappings,
+            EntraGroupTeamInstances = groupInstances,
+            EntraGlobalExclusionGroup = globalExclusion
         };
     }
 
