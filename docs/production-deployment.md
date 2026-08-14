@@ -1,0 +1,538 @@
+# Production Deployment Preparation
+
+> **Scope.** Everything that must exist in Azure/Entra, and everything that must be written into the
+> registry by GPO, before the fleet components are deployed to a corporate environment.
+>
+> **Out of scope.** MSI/Intune packaging and installer authoring (`docs/packaging.md`), the OS image
+> baseline, and .NET runtime distribution.
+>
+> **Relationship to other docs.** This document is the *ordered sequence*; it consolidates
+> `docs/azure-setup.md` (the single source for Azure entities) and `docs/configuration.md` (the single
+> source for the registry surface). Where the two disagree with this document, they win — update this
+> one.
+
+---
+
+## Table of contents
+
+1. [Phase A — Decisions to record first](#phase-a--decisions-to-record-first)
+2. [Phase B — Azure identities](#phase-b--azure-identities)
+3. [Phase C — Storage account and RBAC](#phase-c--storage-account-and-rbac)
+4. [Phase D — Certificate](#phase-d--certificate)
+5. [Phase E — Entra device data](#phase-e--entra-device-data)
+6. [Phase F — Team signing keys](#phase-f--team-signing-keys)
+7. [Phase G — Registry configuration to push](#phase-g--registry-configuration-to-push)
+8. [Phase H — Validation and cutover](#phase-h--validation-and-cutover)
+9. [Preparation checklist](#preparation-checklist)
+10. [Appendix — Reference commands](#appendix--reference-commands)
+
+---
+
+## Phase overview
+
+| Phase | Name | Outcome |
+|---|---|---|
+| A | Decide the deployment shape | Storage mode, auth mode, signing posture, dynamic teams — recorded before anything is created |
+| B | Azure identities | Two app registrations created, credential attached, Graph permissions consented |
+| C | Storage | Account + container created, RBAC assigned to a group and a service principal |
+| D | Certificate | Machine certificate issued, deployed to `LocalMachine\My`, public key uploaded |
+| E | Entra device data | *(dynamic teams only)* extensionAttributes stamped and/or groups created and populated |
+| F | Signing keys | Per-team ECDSA key pairs generated; public keys extracted for GPO |
+| G | Registry configuration | Two GPO-delivered registry trees authored and pushed — NewsService **and** NewsViewer |
+| H | Validation | End-to-end proof on a pilot machine, then fail-closed switches flipped |
+
+Phases B–F can run in parallel with packaging work. Phase G depends on F (the public keys) and on the
+`Company` value being final. Phase H depends on everything.
+
+---
+
+## Phase A — Decisions to record first
+
+Each of these changes what gets created later. Settle them before touching Azure.
+
+| Decision | Options | Consequence |
+|---|---|---|
+| Distribution tier | Azure Blob / file share | File share needs no storage account. **But if `Entra:Enabled=true`, the `AzureBlob:*` credential keys are required even in file-share mode** — the Graph reads reuse the blob credential. |
+| NewsService auth mode | `Certificate` / `ClientSecret` / `ClientSecretEnv` | `Certificate` is the production answer (Phase D). The other two place a secret in clear text (registry, or a machine environment variable). |
+| Signing posture | `RequireSignedIndex` `false` → `true` | Start `false` so an unsigned or mis-keyed team is *visible in the log* rather than invisible. Flip to `true` only after `Valid` is confirmed fleet-wide. |
+| Dynamic teams | `Entra:Enabled` `false` / `true` | `false` = static registry team list only. `true` adds Phase E, Graph admin consent, and the pending live-validation risk below. |
+| `Company` value | One string, fixed at build | Defines both the registry hive and the scheduled-task folder. Must be identical in `Directory.Build.props` and every GPO path. |
+| Team folder naming | Sanitized team name | Registry `teams\` value names must match the generated folder name exactly — e.g. `cz-its`, not `CZ_ITS`, and **no `team-` prefix**. |
+
+> ⚠️ **Entra dynamic-team resolution has not been validated live.** It is structurally complete and
+> offline/fake-tested, shipping behind `Entra:Enabled=false`. The unproven seams are the DeviceId read,
+> the device fetch HTTP, and `EntraGroupClient`'s name→id + `checkMemberGroups` calls. Plan a validation
+> window on an Entra-joined machine before relying on it, and keep the flag off until it passes.
+> See `docs/entra-dynamic-teams.md`.
+
+---
+
+## Phase B — Azure identities
+
+Two separate identities. They *may* be combined into one app registration configured as both public and
+confidential client; keeping them separate is cleaner and is assumed here. Full detail:
+`docs/azure-setup.md` §1–§2.
+
+### B.1 Agent — NewsService (app-only / confidential client)
+
+The unattended identity for blob reads and, when enabled, the Graph device and group reads.
+
+| Setting | Value | Maps to |
+|---|---|---|
+| Supported account types | Single tenant | — |
+| Platform / redirect URI | None — this is a daemon | — |
+| Application (client) ID | Overview blade | `AzureBlob:ClientId` |
+| Directory (tenant) ID | Overview blade | `AzureBlob:TenantId` |
+| Credential | Certificate (preferred) or client secret | `AzureBlob:CertificateThumbprint` / `AzureBlob:ClientSecret` |
+
+**Microsoft Graph permissions — Application type, admin consent required:**
+
+| Permission | Required when | Notes |
+|---|---|---|
+| `Device.Read.All` | any Entra dynamic team | Reads the device object and its extensionAttributes. Omit entirely if `Entra:Enabled=false`. |
+| `GroupMember.Read.All` | at least one group-team instance | Resolves group display names and checks transitive membership. |
+| `Directory.Read.All` | fallback only | Broader; use only if `GroupMember.Read.All` proves insufficient at runtime (surfaces as a `403`). |
+| *(none for Storage)* | — | App-only blob access is governed by RBAC, not an API permission. |
+
+> ⚠️ **Missing admin consent surfaces as a `403`, and `403` is classified as persistent.** NewsService
+> performs a clean team removal and logs an `Error` — it does not ride the grace window. That is
+> deliberate so the cause is visible, but it means a forgotten consent presents as *teams disappearing*,
+> not as a stall.
+
+### B.2 Authoring — NewsCentral (interactive / public client)
+
+Authentication is delegated to the signed-in content author. There is no shared service account for
+publishing.
+
+| Setting | Value |
+|---|---|
+| Supported account types | Single tenant |
+| Platform | Mobile and desktop applications |
+| Redirect URI | `http://localhost` |
+| Allow public client flows | **Yes** — required for `InteractiveBrowserCredential` |
+| Client secret / certificate | None |
+| API permissions | Azure Storage → `user_impersonation` (Delegated) |
+
+The MSAL token is persisted in a named cache (`"NewsCentral"`), so authors see a browser prompt on first
+use only. Subsequent launches refresh silently unless Conditional Access requires step-up or the refresh
+token lapses.
+
+---
+
+## Phase C — Storage account and RBAC
+
+| Item | Value / setting | Maps to |
+|---|---|---|
+| Storage account name | **Without** the `.blob.core.windows.net` suffix | NewsService `AzureBlob:AccountName`, NewsCentral `AzureBlob:AccountName` |
+| Container name | Default `newscentral`; auto-created by NewsCentral on first publish | NewsService `AzureBlob:ContainerName`, NewsCentral `Storage:AzureBlobContainerName` |
+| Container access level | Private — no anonymous access | — |
+| Shared key access | Disabled — RBAC only | — |
+| Networking | Permit the agent machines / corporate proxy egress if the account uses a firewall or private endpoint | — |
+
+### C.1 Role assignments
+
+| Principal | Role | Reason |
+|---|---|---|
+| Content authors — assign to an Entra security **group**, not individuals | **Storage Blob Data Contributor** | Publish content. Group assignment lets IT manage access through normal membership changes. |
+| NewsService agent service principal | **Storage Blob Data Reader** | Sync content to the local cache. Least privilege — the agent never writes content. |
+
+> If the agent also uploads session telemetry to the same account (`Telemetry:UploadEnabled=true` with
+> `StorageMode=Azure`), it needs **Storage Blob Data Contributor** instead. This is the only reason to
+> widen the agent's role — decide it deliberately.
+
+### C.2 Proxy under Local System
+
+NewsService runs as Local System. The default .NET `HttpClient` resolves its proxy via **WinINet**
+(per-user), which is unreliable when no user profile is loaded — whereas the Intune client and Windows
+Update reach the cloud via the **machine WinHTTP proxy**. If the fleet is behind a proxy:
+
+```
+AzureBlob\UseWinHttpProxy   REG_SZ   "true"
+```
+
+This routes **both** blob and Graph traffic through the machine WinHTTP proxy. Default `false` = no
+behaviour change.
+
+---
+
+## Phase D — Certificate
+
+Required only when `AzureBlob:AuthMode=Certificate`. See `docs/azure-setup.md` §6.
+
+1. Generate the certificate — internal CA template, or self-signed for a pilot. RSA 2048 or better;
+   key usage Digital Signature.
+2. Upload the **public** `.cer` to the agent app registration → Certificates & secrets.
+3. Deploy the certificate **with its private key** to each agent machine's `Cert:\LocalMachine\My`, via
+   GPO auto-enrolment or an Intune SCEP profile.
+4. Record the thumbprint → `AzureBlob:CertificateThumbprint`.
+
+Local System has read access to `LocalMachine\My` by default — no additional private-key permission
+grants are required.
+
+### D.1 Shared vs per-machine certificate
+
+| Option | Trade-off |
+|---|---|
+| **Shared** — one certificate on every agent machine, one public key on the app registration | Simple to manage and rotate. Compromise of any machine compromises the fleet credential. |
+| **Per-machine** — unique certificate each; Entra supports multiple certificates per app registration | Stronger isolation and per-device auditability. Needs provisioning automation and a larger key inventory. |
+
+Shared is the reasonable starting point for an agent holding a read-only role. Escalate if the security
+team requires per-device auditability.
+
+---
+
+## Phase E — Entra device data
+
+Skip entirely if `Entra:Enabled` will be `false`. Both source kinds may be used together. Full model:
+`docs/entra-dynamic-teams.md`.
+
+### E.1 Attribute schemes
+
+Stamp the relevant extensionAttributes on the device objects. `Selector` names the attribute that drives
+the lookup; `Mappings` translates a selector value into a team rule.
+
+```
+Entra\AttributeSchemes\{scheme}\Selector           REG_SZ  "extensionAttribute1"
+Entra\AttributeSchemes\{scheme}\Mappings\{value}   REG_SZ  "extensionAttribute2-extensionAttribute5-extensionAttribute4"
+```
+
+An attribute entry's `SourceId` is the **authored scheme name** (e.g. `fat`), independent of the
+resulting team folder name.
+
+### E.2 Group teams
+
+For each instance, create the inclusion group and optionally a per-instance exclusion group. Optionally
+create one fleet-wide exclusion group shared across every instance. Add target devices as members —
+membership is evaluated **transitively**, so nested groups count.
+
+| Registry value | Meaning |
+|---|---|
+| `Entra\GroupTeams\Instances\{label}\InclusionGroup` | Inclusion group display name — setting this **activates** the instance |
+| `Entra\GroupTeams\Instances\{label}\ExclusionGroup` | Per-instance exclusion group display name (optional) |
+| `Entra\GroupTeams\ExclusionGroup` | Fleet-wide exclusion group display name (optional) |
+
+> ⚠️ **The team folder name is derived, not authored.** It is `Canonicalize(InclusionGroup)` —
+> lower-case, space/underscore → `-`, strip anything outside `[a-z0-9-]`. `NewsCentral Prague ITS`
+> becomes `newscentral-prague-its`, and content **must** be published under that exact folder name. The
+> registry subkey `{label}` is an operator-facing label only; renaming it retargets nothing.
+
+> ⚠️ **Inclusion group display names must be unique in the tenant.** An ambiguous name produces no team
+> for that instance and is logged. An unresolvable **fleet-wide** exclusion name suppresses *every* group
+> instance — it fails closed by design, logging one `Error` per cycle.
+
+### E.3 Caps and grace
+
+| Value | Default | Effect |
+|---|---|---|
+| `Entra\Enabled` | `false` | Gates the whole feature |
+| `Entra\GracePeriodMinutes` | `240` | How long a team is retained while Graph is *transiently* unreachable. Per instance, against its own last-confirmed time. `0` = no grace (deliberate and valid). |
+| `Entra\MaxDynamicTeams` | `16` | Cap on total dynamic teams written across both sources; `0` = no cap. Truncates deterministically **after** the grace merge, with a `Warning` naming the dropped ids. |
+
+> ⚠️ **All three MUST be provisioned as `REG_SZ`, never `REG_DWORD`.** `RegistryConfigurationProvider`
+> coerces DWORD `0`→`"False"` and `1`→`"True"`; the int binder then throws and crashes the service at
+> startup. `GracePeriodMinutes=0` and `MaxDynamicTeams=0` are both legitimate values, which is exactly
+> what makes this trap live.
+
+---
+
+## Phase F — Team signing keys
+
+Each team owns an ECDSA P-256 key pair. The private key lives only in the authoring tier; the public key
+is what gets deployed. See `docs/security.md` and `docs/anti-tamper.md`.
+
+1. In NewsCentral, sign in as a **TeamAdmin** (SystemAdmin passes automatically) and open **Key
+   Management**.
+2. Select the team. **Generate** a new ECDSA P-256 key pair — held in page state until applied.
+3. **Apply.** This sets `PublicKeyPrevious` to the outgoing `PublicKey` (rotation continuity) and writes
+   `team-signing.json` into the team's authoring folder.
+4. Copy the **full public key** from the page — it is rendered copyable specifically for GPO deployment.
+5. **Republish** — a separate deliberate action that re-signs and saves `index.json`, with the self-verify
+   guard running at publish time.
+6. Repeat per team. Record each team's public key against its **exact team folder name**.
+
+`team-signing.json` never leaves the authoring tier — it is written through `IStorageService` and is never
+distributed via `IBlobDistributionService`. Public keys are **not secret**; treat them as configuration.
+
+> ⚠️ **Rotation trap.** Signing and index regeneration are distinct operations. Regenerating indexes
+> re-signs with the current key but does **not** rotate keys — and because client change detection uses
+> `IndexHash` rather than the signature, regenerating with a new key on *unchanged* content does **not**
+> force clients to re-sync. `PublicKeyPrevious` must remain in the registry until an actual content
+> change has propagated to every machine.
+
+> ⚠️ **Private signing keys currently live in `team-signing.json` on the authoring tier.** Azure Key
+> Vault migration is the flagged highest-priority preventive measure. Until then, the authoring tier's
+> backup and access control *is* the key protection.
+
+---
+
+## Phase G — Registry configuration to push
+
+Two separate trees, one per fleet component. **GPO owns this configuration entirely — the installer must
+not write it** (`docs/packaging.md`). Full key surface: `docs/configuration.md`.
+
+```
+HKLM\Software\{Company}\NewsCentral\NewsService\
+HKLM\Software\{Company}\NewsCentral\NewsViewer\
+```
+
+> ⚠️ **Each component reads only its own subkey.** The `teams\` list and the `Signing\` subtree are
+> **not** shared — both must be written twice, once under `NewsService` and once under `NewsViewer`.
+> Provisioning only one is a silent half-configuration: NewsService will sync content that NewsViewer
+> then refuses or ignores.
+
+### G.1 Value type rules
+
+| Rule | Detail |
+|---|---|
+| `REG_SZ` for any integer | Any numeric value whose legitimate range includes `0` or `1` **must** be `REG_SZ`. DWORD `0`→`"False"`, `1`→`"True"`, and the int binder then throws at startup. |
+| `REG_SZ` for doc-specified booleans | Written as `"true"`/`"false"` strings where `docs/configuration.md` specifies `REG_SZ` — `RequireSignedIndex`, `UseWinHttpProxy`, `Entra\Enabled`. |
+| `DWORD` is fine for genuine booleans | `BypassDailyGate`, `BypassImageIntegrityCheck`, `Telemetry\UploadEnabled` — the `0`/`1` coercion is exactly what these want. |
+| `teams\` uses value **names** | The team folder name is the value *name*; the data is ignored. Write an empty string as data. |
+
+### G.2 NewsService tree
+
+```
+HKLM\Software\{Company}\NewsCentral\NewsService\
+│
+├── Service\
+│       PollIntervalSeconds     REG_SZ   "60"            ← REG_SZ, never DWORD
+│       CacheRootPath           REG_SZ   "C:\ProgramData\NewsCentral"
+│
+├── Repository\
+│       StorageMode             REG_SZ   "Azure" | "Share"
+│       SharePath               REG_SZ   "\\fileserver\newscentral"   (Share mode)
+│
+├── AzureBlob\
+│       AuthMode                REG_SZ   "Certificate" | "ClientSecret" | "ClientSecretEnv"
+│       TenantId                REG_SZ   <tenant GUID>
+│       ClientId                REG_SZ   <agent app client GUID>
+│       AccountName             REG_SZ   <storage account, no suffix>
+│       ContainerName           REG_SZ   "newscentral"
+│       CertificateThumbprint   REG_SZ   <40 hex chars>   (AuthMode=Certificate)
+│       ClientSecret            REG_SZ   <secret>         (AuthMode=ClientSecret)
+│       UseWinHttpProxy         REG_SZ   "true" | "false"
+│
+├── Signing\
+│       RequireSignedIndex      REG_SZ   "false"          ← flip to "true" at Phase H
+│       {teamFolderName}\
+│           PublicKey           REG_SZ   <Base64 SPKI>
+│           PublicKeyPrevious   REG_SZ   <Base64 SPKI>    (rotation window only)
+│
+├── Entra\                                                (omit entirely if not used)
+│       Enabled                 REG_SZ   "false"
+│       GracePeriodMinutes      REG_SZ   "240"
+│       MaxDynamicTeams         REG_SZ   "16"
+│       GroupTeams\ExclusionGroup                     REG_SZ  <display name>
+│       GroupTeams\Instances\{label}\InclusionGroup   REG_SZ  <display name>
+│       GroupTeams\Instances\{label}\ExclusionGroup   REG_SZ  <display name>
+│       AttributeSchemes\{scheme}\Selector            REG_SZ  "extensionAttribute1"
+│       AttributeSchemes\{scheme}\Mappings\{value}    REG_SZ  <rule>
+│
+├── Delivery\
+│       DefaultLockScreenPath   REG_SZ   <absolute path>  ("" = leave sticky)
+│
+├── Hmac\
+│       SecretKey               REG_SZ   <Base64 32-byte>  (telemetry only)
+│
+├── Telemetry\
+│       UploadEnabled           DWORD    1
+│
+├── Logging\LogLevel\Default              REG_SZ   "Information"
+├── Logging\EventLog\LogLevel\Default     REG_SZ   "Information"
+│
+└── teams\
+        {teamFolderName}        REG_SZ   ""      (one value per static team)
+```
+
+### G.3 NewsViewer tree
+
+```
+HKLM\Software\{Company}\NewsCentral\NewsViewer\
+│   CacheRootPath               REG_SZ   "C:\ProgramData\NewsCentral"
+│   BypassDailyGate             DWORD    0       (1 only on test machines)
+│   BypassImageIntegrityCheck   DWORD    0       (1 only on test machines)
+│
+├── Display\
+│       LogicalDayStartHour     REG_SZ   "5"     ← REG_SZ; "0"/"1" break as DWORD
+│
+├── Delivery\
+│       DefaultWallpaperPath        REG_SZ   <absolute path>   ("" = sticky)
+│       WallpaperStyle              REG_SZ   "Fit" | Fill | Stretch | Center | Tile
+│       WallpaperBackgroundColor    REG_SZ   "0 0 0"
+│
+├── Ui\
+│       Theme                   REG_SZ   "Dark" | "Light"
+│
+├── Signing\
+│       RequireSignedIndex      REG_SZ   "false"
+│       {teamFolderName}\PublicKey          REG_SZ   <Base64 SPKI>
+│       {teamFolderName}\PublicKeyPrevious  REG_SZ   <Base64 SPKI>
+│
+├── Hmac\
+│       SecretKey               REG_SZ   <same Base64 32-byte key as NewsService>
+│
+└── teams\
+        {teamFolderName}        REG_SZ   ""
+```
+
+> ⚠️ **The HMAC key must be identical in NewsViewer (signer) and NewsService (verifier).** It covers
+> session telemetry only — index signing is ECDSA. An empty key disables HMAC system-wide and telemetry
+> passes through as `Disabled`: an acceptable phased-rollout state, not a permanent one.
+
+### G.4 Values NOT delivered by GPO
+
+| Item | Where it lives | Why |
+|---|---|---|
+| `Company` | Build-time constant in `Directory.Build.props` | It defines the hive path and cannot be read from the path it defines |
+| `NEWSSERVICE_AZURE_CLIENTSECRET` | Machine-scope environment variable | Only when `AuthMode=ClientSecretEnv`. The single configuration item that does not arrive through GPO. **Machine scope is required** — Local System does not see user variables. |
+| Team **private** signing keys | `team-signing.json`, authoring tier only | Never distributed; public keys only reach the fleet |
+
+> ⚠️ **`ClientSecretEnv` is a convenience delivery, not a secure one.** A machine environment variable is
+> clear text readable by any SYSTEM process, exactly like a registry `REG_SZ` secret. Do not present it
+> to a security reviewer as hardened. `Certificate` mode is the production answer; Azure Key Vault
+> remains the intended secure path.
+
+---
+
+## Phase H — Validation and cutover
+
+### H.1 Pilot validation sequence
+
+| # | Check | Expected result | Where to look |
+|---|---|---|---|
+| 1 | GPO tree landed under the correct `Company` | Values readable under `…\NewsCentral\NewsService\` | `reg query` |
+| 2 | NewsService starts and reaches the repository | `status.json` shows `isOnline: true` and the expected `syncSource` | `%ProgramData%\NewsCentral\status.json` |
+| 3 | Index signature verifies | Acceptance logged as `Valid` per team on first cycle or on change | Event Log → Application, source `NewsService` |
+| 4 | Content cached | `index.json` + images present under the team folder | `%ProgramData%\NewsCentral\{team}\` |
+| 5 | Lock screen applied | `LockScreenImagePath` points at the cached image | `HKLM\…\PersonalizationCSP` |
+| 6 | Poster shows once per logical day | `ViewerForm` appears at logon or unlock, once | Visual |
+| 7 | Wallpaper applied and **re-asserted** | Set on every run, including already-shown days | Visual + `HKCU\Control Panel\Desktop` |
+| 8 | Telemetry round-trip | `session-*.json` appears in `uploads\`, is forwarded, then removed | `%ProgramData%\NewsCentral\uploads\` |
+| 9 | Dynamic teams *(if enabled)* | `resolved-teams.json` lists the expected teams with `State: Active` | `%ProgramData%\NewsCentral\resolved-teams.json` |
+| 10 | Negative: tampered index rejected | Team skipped, `Error` logged | Event Log |
+
+### H.2 Flipping the fail-closed switch
+
+Only after check 3 reports `Valid` for **every** team on **every** pilot machine:
+
+```
+NewsService\Signing\RequireSignedIndex   REG_SZ   "true"
+NewsViewer\Signing\RequireSignedIndex    REG_SZ   "true"
+```
+
+From that point `Unsigned` and `Disabled` indexes are rejected alongside `Invalid`. A team missing its
+public key in the registry will go dark rather than display unverified content — the intent, but it means
+the key inventory must be complete first.
+
+### H.3 Diagnosing a silent no-op
+
+A freshly deployed machine that behaves as though it has no configuration has one overwhelmingly likely
+cause.
+
+> ⚠️ **`Company` mismatch.** `OpenSubKey` returns `null` with no error, every GPO override is discarded,
+> and the component runs on shipped defaults — NewsService finds no teams and does nothing, NewsViewer
+> shows nothing. Verify that the built-in `Company` value and the GPO hive path use the **identical**
+> string before investigating anything else.
+
+Other silent-failure candidates, in order of likelihood:
+
+- `teams\` value names do not match the generated folder names exactly (case, hyphens, a stray `team-`
+  prefix).
+- `Signing\` or `teams\` written under `NewsService` but not `NewsViewer`, or vice versa.
+- A numeric value provisioned as `REG_DWORD` instead of `REG_SZ` — this one is *not* silent, it crashes
+  the component at startup, but the crash can be mistaken for a service that never installed.
+- Public key stale after a rotation where content never changed — `PublicKeyPrevious` removed too early.
+- NewsViewer suppressed by the remote/virtual session guard on an RDP, Citrix, or Horizon session.
+
+> **NewsViewer emits no runtime diagnostic logging in this release.** When a user reports "I don't see any
+> news", troubleshooting is limited to verifying the NewsViewer registry tree and clearing the per-user
+> gate by deleting `%LOCALAPPDATA%\NewsCentral\viewerstate.json`. EventLog logging for NewsViewer is a
+> planned follow-up (`docs/packaging.md`).
+
+---
+
+## Preparation checklist
+
+| # | Task | Owner | Done |
+|---|---|---|---|
+| A.1 | Deployment shape decided and recorded (storage, auth, signing, Entra) | Solution owner | ☐ |
+| A.2 | `Company` value final in `Directory.Build.props` and communicated to the GPO author | Solution owner | ☐ |
+| A.3 | Team list and exact folder names agreed | Solution owner | ☐ |
+| B.1 | Agent app registration created; credential attached | IT / Cloud | ☐ |
+| B.2 | Graph permissions added and **admin consent granted** (if Entra enabled) | IT / Identity | ☐ |
+| B.3 | Authoring app registration created; public client flows enabled; `user_impersonation` added | IT / Cloud | ☐ |
+| C.1 | Storage account created; shared key access disabled; container private | IT / Cloud | ☐ |
+| C.2 | Authors security group created and populated | IT / Identity | ☐ |
+| C.3 | RBAC: authors group → Storage Blob Data Contributor | IT / Cloud | ☐ |
+| C.4 | RBAC: agent SP → Storage Blob Data Reader (or Contributor if telemetry upload) | IT / Cloud | ☐ |
+| C.5 | Proxy decision made; `UseWinHttpProxy` set if required | IT / Network | ☐ |
+| D.1 | Certificate issued and deployed to `LocalMachine\My` on pilot machines | IT / PKI | ☐ |
+| D.2 | Public `.cer` uploaded to the agent app registration; thumbprint recorded | IT / Cloud | ☐ |
+| E.1 | *(Entra)* extensionAttributes stamped and/or groups created and populated | IT / Identity | ☐ |
+| E.2 | *(Entra)* Inclusion group names confirmed unique; canonicalized folder names published | Solution owner | ☐ |
+| F.1 | Signing key pair generated per team in Key Management | NewsCentral admin | ☐ |
+| F.2 | Index republished per team; self-verify guard passed | NewsCentral admin | ☐ |
+| F.3 | Public keys extracted and mapped to exact team folder names | NewsCentral admin | ☐ |
+| F.4 | HMAC 32-byte key generated and stored securely | NewsCentral admin | ☐ |
+| G.1 | NewsService registry tree authored; value types verified `REG_SZ` vs `DWORD` | IT / Ops | ☐ |
+| G.2 | NewsViewer registry tree authored — including its **own** `teams\` and `Signing\` | IT / Ops | ☐ |
+| G.3 | GPO linked to the pilot OU and applied | IT / Ops | ☐ |
+| G.4 | *(ClientSecretEnv only)* machine environment variable provisioned | IT / Ops | ☐ |
+| H.1 | Pilot validation checks 1–10 passed | QA / Ops | ☐ |
+| H.2 | Stabilisation window completed on the pilot group | Project lead | ☐ |
+| H.3 | `RequireSignedIndex` flipped to `true` on both components | IT / Ops | ☐ |
+| H.4 | Rollout to the wider fleet | IT / Ops | ☐ |
+
+---
+
+## Appendix — Reference commands
+
+**Generate the HMAC key (Base64, 32 bytes):**
+
+```powershell
+[Convert]::ToBase64String(
+    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+**Verify the machine is Entra-joined:**
+
+```powershell
+dsregcmd /status        # AzureAdJoined : YES
+whoami /upn             # must return user@domain, not DOMAIN\user
+```
+
+**Verify a registry tree landed:**
+
+```powershell
+reg query "HKLM\Software\{Company}\NewsCentral\NewsService" /s
+reg query "HKLM\Software\{Company}\NewsCentral\NewsViewer"  /s
+```
+
+**Verify the agent certificate is present:**
+
+```powershell
+Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*NewsService*'
+```
+
+**Force a NewsViewer re-display on a test machine:**
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\NewsCentral\viewerstate.json"
+# or set BypassDailyGate = 1 (DWORD) on that machine only
+```
+
+**Canonicalization of a group display name:**
+
+```
+"NewsCentral Prague ITS"  ->  "newscentral-prague-its"
+# lower-case; space/underscore -> '-'; strip anything outside [a-z0-9-]
+```
+
+### Documents to hand over
+
+| Audience | Document |
+|---|---|
+| Azure / Identity team | `docs/azure-setup.md` + Phases B–E of this document |
+| GPO / Endpoint team | Phase G of this document + `docs/configuration.md` for the full key surface |
+| Packaging team | `docs/packaging.md` — complete and self-contained |
+| Support / service desk | Phase H.3 of this document |

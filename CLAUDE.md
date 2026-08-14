@@ -158,4 +158,5 @@ No direct inter-process communication. All coordination is via the shared cache 
 @docs/security.md
 @docs/anti-tamper.md
 @docs/packaging.md
+@docs/production-deployment.md
 @docs/future.md
