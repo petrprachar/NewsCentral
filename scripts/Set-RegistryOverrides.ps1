@@ -1,19 +1,38 @@
 #Requires -RunAsAdministrator
 # ============================================================================
-#  PARKED INDEFINITELY — NOT UNDER ACTIVE DEVELOPMENT
+#  SCOPE — DEVELOPER AND PILOT MACHINES ONLY
 #
-#  This script (Phase D per-team signing registry provisioning) is parked
-#  indefinitely. It is retained for reference only.
+#  This script provisions a SUBSET of the registry surface, for dev boxes and
+#  pilot machines. It is NOT the fleet provisioning mechanism: in production,
+#  Group Policy owns everything under HKLM\Software\<Company>\NewsCentral\
+#  (see docs/packaging.md — the installer must not write configuration).
 #
-#  NOTE: the team names in the .EXAMPLE blocks below (e.g. team-cz-exp,
-#  team-de-prod) predate the removal of the `team-` folder-name prefix and
-#  are retained as-is. Current folder names carry no `team-` prefix.
+#  AUTHORITATIVE REFERENCES — this script does not supersede either:
+#    docs/configuration.md          full registry surface, per component
+#    docs/production-deployment.md  ordered deployment sequence
 #
-#  WARNING — numeric values must NEVER be written as -Type DWord. RegistryConfigurationProvider
-#  coerces REG_DWORD 0 -> "False" and 1 -> "True", after which the configuration binder throws
-#  converting "False"/"True" to int and crashes the component at startup. Write every int-valued
-#  key (PollIntervalSeconds, GracePeriodMinutes, LockExpirationMinutes, LogicalDayStartHour, ...)
-#  as -Type String. Genuine booleans as DWord are fine — the coercion exists for them.
+#  NOT WRITTEN by this script (write by hand or by GPO):
+#    Signing\   RequireSignedIndex, per-team PublicKey / PublicKeyPrevious
+#               (Phase D — parked indefinitely, see docs/future.md)
+#    Entra\     Enabled, GracePeriodMinutes, MaxDynamicTeams,
+#               AttributeSchemes\, GroupTeams\
+#    Delivery\  DefaultLockScreenPath (NewsService),
+#               DefaultWallpaperPath / WallpaperStyle /
+#               WallpaperBackgroundColor (NewsViewer)
+#    Display\   LogicalDayStartHour
+#    Ui\        Theme
+#    Telemetry\ UploadEnabled
+#    Logging\   LogLevel\Default, EventLog\LogLevel\Default
+#    AzureBlob\ UseWinHttpProxy
+#    NewsCentral component keys (DataPath, LockExpirationMinutes, Storage\, ...)
+#
+#  WARNING — numeric values must NEVER be written as -Type DWord.
+#  RegistryConfigurationProvider coerces REG_DWORD 0 -> "False" and 1 -> "True",
+#  after which the configuration binder throws converting "False"/"True" to int
+#  and crashes the component at startup. Write every int-valued key
+#  (PollIntervalSeconds, GracePeriodMinutes, LockExpirationMinutes,
+#  LogicalDayStartHour, ...) as -Type String. Genuine booleans as DWord are
+#  fine — the coercion exists for them.
 # ============================================================================
 <#
 .SYNOPSIS
@@ -112,7 +131,9 @@
     Azure Blob container name. Default: newscentral
 
 .PARAMETER AzureAuthMode
-    Certificate or ClientSecret. Default: Certificate
+    Certificate, ClientSecret, or ClientSecretEnv.
+    ClientSecretEnv reads the secret from the machine-scope environment variable
+    NEWSSERVICE_AZURE_CLIENTSECRET — this script does not and must not set it.
 
 .PARAMETER AzureCertificateThumbprint
     Certificate thumbprint in Cert:\LocalMachine\My (AzureAuthMode=Certificate).
@@ -121,23 +142,34 @@
     Client secret string (AzureAuthMode=ClientSecret).
 
 .EXAMPLE
-    # Local share setup, two teams, test machine bypass
+    # NewsService on a dev box — file share, two teams
     .\Set-RegistryOverrides.ps1 `
-        -Teams "team-cz-exp","team-de-prod" `
+        -Company "Contoso" `
+        -ComponentName NewsService `
+        -Teams "cz-its","de-prod" `
         -StorageMode Share `
         -SharePath "\\fileserver\newscentral" `
-        -PollIntervalSeconds 60 `
+        -PollIntervalSeconds 60
+
+.EXAMPLE
+    # NewsViewer on the same dev box — same teams, gates bypassed for repeat runs
+    .\Set-RegistryOverrides.ps1 `
+        -Company "Contoso" `
+        -ComponentName NewsViewer `
+        -Teams "cz-its","de-prod" `
         -BypassDailyGate `
         -BypassImageIntegrityCheck
 
 .EXAMPLE
-    # Azure setup
-    .\Set-RegistryOverrides.ps1 `
-        -Teams "team-cz-exp" `
+    # NewsService against Azure, certificate auth — preview only
+    .\Set-RegistryOverrides.ps1 -WhatIf `
+        -Company "Contoso" `
+        -ComponentName NewsService `
+        -Teams "cz-its" `
         -StorageMode Azure `
         -AzureTenantId "00000000-0000-0000-0000-000000000000" `
-        -AzureClientId  "00000000-0000-0000-0000-000000000000" `
-        -AzureAccountName "mystorageaccount" `
+        -AzureClientId "00000000-0000-0000-0000-000000000000" `
+        -AzureAccountName "stgnewscentral" `
         -AzureAuthMode Certificate `
         -AzureCertificateThumbprint "ABCDEF1234567890ABCDEF1234567890ABCDEF12"
 #>
@@ -183,7 +215,7 @@ param(
     [string] $AzureAccountName,
     [string] $AzureContainerName,
 
-    [ValidateSet("Certificate", "ClientSecret")]
+    [ValidateSet("Certificate", "ClientSecret", "ClientSecretEnv")]
     [string] $AzureAuthMode,
 
     [string] $AzureCertificateThumbprint,
@@ -222,7 +254,7 @@ if (-not (Test-Path $base)) {
 }
 
 # ── Root-level values (NewsViewer bindings) ───────────────────────────────────
-if ($PSBoundParameters.ContainsKey("CacheRootPath")) {
+if ($PSBoundParameters.ContainsKey("CacheRootPath") -and $ComponentName -eq "NewsViewer") {
     Set-RegValue -Path $base -Name "CacheRootPath" -Value $CacheRootPath -Type String
 }
 
@@ -245,7 +277,7 @@ if ($PSBoundParameters.ContainsKey("HmacSecretKey")) {
 if ($PSBoundParameters.ContainsKey("PollIntervalSeconds")) {
     Set-RegValue -Path "$base\Service" -Name "PollIntervalSeconds" -Value $PollIntervalSeconds -Type String
 }
-if ($PSBoundParameters.ContainsKey("CacheRootPath")) {
+if ($PSBoundParameters.ContainsKey("CacheRootPath") -and $ComponentName -eq "NewsService") {
     Set-RegValue -Path "$base\Service" -Name "CacheRootPath" -Value $CacheRootPath -Type String
 }
 
