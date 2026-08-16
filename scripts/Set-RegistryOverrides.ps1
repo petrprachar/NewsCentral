@@ -436,7 +436,7 @@ if ($ComponentName -in @("NewsCentral", "NewsTester")) {
     $offending = $newParameterNames | Where-Object { $PSBoundParameters.ContainsKey($_) }
     if ($offending) {
         throw "Parameter(s) $($offending -join ', ') are not valid for -ComponentName $ComponentName. " +
-              "NewsCentral and NewsTester are out of scope for this script's fleet registry surface — see docs/configuration.md."
+            "NewsCentral and NewsTester are out of scope for this script's fleet registry surface. See docs/configuration.md."
     }
 }
 else {
@@ -488,10 +488,11 @@ if ($PSBoundParameters.ContainsKey("TeamPublicKeys")) {
 if ($PSBoundParameters.ContainsKey("TeamPreviousPublicKeys")) {
     Assert-TeamKeyHashtable -Table $TeamPreviousPublicKeys -ParamName "TeamPreviousPublicKeys"
 }
+
 if ($PSBoundParameters.ContainsKey("TeamPublicKeys") -and $PSBoundParameters.ContainsKey("Teams")) {
     foreach ($key in $TeamPublicKeys.Keys) {
         if ($key -notin $Teams) {
-            Write-Warning "-TeamPublicKeys contains '$key', which is not present in -Teams. Valid for a dynamic (Entra-resolved) team with a pinned registry key — otherwise likely a typo."
+            Write-Warning "-TeamPublicKeys contains '$key', which is not present in -Teams. Valid for a dynamic (Entra-resolved) team with a pinned registry key, otherwise likely a typo."
         }
     }
 }
