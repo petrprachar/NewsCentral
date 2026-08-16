@@ -15,47 +15,47 @@
 
 ## Table of contents
 
-1. [Phase A — Decisions to record first](#phase-a--decisions-to-record-first)
-2. [Phase B — Azure identities](#phase-b--azure-identities)
-3. [Phase C — Storage account and RBAC](#phase-c--storage-account-and-rbac)
-4. [Phase D — Certificate](#phase-d--certificate)
-5. [Phase E — Entra device data](#phase-e--entra-device-data)
-6. [Phase F — Team signing keys](#phase-f--team-signing-keys)
-7. [Phase G — Registry configuration to push](#phase-g--registry-configuration-to-push)
-8. [Phase H — Validation and cutover](#phase-h--validation-and-cutover)
+1. [Step 1 — Decisions to record first](#step-1--decisions-to-record-first)
+2. [Step 2 — Azure identities](#step-2--azure-identities)
+3. [Step 3 — Storage account and RBAC](#step-3--storage-account-and-rbac)
+4. [Step 4 — Certificate](#step-4--certificate)
+5. [Step 5 — Entra device data](#step-5--entra-device-data)
+6. [Step 6 — Team signing keys](#step-6--team-signing-keys)
+7. [Step 7 — Registry configuration to push](#step-7--registry-configuration-to-push)
+8. [Step 8 — Validation and cutover](#step-8--validation-and-cutover)
 9. [Preparation checklist](#preparation-checklist)
 10. [Appendix — Reference commands](#appendix--reference-commands)
 
 ---
 
-## Phase overview
+## Step overview
 
-| Phase | Name | Outcome |
+| Step | Name | Outcome |
 |---|---|---|
-| A | Decide the deployment shape | Storage mode, auth mode, signing posture, dynamic teams — recorded before anything is created |
-| B | Azure identities | Two app registrations created, credential attached, Graph permissions consented |
-| C | Storage | Account + container created, RBAC assigned to a group and a service principal |
-| D | Certificate | Machine certificate issued, deployed to `LocalMachine\My`, public key uploaded |
-| E | Entra device data | *(dynamic teams only)* extensionAttributes stamped and/or groups created and populated |
-| F | Signing keys | Per-team ECDSA key pairs generated; public keys extracted for GPO |
-| G | Registry configuration | Two GPO-delivered registry trees authored and pushed — NewsService **and** NewsViewer |
-| H | Validation | End-to-end proof on a pilot machine, then fail-closed switches flipped |
+| 1 | Decide the deployment shape | Storage mode, auth mode, signing posture, dynamic teams — recorded before anything is created |
+| 2 | Azure identities | Two app registrations created, credential attached, Graph permissions consented |
+| 3 | Storage | Account + container created, RBAC assigned to a group and a service principal |
+| 4 | Certificate | Machine certificate issued, deployed to `LocalMachine\My`, public key uploaded |
+| 5 | Entra device data | *(dynamic teams only)* extensionAttributes stamped and/or groups created and populated |
+| 6 | Signing keys | Per-team ECDSA key pairs generated; public keys extracted for GPO |
+| 7 | Registry configuration | Two GPO-delivered registry trees authored and pushed — NewsService **and** NewsViewer |
+| 8 | Validation | End-to-end proof on a pilot machine, then fail-closed switches flipped |
 
-Phases B–F can run in parallel with packaging work. Phase G depends on F (the public keys) and on the
-`Company` value being final. Phase H depends on everything.
+Steps 2-6 can run in parallel with packaging work. Step 7 depends on Step 6 (the public keys) and on the
+`Company` value being final. Step 8 depends on everything.
 
 ---
 
-## Phase A — Decisions to record first
+## Step 1 — Decisions to record first
 
 Each of these changes what gets created later. Settle them before touching Azure.
 
 | Decision | Options | Consequence |
 |---|---|---|
 | Distribution tier | Azure Blob / file share | File share needs no storage account. **But if `Entra:Enabled=true`, the `AzureBlob:*` credential keys are required even in file-share mode** — the Graph reads reuse the blob credential. |
-| NewsService auth mode | `Certificate` / `ClientSecret` / `ClientSecretEnv` | `Certificate` is the production answer (Phase D). The other two place a secret in clear text (registry, or a machine environment variable). |
+| NewsService auth mode | `Certificate` / `ClientSecret` / `ClientSecretEnv` | `Certificate` is the production answer (Step 4). The other two place a secret in clear text (registry, or a machine environment variable). |
 | Signing posture | `RequireSignedIndex` `false` → `true` | Start `false` so an unsigned or mis-keyed team is *visible in the log* rather than invisible. Flip to `true` only after `Valid` is confirmed fleet-wide. |
-| Dynamic teams | `Entra:Enabled` `false` / `true` | `false` = static registry team list only. `true` adds Phase E, Graph admin consent, and the pending live-validation risk below. |
+| Dynamic teams | `Entra:Enabled` `false` / `true` | `false` = static registry team list only. `true` adds Step 5, Graph admin consent, and the pending live-validation risk below. |
 | `Company` value | One string, fixed at build | Defines both the registry hive and the scheduled-task folder. Must be identical in `Directory.Build.props` and every GPO path. |
 | Team folder naming | Sanitized team name | Registry `teams\` value names must match the generated folder name exactly — e.g. `cz-its`, not `CZ_ITS`, and **no `team-` prefix**. |
 
@@ -67,13 +67,13 @@ Each of these changes what gets created later. Settle them before touching Azure
 
 ---
 
-## Phase B — Azure identities
+## Step 2 — Azure identities
 
 Two separate identities. They *may* be combined into one app registration configured as both public and
 confidential client; keeping them separate is cleaner and is assumed here. Full detail:
 `docs/azure-setup.md` §1–§2.
 
-### B.1 Agent — NewsService (app-only / confidential client)
+### 2.1 Agent — NewsService (app-only / confidential client)
 
 The unattended identity for blob reads and, when enabled, the Graph device and group reads.
 
@@ -99,7 +99,7 @@ The unattended identity for blob reads and, when enabled, the Graph device and g
 > deliberate so the cause is visible, but it means a forgotten consent presents as *teams disappearing*,
 > not as a stall.
 
-### B.2 Authoring — NewsCentral (interactive / public client)
+### 2.2 Authoring — NewsCentral (interactive / public client)
 
 Authentication is delegated to the signed-in content author. There is no shared service account for
 publishing.
@@ -119,7 +119,7 @@ token lapses.
 
 ---
 
-## Phase C — Storage account and RBAC
+## Step 3 — Storage account and RBAC
 
 | Item | Value / setting | Maps to |
 |---|---|---|
@@ -129,7 +129,7 @@ token lapses.
 | Shared key access | Disabled — RBAC only | — |
 | Networking | Permit the agent machines / corporate proxy egress if the account uses a firewall or private endpoint | — |
 
-### C.1 Role assignments
+### 3.1 Role assignments
 
 | Principal | Role | Reason |
 |---|---|---|
@@ -140,7 +140,7 @@ token lapses.
 > `StorageMode=Azure`), it needs **Storage Blob Data Contributor** instead. This is the only reason to
 > widen the agent's role — decide it deliberately.
 
-### C.2 Proxy under Local System
+### 3.2 Proxy under Local System
 
 NewsService runs as Local System. The default .NET `HttpClient` resolves its proxy via **WinINet**
 (per-user), which is unreliable when no user profile is loaded — whereas the Intune client and Windows
@@ -155,7 +155,7 @@ behaviour change.
 
 ---
 
-## Phase D — Certificate
+## Step 4 — Certificate
 
 Required only when `AzureBlob:AuthMode=Certificate`. See `docs/azure-setup.md` §6.
 
@@ -169,7 +169,7 @@ Required only when `AzureBlob:AuthMode=Certificate`. See `docs/azure-setup.md` �
 Local System has read access to `LocalMachine\My` by default — no additional private-key permission
 grants are required.
 
-### D.1 Shared vs per-machine certificate
+### 4.1 Shared vs per-machine certificate
 
 | Option | Trade-off |
 |---|---|
@@ -181,12 +181,12 @@ team requires per-device auditability.
 
 ---
 
-## Phase E — Entra device data
+## Step 5 — Entra device data
 
 Skip entirely if `Entra:Enabled` will be `false`. Both source kinds may be used together. Full model:
 `docs/entra-dynamic-teams.md`.
 
-### E.1 Attribute schemes
+### 5.1 Attribute schemes
 
 Stamp the relevant extensionAttributes on the device objects. `Selector` names the attribute that drives
 the lookup; `Mappings` translates a selector value into a team rule.
@@ -199,7 +199,7 @@ Entra\AttributeSchemes\{scheme}\Mappings\{value}   REG_SZ  "extensionAttribute2-
 An attribute entry's `SourceId` is the **authored scheme name** (e.g. `fat`), independent of the
 resulting team folder name.
 
-### E.2 Group teams
+### 5.2 Group teams
 
 For each instance, create the inclusion group and optionally a per-instance exclusion group. Optionally
 create one fleet-wide exclusion group shared across every instance. Add target devices as members —
@@ -220,7 +220,7 @@ membership is evaluated **transitively**, so nested groups count.
 > for that instance and is logged. An unresolvable **fleet-wide** exclusion name suppresses *every* group
 > instance — it fails closed by design, logging one `Error` per cycle.
 
-### E.3 Caps and grace
+### 5.3 Caps and grace
 
 | Value | Default | Effect |
 |---|---|---|
@@ -235,7 +235,7 @@ membership is evaluated **transitively**, so nested groups count.
 
 ---
 
-## Phase F — Team signing keys
+## Step 6 — Team signing keys
 
 Each team owns an ECDSA P-256 key pair. The private key lives only in the authoring tier; the public key
 is what gets deployed. See `docs/security.md` and `docs/anti-tamper.md`.
@@ -265,7 +265,7 @@ distributed via `IBlobDistributionService`. Public keys are **not secret**; trea
 
 ---
 
-## Phase G — Registry configuration to push
+## Step 7 — Registry configuration to push
 
 Two separate trees, one per fleet component. **GPO owns this configuration entirely — the installer must
 not write it** (`docs/packaging.md`). Full key surface: `docs/configuration.md`.
@@ -280,7 +280,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 > Provisioning only one is a silent half-configuration: NewsService will sync content that NewsViewer
 > then refuses or ignores.
 
-### G.1 Value type rules
+### 7.1 Value type rules
 
 | Rule | Detail |
 |---|---|
@@ -289,7 +289,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 | `DWORD` is fine for genuine booleans | `BypassDailyGate`, `BypassImageIntegrityCheck`, `Telemetry\UploadEnabled` — the `0`/`1` coercion is exactly what these want. |
 | `teams\` uses value **names** | The team folder name is the value *name*; the data is ignored. Write an empty string as data. |
 
-### G.2 NewsService tree
+### 7.2 NewsService tree
 
 ```
 HKLM\Software\{Company}\NewsCentral\NewsService\
@@ -313,7 +313,7 @@ HKLM\Software\{Company}\NewsCentral\NewsService\
 │       UseWinHttpProxy         REG_SZ   "true" | "false"
 │
 ├── Signing\
-│       RequireSignedIndex      REG_SZ   "false"          ← flip to "true" at Phase H
+│       RequireSignedIndex      REG_SZ   "false"          ← flip to "true" at Step 8
 │       {teamFolderName}\
 │           PublicKey           REG_SZ   <Base64 SPKI>
 │           PublicKeyPrevious   REG_SZ   <Base64 SPKI>    (rotation window only)
@@ -344,7 +344,7 @@ HKLM\Software\{Company}\NewsCentral\NewsService\
         {teamFolderName}        REG_SZ   ""      (one value per static team)
 ```
 
-### G.3 NewsViewer tree
+### 7.3 NewsViewer tree
 
 ```
 HKLM\Software\{Company}\NewsCentral\NewsViewer\
@@ -379,7 +379,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 > session telemetry only — index signing is ECDSA. An empty key disables HMAC system-wide and telemetry
 > passes through as `Disabled`: an acceptable phased-rollout state, not a permanent one.
 
-### G.4 Values NOT delivered by GPO
+### 7.4 Values NOT delivered by GPO
 
 | Item | Where it lives | Why |
 |---|---|---|
@@ -394,9 +394,9 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 
 ---
 
-## Phase H — Validation and cutover
+## Step 8 — Validation and cutover
 
-### H.1 Pilot validation sequence
+### 8.1 Pilot validation sequence
 
 | # | Check | Expected result | Where to look |
 |---|---|---|---|
@@ -411,7 +411,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 | 9 | Dynamic teams *(if enabled)* | `resolved-teams.json` lists the expected teams with `State: Active` | `%ProgramData%\NewsCentral\resolved-teams.json` |
 | 10 | Negative: tampered index rejected | Team skipped, `Error` logged | Event Log |
 
-### H.2 Flipping the fail-closed switch
+### 8.2 Flipping the fail-closed switch
 
 Only after check 3 reports `Valid` for **every** team on **every** pilot machine:
 
@@ -424,7 +424,7 @@ From that point `Unsigned` and `Disabled` indexes are rejected alongside `Invali
 public key in the registry will go dark rather than display unverified content — the intent, but it means
 the key inventory must be complete first.
 
-### H.3 Diagnosing a silent no-op
+### 8.3 Diagnosing a silent no-op
 
 A freshly deployed machine that behaves as though it has no configuration has one overwhelmingly likely
 cause.
@@ -455,33 +455,33 @@ Other silent-failure candidates, in order of likelihood:
 
 | # | Task | Owner | Done |
 |---|---|---|---|
-| A.1 | Deployment shape decided and recorded (storage, auth, signing, Entra) | Solution owner | ☐ |
-| A.2 | `Company` value final in `Directory.Build.props` and communicated to the GPO author | Solution owner | ☐ |
-| A.3 | Team list and exact folder names agreed | Solution owner | ☐ |
-| B.1 | Agent app registration created; credential attached | IT / Cloud | ☐ |
-| B.2 | Graph permissions added and **admin consent granted** (if Entra enabled) | IT / Identity | ☐ |
-| B.3 | Authoring app registration created; public client flows enabled; `user_impersonation` added | IT / Cloud | ☐ |
-| C.1 | Storage account created; shared key access disabled; container private | IT / Cloud | ☐ |
-| C.2 | Authors security group created and populated | IT / Identity | ☐ |
-| C.3 | RBAC: authors group → Storage Blob Data Contributor | IT / Cloud | ☐ |
-| C.4 | RBAC: agent SP → Storage Blob Data Reader (or Contributor if telemetry upload) | IT / Cloud | ☐ |
-| C.5 | Proxy decision made; `UseWinHttpProxy` set if required | IT / Network | ☐ |
-| D.1 | Certificate issued and deployed to `LocalMachine\My` on pilot machines | IT / PKI | ☐ |
-| D.2 | Public `.cer` uploaded to the agent app registration; thumbprint recorded | IT / Cloud | ☐ |
-| E.1 | *(Entra)* extensionAttributes stamped and/or groups created and populated | IT / Identity | ☐ |
-| E.2 | *(Entra)* Inclusion group names confirmed unique; canonicalized folder names published | Solution owner | ☐ |
-| F.1 | Signing key pair generated per team in Key Management | NewsCentral admin | ☐ |
-| F.2 | Index republished per team; self-verify guard passed | NewsCentral admin | ☐ |
-| F.3 | Public keys extracted and mapped to exact team folder names | NewsCentral admin | ☐ |
-| F.4 | HMAC 32-byte key generated and stored securely | NewsCentral admin | ☐ |
-| G.1 | NewsService registry tree authored; value types verified `REG_SZ` vs `DWORD` | IT / Ops | ☐ |
-| G.2 | NewsViewer registry tree authored — including its **own** `teams\` and `Signing\` | IT / Ops | ☐ |
-| G.3 | GPO linked to the pilot OU and applied | IT / Ops | ☐ |
-| G.4 | *(ClientSecretEnv only)* machine environment variable provisioned | IT / Ops | ☐ |
-| H.1 | Pilot validation checks 1–10 passed | QA / Ops | ☐ |
-| H.2 | Stabilisation window completed on the pilot group | Project lead | ☐ |
-| H.3 | `RequireSignedIndex` flipped to `true` on both components | IT / Ops | ☐ |
-| H.4 | Rollout to the wider fleet | IT / Ops | ☐ |
+| 1.1 | Deployment shape decided and recorded (storage, auth, signing, Entra) | Solution owner | ☐ |
+| 1.2 | `Company` value final in `Directory.Build.props` and communicated to the GPO author | Solution owner | ☐ |
+| 1.3 | Team list and exact folder names agreed | Solution owner | ☐ |
+| 2.1 | Agent app registration created; credential attached | IT / Cloud | ☐ |
+| 2.2 | Graph permissions added and **admin consent granted** (if Entra enabled) | IT / Identity | ☐ |
+| 2.3 | Authoring app registration created; public client flows enabled; `user_impersonation` added | IT / Cloud | ☐ |
+| 3.1 | Storage account created; shared key access disabled; container private | IT / Cloud | ☐ |
+| 3.2 | Authors security group created and populated | IT / Identity | ☐ |
+| 3.3 | RBAC: authors group → Storage Blob Data Contributor | IT / Cloud | ☐ |
+| 3.4 | RBAC: agent SP → Storage Blob Data Reader (or Contributor if telemetry upload) | IT / Cloud | ☐ |
+| 3.5 | Proxy decision made; `UseWinHttpProxy` set if required | IT / Network | ☐ |
+| 4.1 | Certificate issued and deployed to `LocalMachine\My` on pilot machines | IT / PKI | ☐ |
+| 4.2 | Public `.cer` uploaded to the agent app registration; thumbprint recorded | IT / Cloud | ☐ |
+| 5.1 | *(Entra)* extensionAttributes stamped and/or groups created and populated | IT / Identity | ☐ |
+| 5.2 | *(Entra)* Inclusion group names confirmed unique; canonicalized folder names published | Solution owner | ☐ |
+| 6.1 | Signing key pair generated per team in Key Management | NewsCentral admin | ☐ |
+| 6.2 | Index republished per team; self-verify guard passed | NewsCentral admin | ☐ |
+| 6.3 | Public keys extracted and mapped to exact team folder names | NewsCentral admin | ☐ |
+| 6.4 | HMAC 32-byte key generated and stored securely | NewsCentral admin | ☐ |
+| 7.1 | NewsService registry tree authored; value types verified `REG_SZ` vs `DWORD` | IT / Ops | ☐ |
+| 7.2 | NewsViewer registry tree authored — including its **own** `teams\` and `Signing\` | IT / Ops | ☐ |
+| 7.3 | GPO linked to the pilot OU and applied | IT / Ops | ☐ |
+| 7.4 | *(ClientSecretEnv only)* machine environment variable provisioned | IT / Ops | ☐ |
+| 8.1 | Pilot validation checks 1–10 passed | QA / Ops | ☐ |
+| 8.2 | Stabilisation window completed on the pilot group | Project lead | ☐ |
+| 8.3 | `RequireSignedIndex` flipped to `true` on both components | IT / Ops | ☐ |
+| 8.4 | Rollout to the wider fleet | IT / Ops | ☐ |
 
 ---
 
@@ -532,7 +532,7 @@ Remove-Item "$env:LOCALAPPDATA\NewsCentral\viewerstate.json"
 
 | Audience | Document |
 |---|---|
-| Azure / Identity team | `docs/azure-setup.md` + Phases B–E of this document |
-| GPO / Endpoint team | Phase G of this document + `docs/configuration.md` for the full key surface |
+| Azure / Identity team | `docs/azure-setup.md` + Steps 2-5 of this document |
+| GPO / Endpoint team | Step 7 of this document + `docs/configuration.md` for the full key surface |
 | Packaging team | `docs/packaging.md` — complete and self-contained |
-| Support / service desk | Phase H.3 of this document |
+| Support / service desk | Step 8.3 of this document |
