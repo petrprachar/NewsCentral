@@ -24,7 +24,7 @@
 - Storage backend (local file share vs. Azure Blob Storage) is switchable via registry without code changes.
 - Local/file share mode is the **primary development and testing configuration**. No Azure dependency is required for full functional testing.
 - HMAC-SHA256 anti-tamper for session telemetry — NewsViewer signs, NewsService verifies; `index.json` signing moved to per-team ECDSA (see below).
-- ECDSA P-256 per-team `index.json` signing — Phases A, B1 & C complete: signing core in `NewsCentral.Shared`, `IndexGenerationService` signs with team key, `SyncService` and `PresentationSelector` verify via `SigningKeyConfigurationReader`. B2 (Key Management page) complete; D (registry scripts) parked indefinitely; see `docs/security.md`.
+- ECDSA P-256 per-team `index.json` signing — Phases A, B1 & C complete: signing core in `NewsCentral.Shared`, `IndexGenerationService` signs with team key, `SyncService` and `PresentationSelector` verify via `SigningKeyConfigurationReader`. B2 (Key Management page) complete; D (registry scripts) implemented in `scripts/Set-RegistryOverrides.ps1` at dev/pilot scope, GPO owns fleet configuration; see `docs/security.md`.
 - All domain models live in **NewsCentral.Shared** — no model duplication across projects.
 - NativeAOT migration path is preserved for NewsViewer.
 - Fleet components ship **framework-dependent** — .NET 9 Desktop Runtime (x64) required on every target machine (declared prerequisite, not bundled). See `docs/packaging.md`.
