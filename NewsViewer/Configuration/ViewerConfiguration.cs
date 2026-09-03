@@ -7,6 +7,15 @@ public class ViewerConfiguration
 {
     // Company is not configuration — it defines the registry hive path and is the build-time
     // constant SolutionConstants.Company. It is intentionally absent from this POCO.
+
+    /// <summary>
+    /// Per-machine master switch (registry: <c>Active</c>, DWORD 0/1, at the hive root). Default
+    /// <c>true</c> — an absent key must never disable the fleet. When <c>false</c>, NewsViewer
+    /// exits at startup with no action taken: no poster, no wallpaper apply, no viewerstate write,
+    /// no telemetry, no dialog. The last-applied wallpaper is left as-is (not reverted).
+    /// </summary>
+    public bool Active { get; set; } = true;
+
     public string CacheRootPath { get; set; } = @"C:\ProgramData\NewsCentral";
     public bool BypassDailyGate { get; set; } = false;
     public bool BypassImageIntegrityCheck { get; set; } = false;

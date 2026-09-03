@@ -83,6 +83,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 ```
 HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
+│   Active                       DWORD     (0 = NewsViewer exits at startup with no action; default 1)
 │   BypassDailyGate             DWORD     (1 = skip once-per-day gate at startup)
 │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
 ├── Display\
@@ -269,6 +270,7 @@ NewsViewer resolves configuration across three layers (registry always wins):
 
 ```json
 {
+  "Active": true,
   "CacheRootPath": "C:\\ProgramData\\NewsCentral",
   "BypassDailyGate": false,
   "BypassImageIntegrityCheck": false,
@@ -288,6 +290,8 @@ NewsViewer resolves configuration across three layers (registry always wins):
   }
 }
 ```
+
+`Active` (NewsViewer) — per-machine master switch. `bool`, default `true` (registry `Active` DWORD `0`/`1` at the hive root; absent = `true`, so an unprovisioned machine is never silently disabled). Evaluated first in `Main()`, before every other startup guard. `false` exits at startup with no action taken: no poster is shown, no wallpaper is applied, `viewerstate.json` is not written, no telemetry session file is written, and no dialog is shown. The current wallpaper is deliberately left as-is — deactivation is not a revert.
 
 `Display:LogicalDayStartHour` (NewsViewer) — the hour (local time) at which the "logical day" for the once-per-day poster gate rolls over. `int`, default `0` (= calendar day), clamped to `0..23`. Example: `5` makes the day run 05:00 → 04:59 next morning, so a night-shift unlock after midnight is still the same logical day and does not re-trigger the poster. See `docs/newsviewer-spec.md` → The daily gate.
 

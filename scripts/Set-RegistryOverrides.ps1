@@ -76,6 +76,7 @@
 
     HKLM\Software\<Company>\NewsCentral\NewsViewer\
     │   CacheRootPath                REG_SZ    (overrides ViewerConfiguration.CacheRootPath)
+    │   Active                       DWORD     (0 = NewsViewer exits at startup with no action; default 1)
     │   BypassDailyGate             DWORD     (1 = skip once-per-day gate at startup)
     │   BypassImageIntegrityCheck    DWORD     (1 = skip image SHA-256 verification)
     ├── Display\
@@ -126,6 +127,11 @@
 .PARAMETER CacheRootPath
     Local cache root used by both NewsService and NewsViewer.
     Default: C:\ProgramData\NewsCentral
+
+.PARAMETER Active
+    Per-machine master switch. Default true. When $false, NewsViewer exits at startup with no
+    action taken: no poster, no wallpaper apply, no viewerstate write, no telemetry. The
+    last-applied wallpaper is left as-is (not reverted). NewsViewer only.
 
 .PARAMETER BypassDailyGate
     When $true, NewsViewer skips the once-per-logical-day display gate.
@@ -295,7 +301,8 @@
             "de-prod" = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEreplace-with-real-spki-bytes"
         } `
         -LogicalDayStartHour 5 `
-        -Theme Dark
+        -Theme Dark `
+        -Active $true
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -381,6 +388,8 @@ param(
     [ValidateSet("Dark","Light")]
     [string] $Theme,
 
+    [Nullable[bool]] $Active,
+
     # ── Telemetry / Logging (NewsService only) ────────────────────────────────────
     [switch] $TelemetryUploadEnabled,
 
@@ -405,7 +414,7 @@ $newParameterNames = @(
     "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
     "DefaultLockScreenPath", "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor",
     "LogicalDayStartHour", "Theme", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
-    "AzureUseWinHttpProxy"
+    "AzureUseWinHttpProxy", "Active"
 )
 
 # Full parameter -> allowed-component map for the two fleet components. Covers every
@@ -428,7 +437,7 @@ $componentAllowedParams = @{
         "AzureTenantId", "AzureClientId", "AzureAccountName", "AzureContainerName",
         "AzureAuthMode", "AzureCertificateThumbprint", "AzureClientSecret", "AzureUseWinHttpProxy",
         "BypassDailyGate", "BypassImageIntegrityCheck", "LogicalDayStartHour", "Theme",
-        "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor"
+        "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor", "Active"
     )
 }
 
@@ -593,6 +602,11 @@ if (-not (Test-Path $base)) {
 # ── Root-level values (NewsViewer bindings) ───────────────────────────────────
 if ($PSBoundParameters.ContainsKey("CacheRootPath") -and $ComponentName -eq "NewsViewer") {
     Set-RegValue -Path $base -Name "CacheRootPath" -Value $CacheRootPath -Type String
+}
+
+if ($PSBoundParameters.ContainsKey("Active")) {
+    $dword = if ($Active) { 1 } else { 0 }
+    Set-RegValue -Path $base -Name "Active" -Value $dword -Type DWord
 }
 
 if ($PSBoundParameters.ContainsKey("BypassDailyGate")) {

@@ -30,6 +30,13 @@ static class Program
         var configuration = BuildConfiguration();
         var config        = configuration.Get<ViewerConfiguration>() ?? new ViewerConfiguration();
 
+        // Per-machine master switch (registry Active, DWORD 0/1). Evaluated first, ahead of every
+        // other guard: the guards below all mean "there is work but conditions block it", whereas
+        // Active = false means "there is no work". Exits silently — no poster, no wallpaper apply,
+        // no viewerstate write, no telemetry. The last-applied wallpaper is deliberately left in
+        // place; deactivation is not a revert.
+        if (!config.Active) return;
+
         // UI theme — resolved ONCE here and consumed via Theme.Current (the same
         // resolve-once-then-pass pattern as duration resolution). Registry Ui\Theme
         // (REG_SZ "Dark" | "Light", surfaced as Ui:Theme) overrides the code default:
