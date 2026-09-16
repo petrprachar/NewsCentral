@@ -30,6 +30,14 @@ public interface ILockScreenService
     /// the key/value is absent or unreadable.
     /// </summary>
     string? GetCurrentLockScreenPath();
+
+    /// <summary>
+    /// Deletes the three PersonalizationCSP lock-screen values if present, tolerating their
+    /// absence — this is the teardown counterpart to <see cref="SetLockScreen"/>. Does NOT remove
+    /// the <c>PersonalizationCSP</c> key itself, since other CSP settings may live there. Any
+    /// failure is logged as a Warning and swallowed; never throws.
+    /// </summary>
+    void ClearLockScreen();
 }
 
 /// <inheritdoc cref="ILockScreenService"/>
@@ -84,6 +92,34 @@ public sealed class LockScreenService(ILogger<LockScreenService> logger) : ILock
         {
             logger.LogWarning(ex, "Could not read current lock screen path from PersonalizationCSP");
             return null;
+        }
+    }
+
+    public void ClearLockScreen()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(CspKey, writable: true);
+            if (key is null)
+            {
+                logger.LogDebug("PersonalizationCSP key not present — nothing to clear");
+                return;
+            }
+
+            foreach (var valueName in new[] { ImagePathValue, "LockScreenImageUrl", "LockScreenImageStatus" })
+            {
+                if (key.GetValue(valueName) is null)
+                {
+                    logger.LogDebug("Lock-screen value already absent: {Value}", valueName);
+                    continue;
+                }
+                key.DeleteValue(valueName, throwOnMissingValue: false);
+                logger.LogDebug("Lock-screen value cleared: {Value}", valueName);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clear lock screen");
         }
     }
 }

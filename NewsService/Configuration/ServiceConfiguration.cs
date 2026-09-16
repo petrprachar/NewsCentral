@@ -40,6 +40,27 @@ public class DeliverySection
     /// PersonalizationCSP is pointed at the copy published here, not at the ProgramData cache.
     /// </summary>
     public string PublishedImagePath { get; set; } = @"C:\Windows\Web\NewsCentral";
+
+    /// <summary>
+    /// Master enable for the lock-screen surface. Default true. When false, NewsService does not
+    /// read, write, or clear ANY PersonalizationCSP lock-screen value that cycle — the surface is
+    /// left entirely alone, as if NewsService managed no lock screen at all. This is NOT a
+    /// revert: a machine that already had lock-screen content applied keeps that content frozen
+    /// in place until the values are cleared by hand, or the toggle is flipped back on and the
+    /// three-state apply takes over again. Intended opt-out for RDS session hosts, VDI, and
+    /// RemoteApp — set it in the GPO baseline BEFORE first run on those machines, since one
+    /// machine-wide value cannot correctly serve many concurrent sessions.
+    /// </summary>
+    public bool LockScreenEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Reserved; takes effect only when desktop-wallpaper ownership migrates here from NewsViewer
+    /// in a later phase. No effect in the current release — NewsViewer still owns wallpaper
+    /// entirely, applied per-user in the user session via SystemParametersInfo + HKCU. Defined,
+    /// validated, and provisionable now so a GPO baseline can set it alongside LockScreenEnabled
+    /// ahead of that migration, but nothing in NewsService reads it yet.
+    /// </summary>
+    public bool WallpaperEnabled { get; set; } = true;
 }
 
 public class EntraOptions

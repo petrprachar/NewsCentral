@@ -66,6 +66,8 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 ├── Delivery\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
 │       PublishedImagePath     REG_SZ    (protected folder for applied display images; must not be user-writable; default C:\Windows\Web\NewsCentral)
+│       LockScreenEnabled      DWORD     (0 = the lock-screen surface is not read/written/cleared at all — NOT a revert; default 1)
+│       WallpaperEnabled       DWORD     (reserved; no effect until wallpaper ownership migrates from NewsViewer; default 1)
 ├── Telemetry\
 │       UploadEnabled   DWORD   (0 = do not forward session telemetry to the repository; the fixed 30-day local retention sweep still runs; default 1)
 ├── Logging\
@@ -231,7 +233,9 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
   },
   "Delivery": {
     "DefaultLockScreenPath": "",
-    "PublishedImagePath": "C:\\Windows\\Web\\NewsCentral"
+    "PublishedImagePath": "C:\\Windows\\Web\\NewsCentral",
+    "LockScreenEnabled": true,
+    "WallpaperEnabled": true
   },
   "Telemetry": {
     "UploadEnabled": true
@@ -254,9 +258,15 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
 
 `Logging:EventLog:SourceName` / `LogName` name the **same EventLog source the installer registers** (`NewsService` in the Application log — see `docs/packaging.md`); the two must stay in step, so do not edit either side alone.
 
-`Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default: the last-applied lock screen is left in place (sticky). NewsService-only; not shared with other components.
+`Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default. **This is no longer unconditionally "sticky"** (a documentation claim this release corrects — see `docs/newsservice-spec.md` → Step 2): when there is no active content and no usable default, a lock-screen value NewsService itself previously published is now **cleared**, returning the machine to Windows' own default lock screen at the next lock; only a value NewsService did **not** write (GPO, Intune, a manual admin change) is left in place. NewsService-only; not shared with other components.
 
-`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) — the protected folder `ImagePublisher` copies the applied lock-screen image into before `PersonalizationCSP` is pointed at it, instead of pointing CSP directly at the `%ProgramData%` cache. The published file name is content-derived (`lockscreen-{hash16}.ext`), and the SHA-256 recorded in the signed index (or, for the configured default image, the file's own hash) is re-verified at publish time. **This folder must not be writable by standard users** — that is the entire point of publishing here rather than applying from the cache; see `docs/anti-tamper.md` for the threat this closes. NewsService logs a `Warning` at startup if the configured folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`.
+`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) — the protected folder `ImagePublisher` copies the applied lock-screen image into before `PersonalizationCSP` is pointed at it, instead of pointing CSP directly at the `%ProgramData%` cache. The published file name is content-derived (`lockscreen-{hash16}.ext`), and the SHA-256 recorded in the signed index (or, for the configured default image, the file's own hash) is re-verified at publish time. **This folder must not be writable by standard users** — that is the entire point of publishing here rather than applying from the cache; see `docs/anti-tamper.md` for the threat this closes. This value also gates the **teardown** ownership test (Step 2): a live CSP value is only ever cleared when it resolves to a path inside this folder — an empty or unresolvable value makes that test fail closed (nothing is ever cleared). NewsService logs a `Warning` at startup if the configured folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`.
+
+`Delivery:LockScreenEnabled` (bool, default `true`) — master enable for the entire lock-screen surface. `false` stops NewsService reading, writing, or clearing **any** `PersonalizationCSP` lock-screen value that cycle — the surface is left exactly as it stands. **This is not a revert**: a machine that already has lock-screen content applied keeps it frozen in place until the values are cleared by hand, or the toggle is turned back on so the ordinary teardown path can clear it. Provision this **before** first run on machines where the surface should never be managed — see the session-host guidance below. NewsService-only.
+
+`Delivery:WallpaperEnabled` (bool, default `true`) — **reserved**; takes effect only when desktop-wallpaper ownership migrates from NewsViewer to NewsService in a later phase. Defined and provisionable now so it can be set in the GPO baseline alongside `LockScreenEnabled` ahead of that migration, but nothing in NewsService reads it in this release — NewsViewer continues to own wallpaper entirely. NewsService-only.
+
+> **Session-host guidance.** `LockScreenEnabled` and `WallpaperEnabled` both exist primarily as an opt-out for **RDS session hosts, VDI templates, and RemoteApp hosts**: one machine-wide registry value cannot correctly serve many concurrent user sessions, RDS policy can suppress the desktop background outright, and a non-persistent VDI image rebuilds from its template every boot, making any applied state meaningless past the next reboot. Set both to `0` in the GPO baseline for such machines. NewsService also logs a best-effort startup `Warning` (see `WarnIfSessionHostSurfaceUnmanaged` in `Program.cs`) when a machine looks like a Windows Server with Remote Desktop connections allowed and either toggle is still at its default — a heuristic, not a guarantee; it never fires on a client Windows workstation but is not a substitute for provisioning the toggles correctly.
 
 > **Prerequisite — Windows Spotlight.** Windows Spotlight must be disabled via GPO or Intune (`HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent` → `DisableWindowsSpotlightFeatures = 1`, `DisableSpotlightCollectionOnDesktop = 1`) or it will intermittently override the CSP-applied lock screen. NewsCentral does not write these keys — they are a GPO/Intune deployment prerequisite, not something either component configures.
 

@@ -15,15 +15,23 @@ namespace NewsService.Services;
 ///      or a configurable default image when no lock-screen content is active. The winning
 ///      image is re-verified against its signed hash and published to a protected,
 ///      non-user-writable folder (IImagePublisher) before PersonalizationCSP is pointed at it —
-///      not at the ProgramData cache directly. The apply is driven by the live PersonalizationCSP
-///      value (the single source of truth) — it writes only when the intended image differs from
-///      the current registry value, so a failed write is never recorded as applied and the next
-///      cycle retries naturally.
+///      not at the ProgramData cache directly. Three-state, registry-driven, and stateless: the
+///      live PersonalizationCSP value is the single source of truth. When there is no active
+///      content and no usable default, a value NewsService previously published is CLEARED —
+///      returning the machine to Windows' own default lock screen at the next lock — but a value
+///      it did not publish (GPO, Intune, or a manual admin change) is always left alone. The
+///      whole surface can be disabled via Delivery:LockScreenEnabled (default true) for
+///      RDS/VDI/RemoteApp hosts, where one machine-wide value cannot correctly serve many
+///      sessions; disabling it is NOT a revert — whatever is currently applied stays frozen in
+///      place. A failed write or clear is never recorded as applied — the next cycle re-evaluates
+///      and retries naturally.
 ///   3. Write status.json.
 ///   4. Upload session telemetry from the uploads folder.
 ///
-/// Desktop wallpaper is intentionally not applied here — wallpaper ownership moves to NewsViewer
-/// in a later phase. NewsService is a lock-screen-only SYSTEM responsibility.
+/// Desktop wallpaper is intentionally not applied here — NewsViewer owns it today, applied
+/// per-user in the user session. Delivery:WallpaperEnabled is reserved for a later phase where
+/// that ownership migrates to NewsService, and has no effect yet. NewsService is a
+/// lock-screen-only SYSTEM responsibility for now.
 /// </summary>
 public sealed class SyncService(
     IRepositoryReader repository,
@@ -232,14 +240,29 @@ public sealed class SyncService(
 
     // ── Step 2 — lock screen ─────────────────────────────────────────────────
     //
-    // Registry-driven and stateless: the live PersonalizationCSP value is the single source of
-    // truth. Each cycle computes the intended source image, publishes it (re-verified, protected
-    // folder — see IImagePublisher), compares the published path against the current value, and
-    // writes only on a difference. There is no servicestate.json — a failed write simply fails
-    // to match next cycle and retries naturally.
+    // Three-state, registry-driven, and stateless: the live PersonalizationCSP value is the
+    // single source of truth. Delivery:LockScreenEnabled (default true) gates the ENTIRE step —
+    // when false, nothing below is read, published, swept, written, or cleared. Otherwise each
+    // cycle computes the intended source image, publishes it (re-verified, protected folder —
+    // see IImagePublisher), and dispatches on (intended published path, live CSP value): write
+    // when they differ, clear when intended is null and the live value is one NewsService itself
+    // published, leave alone when intended is null and the live value is foreign (or absent).
+    // There is no servicestate.json — a failed write or clear simply fails to match next cycle
+    // and retries naturally.
 
-    private async Task ApplyLockScreenAsync(IReadOnlyList<string> teams)
+    // internal (not private) so LockScreenApplyTests can exercise the LockScreenEnabled=false
+    // early-out directly without standing up the full RunCycleAsync dependency graph.
+    internal async Task ApplyLockScreenAsync(IReadOnlyList<string> teams)
     {
+        // Master opt-out (RDS/VDI/RemoteApp) — must be the very first statement: no CSP read,
+        // sweep, publish, or write/clear happens below this line when disabled.
+        if (!configuration.GetValue("Delivery:LockScreenEnabled", true))
+        {
+            logger.LogDebug(
+                "Lock screen disabled (Delivery:LockScreenEnabled = false) — surface left untouched");
+            return;
+        }
+
         // Stale-file cleanup from the PREVIOUS cycle's publish — never the cycle that just
         // published a file, since Windows may still hold it open from the apply that just ran.
         var livePath = lockScreen.GetCurrentLockScreenPath();
@@ -303,39 +326,96 @@ public sealed class SyncService(
             intended = imagePublisher.Publish(sourcePath, expectedHash!, "lockscreen");
             if (intended is null)
                 logger.LogWarning(
-                    "Lock-screen image publish failed for {Source} — leaving lock screen sticky", source);
+                    "Lock-screen image publish failed for {Source} — no usable image this cycle", source);
         }
 
         ApplyIntendedLockScreen(intended, source);
     }
 
     /// <summary>
-    /// Registry-gated apply. Compares <paramref name="intended"/> against the live
-    /// PersonalizationCSP value and writes only when they differ. A <c>null</c> intended path
-    /// leaves the current lock screen untouched (sticky). A failed write is logged as an error and
-    /// is <b>not</b> recorded as applied — the next cycle re-evaluates against the unchanged live
-    /// value and retries.
+    /// Registry-gated apply — the three-state model. Compares <paramref name="intended"/> against
+    /// the live PersonalizationCSP value:
+    ///   • intended non-null, live already matches → no-op (steady state).
+    ///   • intended non-null, live differs or is absent → write the trio; log Information.
+    ///   • intended null, live absent → no-op, silent.
+    ///   • intended null, live present and inside Delivery:PublishedImagePath (i.e. one WE
+    ///     published) → <b>clear</b> the trio; log Information. This is the teardown this milestone
+    ///     adds — a machine with no active content and no usable default returns to Windows' own
+    ///     default lock screen at the next lock, instead of staying frozen on stale content forever.
+    ///   • intended null, live present but NOT inside Delivery:PublishedImagePath → left alone,
+    ///     logged at Debug. NewsCentral never clears a CSP value it did not write — a value set by
+    ///     GPO, Intune, or a manual admin change is someone else's to manage.
+    /// A failed write or clear is logged and is <b>never</b> recorded as applied/cleared — the next
+    /// cycle re-evaluates against the unchanged live value and retries.
     /// </summary>
     internal void ApplyIntendedLockScreen(string? intended, string source)
     {
-        if (intended is null)
+        var current = lockScreen.GetCurrentLockScreenPath();
+
+        if (intended is not null)
+        {
+            if (current is not null && PathsEqual(current, intended))
+            {
+                logger.LogDebug("Lock screen already current: {Path}", intended);
+                return;
+            }
+
+            if (lockScreen.SetLockScreen(intended))
+                logger.LogInformation("Lock screen applied: {Source} -> {Path}", source, intended);
+            else
+                logger.LogError("Lock screen apply failed: {Source} -> {Path}", source, intended);
+            return;
+        }
+
+        // intended == null — no active content and no usable default (or publishing it failed).
+        if (current is null)
+        {
+            logger.LogDebug("Lock screen already unset — nothing to clear");
+            return;
+        }
+
+        if (!IsUnderPublishRoot(current))
         {
             logger.LogDebug(
-                "Lock screen left unchanged — no active content and no applicable default (sticky)");
+                "Lock screen left unchanged — current value is not one NewsService published: {Path}",
+                current);
             return;
         }
 
-        var current = lockScreen.GetCurrentLockScreenPath();
-        if (current is not null && PathsEqual(current, intended))
+        lockScreen.ClearLockScreen();
+        logger.LogInformation(
+            "Lock screen cleared — no active content and no usable default (was: {Path})", current);
+    }
+
+    /// <summary>
+    /// True when <paramref name="path"/> resolves to a location inside
+    /// <c>Delivery:PublishedImagePath</c> — the ownership test that gates clearing. Compares
+    /// fully-normalized absolute paths (<see cref="Path.GetFullPath(string)"/>,
+    /// <see cref="StringComparison.OrdinalIgnoreCase"/>) with a directory-prefix check, never a raw
+    /// string <c>StartsWith</c> on the configured value, so a trailing separator, a relative
+    /// <c>..</c> segment, or different casing on either side cannot defeat it. A misconfigured or
+    /// unresolvable <c>PublishedImagePath</c> fails <b>closed</b>: every live value is then treated
+    /// as foreign and is never cleared.
+    /// </summary>
+    private bool IsUnderPublishRoot(string path)
+    {
+        var publishRoot = configuration.GetValue<string>("Delivery:PublishedImagePath");
+        if (string.IsNullOrWhiteSpace(publishRoot)) return false;
+
+        try
         {
-            logger.LogDebug("Lock screen already current: {Path}", intended);
-            return;
-        }
+            var normalizedRoot = Path.GetFullPath(publishRoot)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedPath = Path.GetFullPath(path);
 
-        if (lockScreen.SetLockScreen(intended))
-            logger.LogInformation("Lock screen applied: {Source} -> {Path}", source, intended);
-        else
-            logger.LogError("Lock screen apply failed: {Source} -> {Path}", source, intended);
+            return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase)
+                || normalizedPath.StartsWith(
+                       normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;   // unresolvable path → fail closed, treat as foreign, never clear
+        }
     }
 
     /// <summary>Full-path, case-insensitive comparison of two file paths.</summary>

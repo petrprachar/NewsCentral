@@ -65,6 +65,8 @@
     ├── Delivery\
     │       DefaultLockScreenPath  REG_SZ
     │       PublishedImagePath     REG_SZ   (protected folder for applied display images; must not be user-writable)
+    │       LockScreenEnabled      DWORD    (0 = surface not read/written/cleared at all; NOT a revert — see docs/newsservice-spec.md)
+    │       WallpaperEnabled       DWORD    (reserved; no effect until wallpaper ownership migrates to NewsService)
     ├── Telemetry\
     │       UploadEnabled          DWORD
     ├── Logging\
@@ -222,6 +224,18 @@
     before PersonalizationCSP is pointed at them; must not be user-writable, or the protection
     this provides is void. Default C:\Windows\Web\NewsCentral. NewsService only.
 
+.PARAMETER LockScreenEnabled
+    Master enable for the lock-screen surface. Default $true. $false stops NewsService reading,
+    writing, or clearing ANY PersonalizationCSP lock-screen value that cycle — the surface is
+    left entirely alone. This is NOT a revert: content already applied stays frozen until cleared
+    by hand or the toggle is flipped back on. Intended opt-out for RDS session hosts, VDI, and
+    RemoteApp — one machine-wide value cannot correctly serve many concurrent sessions. Bind as
+    $false (not omitted) to write the value; an unbound parameter writes nothing. NewsService only.
+
+.PARAMETER WallpaperEnabled
+    Reserved; takes effect only when wallpaper ownership migrates from NewsViewer to NewsService
+    in a later phase. Default $true. No effect in the current release. NewsService only.
+
 .PARAMETER DefaultWallpaperPath
     Absolute path to a default wallpaper; "" = leave current wallpaper (sticky).
     NewsViewer only.
@@ -309,6 +323,14 @@
         -LogicalDayStartHour 5 `
         -Theme Dark `
         -Active $true
+
+.EXAMPLE
+    # NewsService on an RDS session host / VDI template — opt out of machine-wide personalization
+    .\Set-RegistryOverrides.ps1 `
+        -Company "Contoso" `
+        -ComponentName NewsService `
+        -LockScreenEnabled $false `
+        -WallpaperEnabled $false
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -381,6 +403,8 @@ param(
     # ── Delivery ──────────────────────────────────────────────────────────────────
     [string] $DefaultLockScreenPath,
     [string] $PublishedImagePath,
+    [Nullable[bool]] $LockScreenEnabled,
+    [Nullable[bool]] $WallpaperEnabled,
     [string] $DefaultWallpaperPath,
 
     [ValidateSet("Fill","Fit","Stretch","Center","Tile")]
@@ -419,7 +443,8 @@ $newParameterNames = @(
     "RequireSignedIndex", "TeamPublicKeys", "TeamPreviousPublicKeys",
     "EntraEnabled", "EntraGracePeriodMinutes", "EntraMaxDynamicTeams",
     "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
-    "DefaultLockScreenPath", "PublishedImagePath", "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor",
+    "DefaultLockScreenPath", "PublishedImagePath", "LockScreenEnabled", "WallpaperEnabled",
+    "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor",
     "LogicalDayStartHour", "Theme", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
     "AzureUseWinHttpProxy", "Active"
 )
@@ -435,7 +460,8 @@ $componentAllowedParams = @{
         "AzureAuthMode", "AzureCertificateThumbprint", "AzureClientSecret", "AzureUseWinHttpProxy",
         "EntraEnabled", "EntraGracePeriodMinutes", "EntraMaxDynamicTeams",
         "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
-        "DefaultLockScreenPath", "PublishedImagePath", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
+        "DefaultLockScreenPath", "PublishedImagePath", "LockScreenEnabled", "WallpaperEnabled",
+        "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
         "PollIntervalSeconds", "StorageMode", "SharePath"
     )
     NewsViewer = @(
@@ -750,6 +776,14 @@ if ($PSBoundParameters.ContainsKey("DefaultLockScreenPath")) {
 }
 if ($PSBoundParameters.ContainsKey("PublishedImagePath")) {
     Set-RegValue -Path "$base\Delivery" -Name "PublishedImagePath" -Value $PublishedImagePath -Type String
+}
+if ($PSBoundParameters.ContainsKey("LockScreenEnabled")) {
+    $dword = if ($LockScreenEnabled) { 1 } else { 0 }
+    Set-RegValue -Path "$base\Delivery" -Name "LockScreenEnabled" -Value $dword -Type DWord
+}
+if ($PSBoundParameters.ContainsKey("WallpaperEnabled")) {
+    $dword = if ($WallpaperEnabled) { 1 } else { 0 }
+    Set-RegValue -Path "$base\Delivery" -Name "WallpaperEnabled" -Value $dword -Type DWord
 }
 if ($PSBoundParameters.ContainsKey("DefaultWallpaperPath")) {
     Set-RegValue -Path "$base\Delivery" -Name "DefaultWallpaperPath" -Value $DefaultWallpaperPath -Type String

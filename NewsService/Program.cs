@@ -74,4 +74,61 @@ var host = builder.Build();
 ImagePublisher.CheckPublishFolderAcl(
     config.Delivery.PublishedImagePath, host.Services.GetRequiredService<ILogger<ImagePublisher>>());
 
+// Session-host advisory — never fatal, best-effort heuristic (see comment below); a wrong read
+// just means the warning doesn't fire, which is the safe direction to err in.
+WarnIfSessionHostSurfaceUnmanaged(config, host.Services.GetRequiredService<ILogger<Program>>());
+
 host.Run();
+
+/// <summary>
+/// Warns once at startup when this machine looks like a Windows Server with Remote Desktop
+/// connections allowed and either Delivery:LockScreenEnabled or Delivery:WallpaperEnabled is
+/// still at its default <c>true</c> — machine-wide personalization is unsuitable for RDS session
+/// hosts, VDI templates, and RemoteApp hosts (one value can't serve many sessions, RDS policy can
+/// suppress the desktop background outright, and non-persistent VDI rebuilds every boot).
+///
+/// Detection is a best-effort, two-part registry heuristic, deliberately conservative:
+///   1. HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\fDenyTSConnections == 0
+///      (Remote Desktop connections allowed — high confidence, this is exactly what the
+///      "Allow Remote Desktop connections" checkbox toggles).
+///   2. HKLM\SYSTEM\CurrentControlSet\Control\ProductOptions\ProductType != "WinNT"
+///      (a Windows Server SKU, not a client edition — the same registry-backed value WMI exposes
+///      as Win32_OperatingSystem.ProductType; medium-high confidence, widely relied upon).
+/// Both must hold. This deliberately does NOT try to detect the RD Session Host role
+/// specifically (e.g. via Server Manager / Win32_ServerFeature) — no reliable role-presence
+/// signal is available from the registry alone without WMI, and WMI would need a new package.
+/// The combined signal never fires on a client Windows workstation (ProductType is always
+/// "WinNT" there), which is the one false positive explicitly called out as unacceptable; it can
+/// still under-fire (miss a real RDSH box whose fDenyTSConnections is non-default) or, more
+/// rarely, over-fire on a plain member server with admin RDP enabled but no RDS role at all —
+/// accepted trade-offs given the instruction to prefer silence over a false positive.
+/// </summary>
+static void WarnIfSessionHostSurfaceUnmanaged(ServiceConfiguration config, ILogger logger)
+{
+    try
+    {
+        if (!config.Delivery.LockScreenEnabled && !config.Delivery.WallpaperEnabled) return;
+
+        using var tsKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+            @"SYSTEM\CurrentControlSet\Control\Terminal Server");
+        var tsAllowed = tsKey?.GetValue("fDenyTSConnections") is int deny && deny == 0;
+        if (!tsAllowed) return;
+
+        using var productKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+            @"SYSTEM\CurrentControlSet\Control\ProductOptions");
+        var productType = productKey?.GetValue("ProductType") as string;
+        var isServerSku = !string.Equals(productType, "WinNT", StringComparison.OrdinalIgnoreCase);
+        if (!isServerSku) return;
+
+        logger.LogWarning(
+            "This machine appears to be a Windows Server with Remote Desktop connections allowed " +
+            "— possibly an RDS session host, VDI template, or RemoteApp host. Machine-wide " +
+            "lock-screen/wallpaper personalization (Delivery:LockScreenEnabled, " +
+            "Delivery:WallpaperEnabled) is unsuitable for shared multi-session or non-persistent " +
+            "hosts; both should normally be set to 0 on such machines. See docs/newsservice-spec.md.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogDebug(ex, "Could not evaluate the session-host advisory heuristic — skipping");
+    }
+}
