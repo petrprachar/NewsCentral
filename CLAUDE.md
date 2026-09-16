@@ -12,7 +12,7 @@
 |---|---|---|
 | NewsCentral | Content authoring, approval, scheduling, publishing, user/team management | .NET 9 MAUI Blazor Hybrid desktop app |
 | NewsCentral.Shared | Shared domain models referenced by all components | .NET 9 class library |
-| NewsService | Cache agent — syncs content from repository to local machine, applies the lock screen (with a configurable default image), uploads telemetry | .NET 9 Windows Service |
+| NewsService | Cache agent — syncs content from repository to local machine, applies the lock screen (with a configurable default image, re-verified and published to a protected non-user-writable folder before apply), uploads telemetry | .NET 9 Windows Service |
 | NewsViewer | End-user presentation layer — displays scheduled content from local cache; applies the desktop wallpaper in the user session (`SystemParametersInfo` + HKCU) | .NET 9 WinForms desktop app |
 | NewsTester | Content preview tool for authors and approvers | Future — independent desktop app |
 

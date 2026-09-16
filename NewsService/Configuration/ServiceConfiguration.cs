@@ -33,6 +33,13 @@ public class DeliverySection
     /// (the last-applied lock screen is left in place — sticky).
     /// </summary>
     public string DefaultLockScreenPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Protected folder holding the currently-applied display images; must be a folder no
+    /// standard user can write to, or the protection ImagePublisher provides is void.
+    /// PersonalizationCSP is pointed at the copy published here, not at the ProgramData cache.
+    /// </summary>
+    public string PublishedImagePath { get; set; } = @"C:\Windows\Web\NewsCentral";
 }
 
 public class EntraOptions

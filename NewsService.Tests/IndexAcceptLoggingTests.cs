@@ -46,7 +46,7 @@ public sealed class IndexAcceptLoggingTests : IDisposable
         var cache = new CacheManager(_root, JsonDefaults.Options);
         var log   = new CapturingLogger<SyncService>();
         // Only repository, cache, configuration, and logger are exercised by SyncTeamAsync.
-        var sut = new SyncService(repo, cache, lockScreen: null!, telemetry: null!,
+        var sut = new SyncService(repo, cache, lockScreen: null!, imagePublisher: null!, telemetry: null!,
                                   entra: null!, configuration: config, logger: log);
         return (sut, log, repo, cache);
     }

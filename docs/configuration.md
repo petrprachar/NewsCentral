@@ -65,6 +65,7 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │        see docs/entra-dynamic-teams.md; surfaced via the same recursive registry walk)
 ├── Delivery\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
+│       PublishedImagePath     REG_SZ    (protected folder for applied display images; must not be user-writable; default C:\Windows\Web\NewsCentral)
 ├── Telemetry\
 │       UploadEnabled   DWORD   (0 = do not forward session telemetry to the repository; the fixed 30-day local retention sweep still runs; default 1)
 ├── Logging\
@@ -229,7 +230,8 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
     }
   },
   "Delivery": {
-    "DefaultLockScreenPath": ""
+    "DefaultLockScreenPath": "",
+    "PublishedImagePath": "C:\\Windows\\Web\\NewsCentral"
   },
   "Telemetry": {
     "UploadEnabled": true
@@ -253,6 +255,10 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
 `Logging:EventLog:SourceName` / `LogName` name the **same EventLog source the installer registers** (`NewsService` in the Application log — see `docs/packaging.md`); the two must stay in step, so do not edit either side alone.
 
 `Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default: the last-applied lock screen is left in place (sticky). NewsService-only; not shared with other components.
+
+`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) — the protected folder `ImagePublisher` copies the applied lock-screen image into before `PersonalizationCSP` is pointed at it, instead of pointing CSP directly at the `%ProgramData%` cache. The published file name is content-derived (`lockscreen-{hash16}.ext`), and the SHA-256 recorded in the signed index (or, for the configured default image, the file's own hash) is re-verified at publish time. **This folder must not be writable by standard users** — that is the entire point of publishing here rather than applying from the cache; see `docs/anti-tamper.md` for the threat this closes. NewsService logs a `Warning` at startup if the configured folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`.
+
+> **Prerequisite — Windows Spotlight.** Windows Spotlight must be disabled via GPO or Intune (`HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent` → `DisableWindowsSpotlightFeatures = 1`, `DisableSpotlightCollectionOnDesktop = 1`) or it will intermittently override the CSP-applied lock screen. NewsCentral does not write these keys — they are a GPO/Intune deployment prerequisite, not something either component configures.
 
 `Telemetry:UploadEnabled` (bool, default `true`) — when `false`, NewsService does not forward `session-*.json` telemetry to the repository (a read-only deployment: consume content, write nothing back). NewsViewer is unaffected and always writes session files; NewsService alone decides what becomes of them, so re-enabling upload immediately flushes whatever is still inside the retention window. Independently of this setting, local session files older than a **fixed 30-day window** (`TelemetryDefaults.RetentionDays`, by file `LastWriteTime`) are deleted every cycle — deliberately a constant, not a config key: the rationale is data hygiene (the records describe what a specific user saw and when), not disk space, and a configurable `0` would be ambiguous between delete-everything and keep-forever. Registry override: `Telemetry\UploadEnabled` DWORD `0`/`1`. See `docs/newsservice-spec.md` → Step 4.
 

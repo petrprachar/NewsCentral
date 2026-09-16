@@ -18,7 +18,7 @@ public sealed class LockScreenApplyTests
 
     private static SyncService NewSut(FakeLockScreen fake, CapturingLogger<SyncService> log) =>
         // Only lockScreen + logger are exercised by ApplyIntendedLockScreen; the rest are unused.
-        new(repository: null!, cache: null!, lockScreen: fake, telemetry: null!,
+        new(repository: null!, cache: null!, lockScreen: fake, imagePublisher: null!, telemetry: null!,
             entra: null!, configuration: null!, logger: log);
 
     [Fact]

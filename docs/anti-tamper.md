@@ -179,4 +179,51 @@ ECDSA **signature** governs trust, not change detection; the two are independent
 and `resolved-teams.json` — is protected by filesystem ACLs. That protection is the trust anchor for
 the local consumption leg (especially the unsigned `resolved-teams.json` and, for dynamic teams, the
 delivered-key path); it is a deployment prerequisite. A future anchored-root upgrade (Option B in
-`docs/future.md`) would harden the delivered-key leg beyond ACLs.
+`docs/future.md`) would harden the delivered-key leg beyond ACLs. The lock-screen leg specifically no
+longer depends solely on this cache ACL for its final apply — see §7.
+
+## 7. Lock-screen publish-folder hardening (NewsService)
+
+The image hash inside the signed index (§2) protects `index.json` and the recorded hash from
+tampering, and NewsService's download-time comparison against the sidecar hash catches a changed
+image on the **next** sync. Neither of those, by itself, protected the **apply** step: until this
+hardening, `SyncService` pointed `PersonalizationCSP\LockScreenImagePath` straight at the cached
+image under `%programdata%\NewsCentral\`, trusting two things that were never independently true:
+
+1. **The bytes on disk at apply time still matched the signed hash.** The hash was checked once,
+   at download, and never rechecked when the path was actually handed to the OS moments (or days)
+   later.
+2. **The cache folder itself was safe to point a pre-authentication surface at.**
+   `%programdata%\NewsCentral\` inherits `C:\ProgramData`'s ACL, under which the built-in `Users`
+   group holds create-file/create-folder rights that inherit downward, and `CREATOR OWNER` gets
+   full control of anything it creates. A standard user can pre-create a team's
+   `images\generated\` folder before NewsService reaches it and, as owner, retain delete-child
+   rights over everything later written into it — on a folder the lock screen (a machine-wide,
+   pre-authentication surface) was being pointed at directly.
+
+`ImagePublisher` (`NewsService/Services/ImagePublisher.cs`) closes both gaps for the lock screen.
+Before `SetLockScreen` is ever called, the winning image (or the configured default) is
+re-hashed and compared against its expected SHA-256 — the index-recorded hash for content, a
+self-hash for the admin-supplied default — and only a match is copied into
+`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`, under `C:\Windows`'s ACL,
+which does not grant standard users write access). The published file name is content-derived
+(`lockscreen-{hash16}.ext`), so CSP is pointed at a file whose name is only ever correct — no
+window exists where the path exists but the bytes don't yet match it. A startup check
+(`ImagePublisher.CheckPublishFolderAcl`) warns if the configured folder is ever found to grant
+`Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`, since a user-writable publish
+folder would defeat the entire mechanism. See `docs/configuration.md` for
+`Delivery:PublishedImagePath` and `docs/newsservice-spec.md` for the full publish-then-apply flow.
+
+**Residual gap — this milestone is lock-screen only.** The desktop **wallpaper** is still applied
+by NewsViewer directly from the `%programdata%` cache (`docs/newsviewer-spec.md`) and is not yet
+hardened by an equivalent publish step; it remains protected only by the cache ACL described above.
+Wallpaper is a per-user, post-authentication surface with materially lower blast radius than the
+lock screen, which is why it was deprioritized for this milestone rather than addressed alongside
+it — not an oversight.
+
+> **Prerequisite — Windows Enterprise.** `PersonalizationCSP`, the mechanism the lock-screen apply
+> relies on (both before and after this hardening), is documented by Microsoft as supported on
+> Windows Enterprise and Education SKUs, and on Pro only under Shared PC / Cloud Config
+> (BootToCloud) configurations. The raw registry writes are widely observed to work on Pro outside
+> those configurations too, but that is undocumented behavior — do not rely on it for a production
+> fleet running Pro.

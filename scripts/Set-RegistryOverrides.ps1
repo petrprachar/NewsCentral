@@ -64,6 +64,7 @@
     │       GroupTeams\ExclusionGroup, Instances\<label>\InclusionGroup, ExclusionGroup
     ├── Delivery\
     │       DefaultLockScreenPath  REG_SZ
+    │       PublishedImagePath     REG_SZ   (protected folder for applied display images; must not be user-writable)
     ├── Telemetry\
     │       UploadEnabled          DWORD
     ├── Logging\
@@ -215,6 +216,11 @@
 .PARAMETER DefaultLockScreenPath
     Absolute, SYSTEM-readable path to a default lock-screen image; "" = no default
     (sticky). NewsService only.
+
+.PARAMETER PublishedImagePath
+    Absolute path to the protected folder ImagePublisher copies applied display images into
+    before PersonalizationCSP is pointed at them; must not be user-writable, or the protection
+    this provides is void. Default C:\Windows\Web\NewsCentral. NewsService only.
 
 .PARAMETER DefaultWallpaperPath
     Absolute path to a default wallpaper; "" = leave current wallpaper (sticky).
@@ -374,6 +380,7 @@ param(
 
     # ── Delivery ──────────────────────────────────────────────────────────────────
     [string] $DefaultLockScreenPath,
+    [string] $PublishedImagePath,
     [string] $DefaultWallpaperPath,
 
     [ValidateSet("Fill","Fit","Stretch","Center","Tile")]
@@ -412,7 +419,7 @@ $newParameterNames = @(
     "RequireSignedIndex", "TeamPublicKeys", "TeamPreviousPublicKeys",
     "EntraEnabled", "EntraGracePeriodMinutes", "EntraMaxDynamicTeams",
     "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
-    "DefaultLockScreenPath", "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor",
+    "DefaultLockScreenPath", "PublishedImagePath", "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor",
     "LogicalDayStartHour", "Theme", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
     "AzureUseWinHttpProxy", "Active"
 )
@@ -428,7 +435,7 @@ $componentAllowedParams = @{
         "AzureAuthMode", "AzureCertificateThumbprint", "AzureClientSecret", "AzureUseWinHttpProxy",
         "EntraEnabled", "EntraGracePeriodMinutes", "EntraMaxDynamicTeams",
         "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
-        "DefaultLockScreenPath", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
+        "DefaultLockScreenPath", "PublishedImagePath", "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
         "PollIntervalSeconds", "StorageMode", "SharePath"
     )
     NewsViewer = @(
@@ -740,6 +747,9 @@ if ($PSBoundParameters.ContainsKey("EntraAttributeSchemes")) {
 # ── Delivery\ ────────────────────────────────────────────────────────────────
 if ($PSBoundParameters.ContainsKey("DefaultLockScreenPath")) {
     Set-RegValue -Path "$base\Delivery" -Name "DefaultLockScreenPath" -Value $DefaultLockScreenPath -Type String
+}
+if ($PSBoundParameters.ContainsKey("PublishedImagePath")) {
+    Set-RegValue -Path "$base\Delivery" -Name "PublishedImagePath" -Value $PublishedImagePath -Type String
 }
 if ($PSBoundParameters.ContainsKey("DefaultWallpaperPath")) {
     Set-RegValue -Path "$base\Delivery" -Name "DefaultWallpaperPath" -Value $DefaultWallpaperPath -Type String

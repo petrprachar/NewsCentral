@@ -61,10 +61,17 @@ builder.Services.AddSingleton(_ => new CacheManager(
     config.Service.CacheRootPath, JsonDefaults.Options));
 
 builder.Services.AddSingleton<ILockScreenService, LockScreenService>();
+builder.Services.AddSingleton<IImagePublisher, ImagePublisher>();
 builder.Services.AddSingleton<TelemetryUploader>();
 builder.Services.AddSingleton<SyncService>();
 
 builder.Services.AddHostedService<Worker>();
 
 var host = builder.Build();
+
+// Startup sanity check — never fatal; a bad or user-writable publish path just means the lock
+// screen stays sticky (see ImagePublisher.Publish), but the operator needs to know why.
+ImagePublisher.CheckPublishFolderAcl(
+    config.Delivery.PublishedImagePath, host.Services.GetRequiredService<ILogger<ImagePublisher>>());
+
 host.Run();

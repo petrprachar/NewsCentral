@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using NewsCentral.Configuration;
@@ -11,10 +12,13 @@ namespace NewsService.Services;
 /// Orchestrates one complete poll cycle:
 ///   1. For each team: compare remote index hash vs cached hash; sync changed images.
 ///   2. Apply the lock screen for the most-recently-modified active logon-screen presentation,
-///      or a configurable default image when no lock-screen content is active. The apply is
-///      driven by the live PersonalizationCSP value (the single source of truth) — it writes
-///      only when the intended image differs from the current registry value, so a failed write
-///      is never recorded as applied and the next cycle retries naturally.
+///      or a configurable default image when no lock-screen content is active. The winning
+///      image is re-verified against its signed hash and published to a protected,
+///      non-user-writable folder (IImagePublisher) before PersonalizationCSP is pointed at it —
+///      not at the ProgramData cache directly. The apply is driven by the live PersonalizationCSP
+///      value (the single source of truth) — it writes only when the intended image differs from
+///      the current registry value, so a failed write is never recorded as applied and the next
+///      cycle retries naturally.
 ///   3. Write status.json.
 ///   4. Upload session telemetry from the uploads folder.
 ///
@@ -25,6 +29,7 @@ public sealed class SyncService(
     IRepositoryReader repository,
     CacheManager cache,
     ILockScreenService lockScreen,
+    IImagePublisher imagePublisher,
     TelemetryUploader telemetry,
     EntraTeamResolutionService entra,
     IConfiguration configuration,
@@ -228,12 +233,18 @@ public sealed class SyncService(
     // ── Step 2 — lock screen ─────────────────────────────────────────────────
     //
     // Registry-driven and stateless: the live PersonalizationCSP value is the single source of
-    // truth. Each cycle computes the intended image, compares it against the current value, and
+    // truth. Each cycle computes the intended source image, publishes it (re-verified, protected
+    // folder — see IImagePublisher), compares the published path against the current value, and
     // writes only on a difference. There is no servicestate.json — a failed write simply fails
     // to match next cycle and retries naturally.
 
     private async Task ApplyLockScreenAsync(IReadOnlyList<string> teams)
     {
+        // Stale-file cleanup from the PREVIOUS cycle's publish — never the cycle that just
+        // published a file, since Windows may still hold it open from the apply that just ran.
+        var livePath = lockScreen.GetCurrentLockScreenPath();
+        imagePublisher.SweepExcept(livePath is null ? null : Path.GetFileName(livePath));
+
         PublishedAssignmentIndex? winner = null;
         string? winnerTeam = null;
 
@@ -252,30 +263,47 @@ public sealed class SyncService(
             }
         }
 
-        // Compute the intended path and a human-readable source for logging.
-        string? intended;
+        // Compute the intended SOURCE path, its expected hash, and a human-readable source label.
+        string? sourcePath;
+        string? expectedHash;
         string source;
         if (winner is not null)
         {
-            intended = cache.Resolve(winner.Content.ImagePath);
-            source   = $"presentation {winner.PresentationId}, team {winnerTeam}";
+            sourcePath   = cache.Resolve(winner.Content.ImagePath);
+            expectedHash = winner.Content.ImageHash;
+            source       = $"presentation {winner.PresentationId}, team {winnerTeam}";
         }
         else
         {
             var defaultPath = configuration.GetValue<string>("Delivery:DefaultLockScreenPath");
             if (!string.IsNullOrEmpty(defaultPath) && File.Exists(defaultPath))
             {
-                intended = defaultPath;
-                source   = "default";
+                sourcePath = defaultPath;
+                source     = "default";
+                // The default image is admin-supplied and carries no index hash to check against.
+                // Hashing the file itself makes Publish's verification a self-consistent no-op —
+                // NOT a skipped security check — so Publish always verifies what it copies.
+                expectedHash = "sha256:" +
+                    Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(defaultPath))).ToLowerInvariant();
             }
             else
             {
                 if (!string.IsNullOrEmpty(defaultPath))
                     logger.LogWarning(
                         "Default lock-screen path configured but file not found: {Path}", defaultPath);
-                intended = null;       // no content, no usable default → sticky
-                source   = string.Empty;
+                sourcePath   = null;    // no content, no usable default → sticky
+                expectedHash = null;
+                source       = string.Empty;
             }
+        }
+
+        string? intended = null;
+        if (sourcePath is not null)
+        {
+            intended = imagePublisher.Publish(sourcePath, expectedHash!, "lockscreen");
+            if (intended is null)
+                logger.LogWarning(
+                    "Lock-screen image publish failed for {Source} — leaving lock screen sticky", source);
         }
 
         ApplyIntendedLockScreen(intended, source);

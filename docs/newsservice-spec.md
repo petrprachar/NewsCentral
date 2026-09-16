@@ -35,15 +35,21 @@ Executed by `Worker` on every interval tick:
 - Writes the new `index.json` to cache only after all images are safely written
 
 **Step 2 — Lock screen** (lock-screen only — desktop wallpaper is applied by NewsViewer in the user session)
+- **Stale-file sweep** — reads the live `PersonalizationCSP\LockScreenImagePath` value and calls `IImagePublisher.SweepExcept` to delete every other previously-published `lockscreen-*` file from `Delivery:PublishedImagePath`. This runs at the **start** of the step, before anything is published this cycle — never in the same cycle a file was just written, since Windows may still hold it open from the apply that just ran.
 - Filters each team's cached index to *active* assignments: `ScheduleStart ≤ now ≤ ScheduleEnd` and today's day number (1=Mon … 7=Sun) is in `DaysOfWeek`
 - Selects the most recently modified active assignment with `IsLogonScreen = true` (the **winner**)
-- **Registry-driven, stateless apply** — the live `PersonalizationCSP\LockScreenImagePath` value is the single source of truth; there is no `servicestate.json`. Computes the **intended** path, then applies only when it differs from the current registry value:
-  - Winner exists → intended = the winner's cached image path
-  - No winner and `Delivery:DefaultLockScreenPath` is configured and the file exists → intended = the default path
-  - No winner and no usable default (unset, or configured-but-missing → warning logged) → intended = `null`
+- **Publish, then apply.** The intended *source* image and its expected hash are computed exactly as before:
+  - Winner exists → source = the winner's cached image path, expected hash = `Content.ImageHash` from the signed index
+  - No winner and `Delivery:DefaultLockScreenPath` is configured and the file exists → source = the default path; the default carries no index hash, so its own SHA-256 is computed and passed as the expected hash — a self-consistent no-op verification, not a skipped check
+  - No winner and no usable default (unset, or configured-but-missing → warning logged) → source = `null`
+
+  A non-null source is then re-verified and copied into the protected `Delivery:PublishedImagePath` folder by `IImagePublisher.Publish` — SHA-256 re-checked against the expected hash, target file named `lockscreen-{hash16}.ext` (content-derived, so the name changes exactly when the bytes change), written via a temp-file-then-move so a torn copy can never be referenced. A publish failure (hash mismatch, missing source, I/O error) logs and is treated as `intended = null` — sticky, never a crash.
+- **Registry-driven, stateless apply** — the live `PersonalizationCSP\LockScreenImagePath` value is the single source of truth; there is no `servicestate.json`. Applies only when the **published** path differs from the current registry value:
   - `current = ILockScreenService.GetCurrentLockScreenPath()`; both sides normalized via `Path.GetFullPath` and compared `OrdinalIgnoreCase`
   - `intended == null` → leave the current lock screen untouched (sticky); `intended == current` → skip; otherwise call `SetLockScreen(intended)` — log Information on success, Error on failure
-- A failed write is **not** recorded as applied: the live value still won't match the intended one, so the next cycle re-evaluates and retries naturally. This self-heals the drift class where a failed apply was previously recorded as success. The decision is unit-tested via `SyncService.ApplyIntendedLockScreen` with an `ILockScreenService` test double.
+- A failed write is **not** recorded as applied: the live value still won't match the intended one, so the next cycle re-evaluates and retries naturally. This self-heals the drift class where a failed apply was previously recorded as success. Because the published file name is content-derived, the compare-and-apply logic is unchanged and needed no modification — the path it compares simply now points at the protected folder instead of the cache. The decision is unit-tested via `SyncService.ApplyIntendedLockScreen` with an `ILockScreenService` test double; the publish step is unit-tested separately via `ImagePublisherTests`.
+
+> **Prerequisite — Windows Enterprise.** Personalization CSP (the mechanism behind the lock-screen apply) is documented by Microsoft as supported on Windows Enterprise and Education SKUs, and on Pro only under Shared PC / Cloud Config (BootToCloud) configurations. The raw registry writes this service performs are widely observed to work on Pro outside those configurations too, but that is undocumented behavior — do not rely on it for a production fleet running Pro.
 
 **Step 3 — status.json**
 - Writes `LastSyncTime`, `IsOnline`, `SyncSource` (`Share` / `Azure` / `None`) to cache root
@@ -76,9 +82,22 @@ NewsService applies the **lock screen only**. Desktop wallpaper is owned by News
 |---|---|---|
 | Lock screen | `PersonalizationCSP` registry keys (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`) | Works from SYSTEM — no desktop access needed. NewsService runs as LocalSystem. Enterprise/MDM-grade mechanism used by Intune. |
 
-`ILockScreenService` exposes `bool SetLockScreen(string)` (writes the three CSP values; returns `false` on a missing image or a caught write failure) and `string? GetCurrentLockScreenPath()` (reads the live `LockScreenImagePath`, or `null` if absent/unreadable). SyncService owns the Information-level "applied" log; `SetLockScreen` logs its own write at Debug.
+`ILockScreenService` exposes `bool SetLockScreen(string)` (writes the three CSP values; returns `false` on a missing image or a caught write failure) and `string? GetCurrentLockScreenPath()` (reads the live `LockScreenImagePath`, or `null` if absent/unreadable). SyncService owns the Information-level "applied" log; `SetLockScreen` logs its own write at Debug. `SetLockScreen` is always called with a path already published under `Delivery:PublishedImagePath` by `ImagePublisher` — CSP never points directly into the `%ProgramData%` cache; see `IImagePublisher` below and `docs/anti-tamper.md`.
 
 A configurable **default lock-screen image** is applied when no lock-screen content is active. It is set via `Delivery:DefaultLockScreenPath` (absolute, SYSTEM-readable path; default `""` = no default). Empty leaves the current lock screen in place (sticky). See Step 2 of the poll cycle for the registry-gated apply.
+
+## `IImagePublisher` — protected-folder publish before apply
+
+`ImagePublisher` re-verifies and copies the winning lock-screen image (or the configured default) into `Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) before `SetLockScreen` is ever called, closing two gaps that existed when CSP pointed directly at the cache:
+
+1. **No re-verification at apply.** The image's SHA-256 was checked once, at download time, against the signed index — never again when the path was actually handed to the OS. `Publish` re-checks it every time.
+2. **A writable cache folder.** `%ProgramData%\NewsCentral\` inherits `C:\ProgramData`'s ACL, under which a standard user can pre-create a team's `images\generated\` folder and, as `CREATOR OWNER`, retain delete-child rights over everything later written into it. The lock screen is a machine-wide, pre-authentication surface, so that exposure matters here specifically.
+
+`Publish(sourcePath, expectedHash, prefix)` hashes `sourcePath`, compares it (accepting both the bare-hex and `sha256:`-prefixed forms, case-insensitively) against `expectedHash`, and on a match copies it into the publish folder as `{prefix}-{hash16}{ext}` — a content-derived name, so an existing target of that name is known-correct and is never re-copied, and the CSP path changes exactly when the image content changes. A mismatch, a missing source, or an I/O error logs and returns `null`; the caller must treat that as "no usable image," never as success. The publish root is created (inheriting its parent's ACL) if absent; no explicit DACL is ever set — inheriting from `C:\Windows` (Users read-only, no writable-down inheritance) is the entire point.
+
+`SweepExcept(keepFileName)` deletes every other previously-published `lockscreen-*` file. `SyncService` calls it at the **start** of the lock-screen step — reading the live CSP value first — so a file is never removed in the same cycle it was published, when Windows may still hold it open.
+
+A startup check (`ImagePublisher.CheckPublishFolderAcl`, called once from `Program.cs` after the host is built) logs a `Warning` if the configured publish folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users` — never fatal, since a bad or writable path just means the lock screen stays sticky, but an operator needs to know why. See `docs/anti-tamper.md` for the full threat model and `docs/configuration.md` for `Delivery:PublishedImagePath`.
 
 ## Azure Authentication
 
