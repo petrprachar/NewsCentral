@@ -25,7 +25,7 @@
     </Content>
     <!-- Optional developer overlay: copied to output for F5, but NEVER published.
          CopyToPublishDirectory=Never keeps a developer's personal values (e.g. a
-         DefaultWallpaperPath) out of the fleet artifact. -->
+         CacheRootPath) out of the fleet artifact. -->
     <Content Include="appsettings.Development.json" Condition="Exists('appsettings.Development.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Never</CopyToPublishDirectory>

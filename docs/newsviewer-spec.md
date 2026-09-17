@@ -1,9 +1,9 @@
 # NewsViewer — Component Specification
 
 **Type:** WinForms (.NET 9) desktop application  
-**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass, and to the themed 220px branded panel (adaptive image-fit window, Dark/Light themes, resx strings) in the UI v3 pass. Desktop wallpaper application added (user-session, `SystemParametersInfo` + HKCU; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
+**Status:** Phase 2 complete. All Phase 2 features implemented and tested; the side panel was reworked from a hover-reveal to a fixed Fluent gray panel in the v2.7 UI pass, and to the themed 220px branded panel (adaptive image-fit window, Dark/Light themes, resx strings) in the UI v3 pass. Wallpaper-**image** ownership migrated to NewsService (PersonalizationCSP, machine-wide); NewsViewer retains only a per-user HKCU wallpaper **style** re-assert (no `SystemParametersInfo`; see Wallpaper Application). NativeAOT migration path preserved; Win32 P/Invoke via `DllImport` with simple types — no unsafe code required.
 
-NewsViewer is a **one-shot process**: launch → evaluate the daily gate → render the poster (or not) → apply the wallpaper → exit. There is no resident process, no `FileSystemWatcher`, and no held-open message pump. Each display decision is made afresh at launch.
+NewsViewer is a **one-shot process**: launch → evaluate the daily gate → render the poster (or not) → re-assert the wallpaper style → exit. There is no resident process, no `FileSystemWatcher`, and no held-open message pump. Each display decision is made afresh at launch.
 
 ## Launch Conditions
 
@@ -12,7 +12,7 @@ NewsViewer is a **one-shot process**: launch → evaluate the daily gate → ren
 - Optionally launchable from the Windows Start menu
 - `appsettings.json` must be declared in `NewsViewer.csproj` as `<Content Include="appsettings.json">` with `CopyToOutputDirectory = PreserveNewest` so it is deployed alongside the executable
 - **Configuration layers** (registry always wins): `appsettings.json` (shipped, neutral, **committed** — a tracked artifact, never gitignored — loaded `optional: false`, so a missing file is a hard startup failure) → `appsettings.Development.json` (optional, gitignored dev overlay, loaded `optional: true`, **never published** via `CopyToPublishDirectory=Never`; documented shape in `appsettings.Development.json.example`) → registry (GPO). `appsettings.json` is the base layer the MSI installs and GPO sits on top of. See `docs/configuration.md` → appsettings.json — NewsViewer.
-- `Main()` evaluates the `Active` master switch (registry `Active`, DWORD 0/1 at the hive root; default `true`) first, ahead of every other startup check, and returns immediately when `false` — no poster, no wallpaper apply, no `viewerstate.json` write, no telemetry, no dialog. The last-applied wallpaper is left as-is.
+- `Main()` evaluates the `Active` master switch (registry `Active`, DWORD 0/1 at the hive root; default `true`) first, ahead of every other startup check, and returns immediately when `false` — no poster, no wallpaper style re-assert, no `viewerstate.json` write, no telemetry, no dialog. The last-applied wallpaper style is left as-is (the wallpaper image is NewsService's concern, unaffected by NewsViewer's `Active` switch either way).
 - `Main()` validates `CacheRootPath` after config load; if it is empty a `MessageBox` is shown and the process exits. (`Company` is **not** validated here — it is the build-time constant `SolutionConstants.Company`, enforced at build time, not read from config.)
 - Registry `teams\` value names must match the generated folder name exactly — the sanitized team name with no `team-` prefix (e.g. `cz-its`, not `CZ_ITS`)
 
@@ -43,11 +43,11 @@ Content published **after** the day's poster has already shown **waits for the n
 
 - Reads `index.json` from all team cache folders matching the `teams` registry configuration
 - **ECDSA verification** — calls `EcdsaSignatureService.Verify(index, keys)` where `keys = SigningKeyConfigurationReader.GetPublicKeys(configuration, teamFolderName)`: `Invalid` → skips the team entirely (no presentations shown from that team); `Unsigned` / `Disabled` / `Valid` → all logged distinctly, team accepted. Index is deserialized with standard ISO timestamp parsing (no `DateTime` converter) so values match the signed, persisted form.
-- Selects the most recent active **News-of-the-Week** presentation by `PresentationLastModified` timestamp. Only `DisplayTypes.IsNewsOfWeek` assignments are eligible for the poster — a wallpaper-only / lock-screen-only assignment is never shown as a full-screen poster.
-- Active-window/day filtering and the "newest by `PresentationLastModified`" pick are the shared pure helper `NewsCentral.Models.IndexFile.ActiveAssignmentSelector` (`IsActive` + `PickNewestActive(assignments, now, predicate)`), unit-tested in `NewsCentral.Shared.Tests`. `SelectActive` uses predicate `a => a.DisplayTypes.IsNewsOfWeek`; `SelectActiveWallpaper` uses `a => a.DisplayTypes.IsWallpaper`. The two selections are independent (an assignment flagged both shows a poster **and** sets the wallpaper). Both read from the same signature-verified index enumeration — neither bypasses verification.
+- Selects the most recent active **News-of-the-Week** presentation by `PresentationLastModified` timestamp. Only `DisplayTypes.IsNewsOfWeek` assignments are eligible for the poster — a wallpaper-only / lock-screen-only assignment is never shown as a full-screen poster. (Wallpaper and lock-screen selection now happen in NewsService, from the same signed indexes, via the same shared helper — see below.)
+- Active-window/day filtering and the "newest by `PresentationLastModified`" pick are the shared pure helper `NewsCentral.Models.IndexFile.ActiveAssignmentSelector` (`IsActive` + `PickNewestActive(assignments, now, predicate)`), unit-tested in `NewsCentral.Shared.Tests`. `SelectActive` uses predicate `a => a.DisplayTypes.IsNewsOfWeek`. The same helper is used by `SyncService` in NewsService for the lock-screen (`IsLogonScreen`) and wallpaper (`IsWallpaper`) winners — see `docs/newsservice-spec.md` — reading from the same signature-verified index enumeration; verification is never bypassed on either side.
 - **Image integrity verification** — after the winning assignment is selected, computes SHA-256 of the cached image file and compares it against `Content.ImageHash` from the signed index. Missing hash → warning logged, continues. Mismatch → error logged, returns `(best, null)` so the caller declines to display/apply tampered content. Disabled by `BypassImageIntegrityCheck = true`.
-- If no valid presentation found: **the poster is skipped** (but the wallpaper step still runs — see Wallpaper Application)
-- If no qualifying monitor (Full HD or better): **do not show the poster window** (the wallpaper step is not gated by this)
+- If no valid presentation found: **the poster is skipped** (but the wallpaper style re-assert still runs — see Wallpaper Application)
+- If no qualifying monitor (Full HD or better): **do not show the poster window** (the wallpaper style re-assert is not gated by this)
 
 ## Window Layout
 
@@ -149,7 +149,7 @@ If either condition is true the process exits immediately and no window is shown
 
 ## Virtual Desktop — Full Details (Phase 2)
 
-Virtual Desktop governs **how the poster is presented** — it does not gate or exclude the independent wallpaper and lock-screen applies. When `assignment.UseVirtualDesktop = true`:
+Virtual Desktop governs **how the poster is presented** — it does not gate or exclude NewsViewer's independent wallpaper style re-assert, nor NewsService's out-of-process lock-screen/wallpaper-image applies. When `assignment.UseVirtualDesktop = true`:
 
 1. `Program.Main` spawns a **fresh STA thread** (`uiThread`) for all virtual-desktop UI. This is required because `Application.EnableVisualStyles()` and other WinForms startup calls on the main thread create hidden internal windows (the WinForms parking window, etc.). `SetThreadDesktop` silently returns `false` once a thread owns any window handle; using a fresh thread that has never touched WinForms guarantees the call succeeds.
 2. On the new thread: `VirtualDesktopManager` is constructed — saves the original desktop handle (`GetThreadDesktop`) and creates a new named desktop (`CreateDesktop("NewsViewer", ...)`).
@@ -164,26 +164,25 @@ Win32 P/Invoke declarations are in `NativeMethods.cs` (`DllImport`, `CharSet.Uni
 
 ## Wallpaper Application
 
-NewsViewer applies the **desktop wallpaper** in the user session (lock-screen application stays with NewsService). `NewsViewer/Services/WallpaperService.cs` is a thin, AOT-clean shell — **`SystemParametersInfo` + HKCU only, no COM/`IDesktopWallpaper`** (`DllImport` with simple blittable types + `Microsoft.Win32.Registry`, no extra packages, no unsafe code; matching `NativeMethods.cs`).
+**NewsViewer no longer selects or applies a wallpaper image.** Wallpaper-image ownership migrated to NewsService: the image is enforced machine-wide through PersonalizationCSP (`DesktopImagePath`/`DesktopImageUrl`/`DesktopImageStatus`), published, verified, and three-state applied/cleared exactly like the lock screen — see `docs/newsservice-spec.md` → "Display surfaces". `PresentationSelector.SelectActiveWallpaper` has been **removed**; `SelectActive` (the poster path) is unaffected.
 
-`bool SetWallpaper(string imagePath)`:
-- `!File.Exists` → warning, returns `false`.
+NewsViewer retains a small, deliberate **style-only** residue. Verified on Windows 11 Enterprise: PersonalizationCSP enforces **which** image is shown (Windows Settings greys out the wallpaper picker), but it does **not** cover **how** that image is fitted — the per-user HKCU `WallpaperStyle`/`TileWallpaper`/`Colors\Background` values still control Fill/Fit/Stretch/Center/Tile framing, and NewsService cannot reach per-user HKCU from its session-0 context. `NewsViewer/Services/WallpaperService.cs` exists solely to keep that style correct for whatever image CSP currently has applied — it is a thin, AOT-clean shell, **HKCU only, no COM/`IDesktopWallpaper`, no `SystemParametersInfo`** (`Microsoft.Win32.Registry` only, no extra packages, no unsafe code).
+
+`void ApplyWallpaperStyle()`:
 - Writes `HKCU\Control Panel\Desktop`: `WallpaperStyle`/`TileWallpaper` from the configured style (default **Fit** → `WallpaperStyle="6"`, `TileWallpaper="0"`; also Fill `10`/`0`, Stretch `2`/`0`, Center `0`/`0`, Tile `0`/`1`).
 - Sets a uniform desktop background colour so Fit letterbox bars are even: `HKCU\Control Panel\Colors\Background = "R G B"` plus `SetSysColors(COLOR_DESKTOP)` (configurable, default `"0 0 0"`).
-- `SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)`; returns its result.
+- Takes no image parameter and performs no image-existence check — there is no image to apply here.
 
-**Selection** — `PresentationSelector.SelectActiveWallpaper(teams)` picks the newest active `DisplayTypes.IsWallpaper` assignment from the same signature-verified index read (never bypasses verification), returning `(assignment, resolvedImagePath)` or `(null, null)`.
-
-**Control flow (terminal step, re-asserted every run, stateless — no viewerstate):**
-- Skipped entirely on remote/virtual sessions (`IsRemoteOrVirtualSession`); otherwise runs on any local interactive session and is **not** gated by `HasQualifyingMonitor`.
-- A "no active display assignment" (or no qualifying monitor) case does **not** exit the process — the poster is skipped and the wallpaper step still runs, then the process exits.
+**Control flow (terminal step, re-asserted every run, unconditional — no selection, no viewerstate):**
+- Skipped entirely on remote/virtual sessions (`IsRemoteOrVirtualSession`); otherwise runs on any local interactive session and is **not** gated by `HasQualifyingMonitor`. This condition is unchanged from before the wallpaper-ownership migration.
+- Runs **unconditionally** — regardless of whether any wallpaper content is active, since NewsViewer no longer knows or cares whether wallpaper content exists; the style must be correct for whatever image CSP has applied, always.
 - Runs as the **terminal** step, after `ViewerForm` closes and the virtual desktop (if used) is switched back and destroyed — on the main thread / original desktop, never on the temporary VD.
-- Decision: `intended` = wallpaper winner path; else `Delivery:DefaultWallpaperPath` if set & `File.Exists`; else `null`. `intended != null` → `SetWallpaper(intended)` (Information log `Wallpaper applied: {source} -> {path}` with source `presentation {id}, team {team}` or `default`; Error on `false`). `intended == null` → leave the current wallpaper untouched (sticky), Debug log. If the winner's image fails integrity verification (`wpPath == null`), it falls back to the default rather than applying unverified content.
-- `Delivery:DefaultWallpaperPath` is applied on **every run** where no active `IsWallpaper` assignment exists; an **empty** value leaves the current wallpaper in place (**sticky**).
 
-> **Test ritual — stale wallpaper impersonates fresh behaviour.** The wallpaper lives in **HKCU**, so it **survives a `%ProgramData%` cache wipe** — a wallpaper left over from an earlier test will look like fresh output of the run under test. Reset the wallpaper to a known neutral image **before each end-to-end run**.
+**Orphaned-configuration warning.** `Delivery:DefaultWallpaperPath` moved to the NewsService hive (`docs/configuration.md`). `ViewerConfiguration.DeliverySection` no longer has a property for it, so `Program.cs` reads the raw registry value directly at startup: if `HKLM\Software\{Company}\NewsCentral\NewsViewer\Delivery\DefaultWallpaperPath` is still present, it logs a diagnostic warning naming the NewsService hive as the correct location. The value is **never deleted** — diagnostics only.
 
-Config (`Delivery` section, NewsViewer): `DefaultWallpaperPath` (default `""`), `WallpaperStyle` (default `Fit`), `WallpaperBackgroundColor` (default `"0 0 0"`). See `docs/configuration.md`.
+> **Test ritual — stale wallpaper impersonates fresh behaviour.** The wallpaper image lives in `HKLM\...\PersonalizationCSP` (NewsService), and the style lives in **HKCU** (NewsViewer) — either can **survive a `%ProgramData%` cache wipe**, so a wallpaper left over from an earlier test will look like fresh output of the run under test. Reset the wallpaper to a known neutral image and style **before each end-to-end run**.
+
+Config (`Delivery` section, NewsViewer): `WallpaperStyle` (default `Fit`), `WallpaperBackgroundColor` (default `"0 0 0"`) — style only. `DefaultWallpaperPath` lives on the NewsService side now. See `docs/configuration.md`.
 
 ## Session Telemetry
 

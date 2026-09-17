@@ -243,7 +243,7 @@ public sealed class LockScreenApplyTests
 
     // ── Test doubles ──────────────────────────────────────────────────────────
 
-    private sealed class FakeLockScreen : ILockScreenService
+    private sealed class FakeLockScreen : IPersonalizationService
     {
         public string? Current { get; set; }
         public bool SetResult { get; set; } = true;
@@ -269,6 +269,13 @@ public sealed class LockScreenApplyTests
             ClearCalls.Add(Current);
             Current = null;
         }
+
+        // Wallpaper members exist only to satisfy IPersonalizationService — this file covers
+        // lock-screen behaviour exclusively; wallpaper behaviour is covered by
+        // WallpaperApplyTests.cs's own fake. Never called by any test in this file.
+        public bool SetWallpaper(string imagePath) => throw new NotSupportedException();
+        public string? GetCurrentWallpaperPath() => throw new NotSupportedException();
+        public void ClearWallpaper() => throw new NotSupportedException();
     }
 
     private sealed class CapturingLogger<T> : ILogger<T>

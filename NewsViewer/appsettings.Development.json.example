@@ -12,7 +12,7 @@
 // Only override the keys you actually need; everything else falls through to appsettings.json.
 {
   "Delivery": {
-    "DefaultWallpaperPath": "C:\\Users\\you\\Pictures\\dev-wallpaper.png"
+    "WallpaperStyle": "Fit"
   },
   "Display": {
     "LogicalDayStartHour": 5

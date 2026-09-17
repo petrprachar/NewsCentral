@@ -8,8 +8,8 @@ NewsCentral.sln
 ├── NewsCentral.Shared.Tests\    .NET 9 xUnit test project — ECDSA signing core + config reader + SignatureGate + Entra resolver/merger + key-with-content precedence + shared readers + active-assignment selector (all passing)
 ├── NewsCentral\                 .NET 9 MAUI Blazor Hybrid — authoring app (Phase B2 complete)
 ├── NewsService\                 .NET 9 Windows Service — cache sync agent (implemented; Entra device team resolution end-to-end, phases 1–3b)
-├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated lock-screen apply (offline seams; all passing)
-└── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete; desktop wallpaper application)
+├── NewsService.Tests\           .NET 9 xUnit test project — Entra extension-attribute mapper + resolution orchestrator + effective-team union + registry-gated three-state apply for both display surfaces (lock screen + wallpaper), cross-surface isolation (offline seams; all passing)
+└── NewsViewer\                  .NET 9 WinForms — end-user presentation viewer (Phase 2 complete; desktop wallpaper STYLE re-assert only — the wallpaper image and the lock screen are both owned by NewsService)
 ```
 
 ## Project References
@@ -43,7 +43,7 @@ NewsCentral.Shared\
 │       ├── PublishedAssignmentIndex.cs one entry per published assignment
 │       ├── ContentInfo.cs             image path, hash, size, last-modified, URL
 │       ├── DisplayTypeInfo.cs         IsNewsOfWeek, IsWallpaper, IsLogonScreen
-│       ├── ActiveAssignmentSelector.cs pure IsActive + PickNewestActive(predicate); shared by NewsViewer poster/wallpaper
+│       ├── ActiveAssignmentSelector.cs pure IsActive + PickNewestActive(predicate); shared by NewsViewer's poster selection and NewsService's lock-screen/wallpaper selection
 │       └── IndexStatistics.cs         summary counts
 └── Security\
     ├── ISignable.cs                   interface ISignable { string? Signature { get; set; } }
@@ -87,7 +87,8 @@ NewsService\
 │   ├── LocalShareRepositoryReader.cs  file share implementation (primary)
 │   ├── AzureBlobRepositoryReader.cs   Azure implementation — Certificate / ClientSecret auth
 │   ├── CacheManager.cs            all local cache I/O; SHA-256 sidecar hashes
-│   ├── LockScreenService.cs       ILockScreenService — read/write PersonalizationCSP (lock-screen only; SYSTEM context)
+│   ├── ImagePublisher.cs          IImagePublisher — re-verifies + copies the winning image per surface into a protected, non-user-writable folder (prefix "lockscreen"/"wallpaper") before CSP is pointed at it
+│   ├── PersonalizationService.cs  IPersonalizationService — read/write/clear PersonalizationCSP for BOTH surfaces (lock screen + desktop wallpaper; SYSTEM context)
 │   ├── TelemetryUploader.cs       deserializes and HMAC-verifies session-*.json; forwards Valid/Unsigned, discards Invalid
 │   ├── IDeviceIdentityProvider.cs   seam for DeviceIdentityProvider
 │   ├── DeviceIdentityProvider.cs    local Entra AD DeviceId read (registry / dsregcmd fallback)
@@ -100,7 +101,7 @@ NewsService\
 │   ├── GroupOutcomeMapper.cs        pure EntraGroupSnapshot → EntraSourceOutcome, incl. global-exclusion fail-closed
 │   ├── GroupMembershipChunker.cs    pure checkMemberGroups 20-id chunking + id→name mapping
 │   ├── EntraTeamResolutionService.cs   orchestrates one Entra resolution cycle; writes resolved-teams.json
-│   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching
+│   └── SyncService.cs             orchestrates the poll cycle; ECDSA-verifies index.json via SignatureGate before caching; applies both display surfaces (lock screen, wallpaper) via a shared three-state dispatch core
 ├── JsonDefaults.cs                shared JsonSerializerOptions (WriteIndented + CamelCase + CaseInsensitive + enum converter)
 ├── Worker.cs                      BackgroundService host; reads interval from configuration
 ├── Program.cs                     DI wiring; registers HmacService; adds registry override source; storage mode resolved from merged config
@@ -112,13 +113,13 @@ NewsService\
 ```
 NewsViewer\
 ├── Configuration\
-│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassDailyGate, BypassImageIntegrityCheck, HmacOptions, and DeliverySection (wallpaper)
+│   └── ViewerConfiguration.cs        typed POCOs bound from appsettings.json; includes BypassDailyGate, BypassImageIntegrityCheck, HmacOptions, and DeliverySection (wallpaper STYLE only — WallpaperStyle/WallpaperBackgroundColor; DefaultWallpaperPath moved to NewsService)
 ├── Models\
 │   └── ViewerState.cs                viewerstate.json structure
 │   (SessionTelemetry lives in NewsCentral.Shared — cross-component DTO)
 ├── Services\
-│   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate; SelectActive + SelectActiveWallpaper via shared ActiveAssignmentSelector; verifies image SHA-256
-│   ├── WallpaperService.cs           desktop wallpaper applier — SystemParametersInfo + HKCU (DllImport, no COM); style + uniform background colour
+│   ├── PresentationSelector.cs       reads index.json per team, ECDSA-verifies via SignatureGate; SelectActive (poster only — SelectActiveWallpaper removed, wallpaper selection now lives in NewsService) via shared ActiveAssignmentSelector; verifies image SHA-256
+│   ├── WallpaperService.cs           desktop wallpaper STYLE-only applier — HKCU only, no SystemParametersInfo, no COM (DllImport SetSysColors); the image itself is NewsService/CSP-owned
 │   ├── ViewerStateService.cs         reads/writes viewerstate.json for the date-only logical-day gate (AlreadyShownToday)
 │   ├── VirtualDesktopManager.cs      CreateDesktop/SwitchDesktop/SetThreadDesktop wrapper
 │   └── TelemetryWriter.cs            HMAC-signs and writes session-{guid}.json to uploads\ on close
@@ -131,7 +132,7 @@ NewsViewer\
 │   └── UiStrings.cs                  static accessor — ResourceManager + CurrentUICulture
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then applies wallpaper as the terminal step (after poster/VD teardown); one-shot, exits after
+├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then re-asserts the wallpaper STYLE as the terminal step (after poster/VD teardown); warns once if an orphaned DefaultWallpaperPath remains in the NewsViewer hive; one-shot, exits after
 └── appsettings.json
 ```
 

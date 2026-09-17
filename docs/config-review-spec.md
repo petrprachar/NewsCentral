@@ -153,7 +153,8 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Entra:GracePeriodMinutes` | `240` | `Entra\GracePeriodMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (0 = "no grace" is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Entra:MaxDynamicTeams` | `16` | `Entra\MaxDynamicTeams` | S | OV | number | | integer count; 0 = no cap; MUST be REG_SZ (DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Entra:GroupTeams:ExclusionGroup` | `""` | `Entra\GroupTeams\ExclusionGroup` | S | OV | text | | fleet-wide exclusion group id/name; suppresses every group instance if set but unresolvable |
-| `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default lock screen (sticky) |
+| `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty; no content + no default CLEARS a value NewsService itself published, leaves a foreign value alone |
+| `Delivery:DefaultWallpaperPath` | `""` | `Delivery\DefaultWallpaperPath` | S | OV | path | | absolute; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty; same teardown semantics as `Delivery:DefaultLockScreenPath`. Moved here from the NewsViewer manifest — NewsService owns the wallpaper image |
 | `Telemetry:UploadEnabled` | `true` | `Telemetry\UploadEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1 — genuine bool, DWORD is safe); false = session telemetry is not forwarded to the repository; the fixed 30-day local retention sweep still runs |
 | `Logging:LogLevel:Default` | `Information` | `Logging\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 | `Logging:EventLog:LogLevel:Default` | `Information` | `Logging\EventLog\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
@@ -172,8 +173,7 @@ Hive: `…\NewsCentral\NewsViewer\`.
 | `BypassImageIntegrityCheck` | `false` | `BypassImageIntegrityCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |
 | `Signing:RequireSignedIndex` | `false` | `Signing\RequireSignedIndex` | S | OV | toggle | | `true \| false` (registry: REG_SZ); ad-hoc read, not on POCO |
-| `Delivery:DefaultWallpaperPath` | `""` | `Delivery\DefaultWallpaperPath` | S | OV | path | | absolute; `""` = sticky; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables the default wallpaper (sticky) |
-| `Delivery:WallpaperStyle` | `Fit` | `Delivery\WallpaperStyle` | S | OV | dropdown | | `Fill \| Fit \| Stretch \| Center \| Tile` |
+| `Delivery:WallpaperStyle` | `Fit` | `Delivery\WallpaperStyle` | S | OV | dropdown | | `Fill \| Fit \| Stretch \| Center \| Tile`; style only — the wallpaper image is NewsService/CSP-owned |
 | `Delivery:WallpaperBackgroundColor` | `0 0 0` | `Delivery\WallpaperBackgroundColor` | S | OV | text | | `"R G B"`, each 0–255 |
 
 Structural: `Signing\{team}\PublicKey` + `PublicKeyPrevious` (RO, **not secret**, own subtree); `teams\{team}` (RO).

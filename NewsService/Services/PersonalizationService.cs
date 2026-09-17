@@ -1,0 +1,232 @@
+using Microsoft.Win32;
+
+namespace NewsService.Services;
+
+/// <summary>
+/// Reads, writes, and clears the two PersonalizationCSP surfaces NewsService manages — the
+/// logon/lock screen (<c>LockScreenImage{Path,Url,Status}</c>) and the desktop wallpaper
+/// (<c>DesktopImage{Path,Url,Status}</c>) — via the PersonalizationCSP registry keys. For each
+/// surface, the live value is the single source of truth — there is no separate state file.
+/// SyncService compares the intended path against the current value, per surface, and applies
+/// only on a difference.
+///
+/// This is a SYSTEM-context service: NewsService runs as LocalSystem, and PersonalizationCSP works
+/// from session 0 without desktop access — the enterprise-grade mechanism used by MDM/Intune. Both
+/// surfaces are enforced this way; NewsViewer retains only a small per-user HKCU wallpaper STYLE
+/// residue (WallpaperStyle/TileWallpaper/Colors\Background), since style is not covered by CSP and
+/// is unreachable from session 0. See docs/newsviewer-spec.md.
+/// </summary>
+public interface IPersonalizationService
+{
+    /// <summary>
+    /// Writes the three PersonalizationCSP lock-screen values for <paramref name="imagePath"/>.
+    /// Returns <c>true</c> on success, <c>false</c> if the image is missing or the write fails.
+    /// A <c>false</c> result must not be treated as applied — the next cycle re-evaluates and
+    /// retries naturally because the live registry value still won't match the intended one.
+    /// </summary>
+    bool SetLockScreen(string imagePath);
+
+    /// <summary>
+    /// Returns the current <c>LockScreenImagePath</c> from PersonalizationCSP, or <c>null</c> if
+    /// the key/value is absent or unreadable.
+    /// </summary>
+    string? GetCurrentLockScreenPath();
+
+    /// <summary>
+    /// Deletes the three PersonalizationCSP lock-screen values if present, tolerating their
+    /// absence — this is the teardown counterpart to <see cref="SetLockScreen"/>. Does NOT remove
+    /// the <c>PersonalizationCSP</c> key itself, since other CSP settings may live there. Any
+    /// failure is logged as a Warning and swallowed; never throws.
+    /// </summary>
+    void ClearLockScreen();
+
+    /// <summary>
+    /// Writes the three PersonalizationCSP desktop-wallpaper values (<c>DesktopImagePath</c>,
+    /// <c>DesktopImageUrl</c>, <c>DesktopImageStatus</c>, in that order) for
+    /// <paramref name="imagePath"/>. Mirrors <see cref="SetLockScreen"/> exactly — same tolerance
+    /// rules, same "a false result is never applied" contract.
+    /// </summary>
+    bool SetWallpaper(string imagePath);
+
+    /// <summary>
+    /// Returns the current <c>DesktopImagePath</c> from PersonalizationCSP, or <c>null</c> if the
+    /// key/value is absent or unreadable. Mirrors <see cref="GetCurrentLockScreenPath"/>.
+    /// </summary>
+    string? GetCurrentWallpaperPath();
+
+    /// <summary>
+    /// Deletes the three PersonalizationCSP desktop-wallpaper values if present, tolerating their
+    /// absence. Mirrors <see cref="ClearLockScreen"/> — does NOT remove the
+    /// <c>PersonalizationCSP</c> key itself. Any failure is a Warning, never a throw.
+    /// </summary>
+    void ClearWallpaper();
+}
+
+/// <inheritdoc cref="IPersonalizationService"/>
+public sealed class PersonalizationService(ILogger<PersonalizationService> logger) : IPersonalizationService
+{
+    private const string CspKey =
+        @"SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP";
+    private const string LockScreenImagePathValue = "LockScreenImagePath";
+    private const string DesktopImagePathValue = "DesktopImagePath";
+
+    // ── Lock screen ──────────────────────────────────────────────────────────
+
+    public bool SetLockScreen(string imagePath)
+    {
+        if (!File.Exists(imagePath))
+        {
+            logger.LogWarning("Lock screen image not found: {Path}", imagePath);
+            return false;
+        }
+
+        try
+        {
+            using var key = Registry.LocalMachine.CreateSubKey(CspKey, writable: true);
+            if (key is null)
+            {
+                logger.LogWarning(
+                    "Cannot open PersonalizationCSP key — the service may lack write access to HKLM");
+                return false;
+            }
+
+            key.SetValue(LockScreenImagePathValue, imagePath, RegistryValueKind.String);
+            key.SetValue("LockScreenImageUrl",      imagePath, RegistryValueKind.String);
+            key.SetValue("LockScreenImageStatus",   1,         RegistryValueKind.DWord);
+
+            // SyncService owns the Information-level "applied" line; keep this at Debug to
+            // avoid two info lines per apply.
+            logger.LogDebug("Lock screen set via PersonalizationCSP: {Path}", imagePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to set lock screen");
+            return false;
+        }
+    }
+
+    public string? GetCurrentLockScreenPath()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(CspKey, writable: false);
+            return key?.GetValue(LockScreenImagePathValue) as string;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not read current lock screen path from PersonalizationCSP");
+            return null;
+        }
+    }
+
+    public void ClearLockScreen()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(CspKey, writable: true);
+            if (key is null)
+            {
+                logger.LogDebug("PersonalizationCSP key not present — nothing to clear");
+                return;
+            }
+
+            foreach (var valueName in new[] { LockScreenImagePathValue, "LockScreenImageUrl", "LockScreenImageStatus" })
+            {
+                if (key.GetValue(valueName) is null)
+                {
+                    logger.LogDebug("Lock-screen value already absent: {Value}", valueName);
+                    continue;
+                }
+                key.DeleteValue(valueName, throwOnMissingValue: false);
+                logger.LogDebug("Lock-screen value cleared: {Value}", valueName);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clear lock screen");
+        }
+    }
+
+    // ── Desktop wallpaper ────────────────────────────────────────────────────
+    //
+    // Mechanically mirrors the lock-screen trio above — same PersonalizationCSP key, same value
+    // ordering (path, url, then status last), same tolerance rules — just targeting the
+    // DesktopImage* values instead of LockScreenImage*.
+
+    public bool SetWallpaper(string imagePath)
+    {
+        if (!File.Exists(imagePath))
+        {
+            logger.LogWarning("Wallpaper image not found: {Path}", imagePath);
+            return false;
+        }
+
+        try
+        {
+            using var key = Registry.LocalMachine.CreateSubKey(CspKey, writable: true);
+            if (key is null)
+            {
+                logger.LogWarning(
+                    "Cannot open PersonalizationCSP key — the service may lack write access to HKLM");
+                return false;
+            }
+
+            key.SetValue(DesktopImagePathValue,   imagePath, RegistryValueKind.String);
+            key.SetValue("DesktopImageUrl",       imagePath, RegistryValueKind.String);
+            key.SetValue("DesktopImageStatus",    1,         RegistryValueKind.DWord);
+
+            // SyncService owns the Information-level "applied" line; keep this at Debug to
+            // avoid two info lines per apply.
+            logger.LogDebug("Wallpaper set via PersonalizationCSP: {Path}", imagePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to set wallpaper");
+            return false;
+        }
+    }
+
+    public string? GetCurrentWallpaperPath()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(CspKey, writable: false);
+            return key?.GetValue(DesktopImagePathValue) as string;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not read current wallpaper path from PersonalizationCSP");
+            return null;
+        }
+    }
+
+    public void ClearWallpaper()
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(CspKey, writable: true);
+            if (key is null)
+            {
+                logger.LogDebug("PersonalizationCSP key not present — nothing to clear");
+                return;
+            }
+
+            foreach (var valueName in new[] { DesktopImagePathValue, "DesktopImageUrl", "DesktopImageStatus" })
+            {
+                if (key.GetValue(valueName) is null)
+                {
+                    logger.LogDebug("Wallpaper value already absent: {Value}", valueName);
+                    continue;
+                }
+                key.DeleteValue(valueName, throwOnMissingValue: false);
+                logger.LogDebug("Wallpaper value cleared: {Value}", valueName);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to clear wallpaper");
+        }
+    }
+}

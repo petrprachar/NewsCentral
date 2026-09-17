@@ -64,9 +64,10 @@
     │       GroupTeams\ExclusionGroup, Instances\<label>\InclusionGroup, ExclusionGroup
     ├── Delivery\
     │       DefaultLockScreenPath  REG_SZ
-    │       PublishedImagePath     REG_SZ   (protected folder for applied display images; must not be user-writable)
-    │       LockScreenEnabled      DWORD    (0 = surface not read/written/cleared at all; NOT a revert — see docs/newsservice-spec.md)
-    │       WallpaperEnabled       DWORD    (reserved; no effect until wallpaper ownership migrates to NewsService)
+    │       DefaultWallpaperPath   REG_SZ   (moved here from NewsViewer — NewsService owns the wallpaper image)
+    │       PublishedImagePath     REG_SZ   (protected folder for applied display images, both surfaces; must not be user-writable)
+    │       LockScreenEnabled      DWORD    (0 = lock-screen surface not read/written/cleared at all; NOT a revert — see docs/newsservice-spec.md)
+    │       WallpaperEnabled       DWORD    (0 = wallpaper surface not read/written/cleared at all; NOT a revert — mirrors LockScreenEnabled)
     ├── Telemetry\
     │       UploadEnabled          DWORD
     ├── Logging\
@@ -87,8 +88,7 @@
     ├── Ui\
     │       Theme                   REG_SZ   "Dark" or "Light"
     ├── Delivery\
-    │       DefaultWallpaperPath        REG_SZ
-    │       WallpaperStyle              REG_SZ
+    │       WallpaperStyle              REG_SZ   (style only — the image is NewsService/CSP-owned)
     │       WallpaperBackgroundColor    REG_SZ
     ├── Signing\
     │       RequireSignedIndex      REG_SZ   "true" or "false"
@@ -216,8 +216,9 @@
     Authoritatively replaces every subkey under Entra\AttributeSchemes\. NewsService only.
 
 .PARAMETER DefaultLockScreenPath
-    Absolute, SYSTEM-readable path to a default lock-screen image; "" = no default
-    (sticky). NewsService only.
+    Absolute, SYSTEM-readable path to a default lock-screen image; "" = no default. When there is
+    neither active content nor a usable default, a value NewsService itself previously published
+    is CLEARED (not left sticky); a foreign value is always left alone. NewsService only.
 
 .PARAMETER PublishedImagePath
     Absolute path to the protected folder ImagePublisher copies applied display images into
@@ -233,15 +234,20 @@
     $false (not omitted) to write the value; an unbound parameter writes nothing. NewsService only.
 
 .PARAMETER WallpaperEnabled
-    Reserved; takes effect only when wallpaper ownership migrates from NewsViewer to NewsService
-    in a later phase. Default $true. No effect in the current release. NewsService only.
+    Master enable for the desktop-wallpaper surface. Default $true. Mirrors LockScreenEnabled
+    exactly, including the NOT-a-revert semantics — $false leaves whatever is currently applied
+    frozen in place rather than reverting it. NewsService only.
 
 .PARAMETER DefaultWallpaperPath
-    Absolute path to a default wallpaper; "" = leave current wallpaper (sticky).
-    NewsViewer only.
+    Absolute path to a default wallpaper applied when no active IsWallpaper content exists;
+    "" = no default. When there is neither active content nor a usable default, a value
+    NewsService itself previously published is CLEARED; a foreign value is always left alone.
+    NewsService owns the wallpaper image — moved here from NewsViewer, which now applies only the
+    per-user HKCU style. NewsService only.
 
 .PARAMETER WallpaperStyle
-    Fill, Fit, Stretch, Center, or Tile. Default Fit. NewsViewer only.
+    Fill, Fit, Stretch, Center, or Tile. Default Fit. Style only — the wallpaper image itself is
+    owned by NewsService (Delivery:DefaultWallpaperPath). NewsViewer only.
 
 .PARAMETER WallpaperBackgroundColor
     "R G B" desktop background color for Fit letterbox bars. Default "0 0 0". NewsViewer only.
@@ -460,7 +466,8 @@ $componentAllowedParams = @{
         "AzureAuthMode", "AzureCertificateThumbprint", "AzureClientSecret", "AzureUseWinHttpProxy",
         "EntraEnabled", "EntraGracePeriodMinutes", "EntraMaxDynamicTeams",
         "EntraGlobalExclusionGroup", "EntraGroupInstances", "EntraAttributeSchemes",
-        "DefaultLockScreenPath", "PublishedImagePath", "LockScreenEnabled", "WallpaperEnabled",
+        "DefaultLockScreenPath", "DefaultWallpaperPath", "PublishedImagePath",
+        "LockScreenEnabled", "WallpaperEnabled",
         "TelemetryUploadEnabled", "LogLevel", "EventLogLevel",
         "PollIntervalSeconds", "StorageMode", "SharePath"
     )
@@ -470,7 +477,7 @@ $componentAllowedParams = @{
         "AzureTenantId", "AzureClientId", "AzureAccountName", "AzureContainerName",
         "AzureAuthMode", "AzureCertificateThumbprint", "AzureClientSecret", "AzureUseWinHttpProxy",
         "BypassDailyGate", "BypassImageIntegrityCheck", "LogicalDayStartHour", "Theme",
-        "DefaultWallpaperPath", "WallpaperStyle", "WallpaperBackgroundColor", "Active"
+        "WallpaperStyle", "WallpaperBackgroundColor", "Active"
     )
 }
 

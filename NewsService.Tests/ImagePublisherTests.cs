@@ -157,7 +157,7 @@ public sealed class ImagePublisherTests : IDisposable
         File.WriteAllText(unrelated, "unrelated");
         var (sut, _) = NewSut();
 
-        sut.SweepExcept("lockscreen-aaaaaaaaaaaaaaaa.jpg");
+        sut.SweepExcept("lockscreen-aaaaaaaaaaaaaaaa.jpg", "lockscreen");
 
         Assert.True(File.Exists(keep));
         Assert.False(File.Exists(stale));
@@ -174,10 +174,26 @@ public sealed class ImagePublisherTests : IDisposable
         File.WriteAllText(b, "b");
         var (sut, _) = NewSut();
 
-        sut.SweepExcept(null);
+        sut.SweepExcept(null, "lockscreen");
 
         Assert.False(File.Exists(a));
         Assert.False(File.Exists(b));
+    }
+
+    [Fact]
+    public void SweepExcept_IsScopedToPrefix_NeverTouchesOtherSurfacesFiles()
+    {
+        Directory.CreateDirectory(_publishRoot);
+        var lockFile = Path.Combine(_publishRoot, "lockscreen-aaaaaaaaaaaaaaaa.jpg");
+        var wallFile = Path.Combine(_publishRoot, "wallpaper-bbbbbbbbbbbbbbbb.jpg");
+        File.WriteAllText(lockFile, "lock");
+        File.WriteAllText(wallFile, "wall");
+        var (sut, _) = NewSut();
+
+        sut.SweepExcept(null, "wallpaper");
+
+        Assert.True(File.Exists(lockFile));    // a wallpaper sweep must never delete a lockscreen-* file
+        Assert.False(File.Exists(wallFile));
     }
 
     // ── Test double ───────────────────────────────────────────────────────────

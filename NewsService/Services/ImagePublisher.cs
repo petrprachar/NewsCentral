@@ -8,14 +8,17 @@ namespace NewsService.Services;
 /// <summary>
 /// Publishes a verified display image to a protected, non-user-writable folder
 /// (<see cref="DeliverySection.PublishedImagePath"/>) before it is referenced by
-/// PersonalizationCSP. This closes two gaps in the cache-based apply it replaces:
+/// PersonalizationCSP — shared by both surfaces NewsService manages (lock screen, prefix
+/// "lockscreen"; desktop wallpaper, prefix "wallpaper"), each in its own content-derived
+/// namespace within the same folder. This closes two gaps in the cache-based apply it replaces:
 ///   1. The bytes on disk were never re-verified before the path was handed to the OS — the
 ///      image hash was checked once at download time against the signed index, never again at
 ///      apply time.
 ///   2. %ProgramData%\NewsCentral\ inherits C:\ProgramData's ACL, under which a standard user
 ///      can pre-create a team's images\generated\ folder and, as CREATOR OWNER, retain
-///      delete-child rights over everything later written into it. The lock screen is a
-///      machine-wide, pre-authentication surface, so that exposure matters here specifically.
+///      delete-child rights over everything later written into it. Both surfaces are
+///      machine-wide, pre-authentication-reachable (lock screen) or system-enforced (wallpaper)
+///      surfaces, so that exposure matters for either.
 /// File names are content-derived (<c>{prefix}-{hash16}{ext}</c>), so existence of the target
 /// implies correctness and the CSP path changes exactly when the image content changes.
 /// </summary>
@@ -33,12 +36,15 @@ public interface IImagePublisher
     string? Publish(string sourcePath, string expectedHash, string prefix);
 
     /// <summary>
-    /// Deletes every published lock-screen file ("lockscreen-*") in the publish root except the
-    /// one named by <paramref name="keepFileName"/> (or every one, if <c>null</c>). Call this only
-    /// at the START of a cycle, before anything is published that cycle — never in the same cycle
-    /// a file was just written, since Windows may still hold it open from the apply that just ran.
+    /// Deletes every published file matching <c>{prefix}-*</c> in the publish root except the one
+    /// named by <paramref name="keepFileName"/> (or every matching one, if <c>null</c> — a legitimate
+    /// steady state once a surface has nothing active to publish). Scoped strictly to
+    /// <paramref name="prefix"/>, so sweeping one surface (e.g. "lockscreen") never touches another
+    /// surface's files (e.g. "wallpaper-*"). Call this only at the START of a cycle, before anything
+    /// is published that cycle — never in the same cycle a file was just written, since Windows may
+    /// still hold it open from the apply that just ran.
     /// </summary>
-    void SweepExcept(string? keepFileName);
+    void SweepExcept(string? keepFileName, string prefix);
 }
 
 /// <inheritdoc cref="IImagePublisher"/>
@@ -46,7 +52,6 @@ public sealed class ImagePublisher(
     ServiceConfiguration config,
     ILogger<ImagePublisher> logger) : IImagePublisher
 {
-    private const string LockScreenGlob = "lockscreen-*";
     private const string Sha256Prefix = "sha256:";
 
     public string? Publish(string sourcePath, string expectedHash, string prefix)
@@ -122,19 +127,20 @@ public sealed class ImagePublisher(
         }
     }
 
-    public void SweepExcept(string? keepFileName)
+    public void SweepExcept(string? keepFileName, string prefix)
     {
         var publishRoot = config.Delivery.PublishedImagePath;
         if (string.IsNullOrWhiteSpace(publishRoot) || !Directory.Exists(publishRoot)) return;
 
+        var glob = $"{prefix}-*";
         IEnumerable<string> candidates;
         try
         {
-            candidates = Directory.EnumerateFiles(publishRoot, LockScreenGlob).ToList();
+            candidates = Directory.EnumerateFiles(publishRoot, glob).ToList();
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Lock-screen sweep: could not enumerate {Root}", publishRoot);
+            logger.LogWarning(ex, "{Prefix} sweep: could not enumerate {Root}", prefix, publishRoot);
             return;
         }
 
@@ -147,12 +153,12 @@ public sealed class ImagePublisher(
             try
             {
                 File.Delete(path);
-                logger.LogDebug("Lock-screen sweep: deleted stale {File}", name);
+                logger.LogDebug("{Prefix} sweep: deleted stale {File}", prefix, name);
             }
             catch (Exception ex)
             {
                 // A locked stale file must never abort the sweep of its siblings.
-                logger.LogWarning(ex, "Lock-screen sweep: failed to delete {File} — continuing", name);
+                logger.LogWarning(ex, "{Prefix} sweep: failed to delete {File} — continuing", prefix, name);
             }
         }
     }
@@ -166,8 +172,9 @@ public sealed class ImagePublisher(
     /// Startup sanity check, called once from Program.cs after the host is built. Never throws and
     /// never stops the service: a bad or user-writable publish path just means every future
     /// <see cref="Publish"/> call fails (folder unusable) or the protection is void (folder
-    /// writable) — the lock screen then stays sticky forever, which is the safe failure mode, but
-    /// the operator needs to know why.
+    /// writable) — every managed surface then falls back to its foreign-value-never-cleared /
+    /// stays-frozen fail-closed behavior, which is the safe failure mode, but the operator needs
+    /// to know why.
     /// </summary>
     internal static void CheckPublishFolderAcl(string publishRoot, ILogger logger)
     {
@@ -178,7 +185,7 @@ public sealed class ImagePublisher(
             {
                 logger.LogError(
                     "Delivery:PublishedImagePath is empty or not an absolute path: '{Path}' — " +
-                    "lock-screen image publishing will fail every cycle", publishRoot);
+                    "image publishing will fail every cycle for every surface", publishRoot);
                 return;
             }
             fullPath = Path.GetFullPath(publishRoot);
@@ -187,7 +194,7 @@ public sealed class ImagePublisher(
         {
             logger.LogError(ex,
                 "Delivery:PublishedImagePath is not a usable path: '{Path}' — " +
-                "lock-screen image publishing will fail every cycle", publishRoot);
+                "image publishing will fail every cycle for every surface", publishRoot);
             return;
         }
 

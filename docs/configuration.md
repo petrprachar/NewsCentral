@@ -65,9 +65,10 @@ HKLM\Software\[Company]\NewsCentral\NewsService\
 │        see docs/entra-dynamic-teams.md; surfaced via the same recursive registry walk)
 ├── Delivery\
 │       DefaultLockScreenPath   REG_SZ   (absolute, SYSTEM-readable path to a default lock-screen image; "" = no default)
-│       PublishedImagePath     REG_SZ    (protected folder for applied display images; must not be user-writable; default C:\Windows\Web\NewsCentral)
+│       DefaultWallpaperPath    REG_SZ   (absolute path to a default wallpaper image; "" = no default; moved here from NewsViewer)
+│       PublishedImagePath     REG_SZ    (protected folder for applied display images, both surfaces; must not be user-writable; default C:\Windows\Web\NewsCentral)
 │       LockScreenEnabled      DWORD     (0 = the lock-screen surface is not read/written/cleared at all — NOT a revert; default 1)
-│       WallpaperEnabled       DWORD     (reserved; no effect until wallpaper ownership migrates from NewsViewer; default 1)
+│       WallpaperEnabled       DWORD     (0 = the wallpaper surface is not read/written/cleared at all — NOT a revert; mirrors LockScreenEnabled; default 1)
 ├── Telemetry\
 │       UploadEnabled   DWORD   (0 = do not forward session telemetry to the repository; the fixed 30-day local retention sweep still runs; default 1)
 ├── Logging\
@@ -102,8 +103,7 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 │           PublicKeyPrevious  REG_SZ   (Base64 SPKI; optional — rotation window)
 │       (one subtree per team; surfaced as Signing:{teamFolderName}:PublicKey via RegistryConfigurationProvider)
 ├── Delivery\
-│       DefaultWallpaperPath      REG_SZ   (absolute path to a default wallpaper; "" = leave current/sticky)
-│       WallpaperStyle            REG_SZ   (Fill | Fit | Stretch | Center | Tile; default Fit)
+│       WallpaperStyle            REG_SZ   (Fill | Fit | Stretch | Center | Tile; default Fit — style only, the image is NewsService/CSP-owned)
 │       WallpaperBackgroundColor  REG_SZ   ("R G B" desktop background for Fit letterbox bars; default "0 0 0")
 └── teams\
         (one REG_SZ value per team; value name = full folder name)
@@ -233,6 +233,7 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
   },
   "Delivery": {
     "DefaultLockScreenPath": "",
+    "DefaultWallpaperPath": "",
     "PublishedImagePath": "C:\\Windows\\Web\\NewsCentral",
     "LockScreenEnabled": true,
     "WallpaperEnabled": true
@@ -258,13 +259,17 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
 
 `Logging:EventLog:SourceName` / `LogName` name the **same EventLog source the installer registers** (`NewsService` in the Application log — see `docs/packaging.md`); the two must stay in step, so do not edit either side alone.
 
-`Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default. **This is no longer unconditionally "sticky"** (a documentation claim this release corrects — see `docs/newsservice-spec.md` → Step 2): when there is no active content and no usable default, a lock-screen value NewsService itself previously published is now **cleared**, returning the machine to Windows' own default lock screen at the next lock; only a value NewsService did **not** write (GPO, Intune, a manual admin change) is left in place. NewsService-only; not shared with other components.
+`Delivery:DefaultLockScreenPath` — absolute, machine-readable (SYSTEM-readable in the pre-logon context) path to a default lock-screen image applied when no lock-screen content is active. Empty (`""`) means no default. **This is no longer unconditionally "sticky"**: when there is no active content and no usable default, a lock-screen value NewsService itself previously published is **cleared**, returning the machine to Windows' own default lock screen at the next lock; only a value NewsService did **not** write (GPO, Intune, a manual admin change) is left in place. See `docs/newsservice-spec.md` → Step 2. NewsService-only.
 
-`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) — the protected folder `ImagePublisher` copies the applied lock-screen image into before `PersonalizationCSP` is pointed at it, instead of pointing CSP directly at the `%ProgramData%` cache. The published file name is content-derived (`lockscreen-{hash16}.ext`), and the SHA-256 recorded in the signed index (or, for the configured default image, the file's own hash) is re-verified at publish time. **This folder must not be writable by standard users** — that is the entire point of publishing here rather than applying from the cache; see `docs/anti-tamper.md` for the threat this closes. This value also gates the **teardown** ownership test (Step 2): a live CSP value is only ever cleared when it resolves to a path inside this folder — an empty or unresolvable value makes that test fail closed (nothing is ever cleared). NewsService logs a `Warning` at startup if the configured folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`.
+`Delivery:DefaultWallpaperPath` — absolute path to a default wallpaper image applied when no active `IsWallpaper` content exists. Empty (`""`) means no default. Same semantics as `DefaultLockScreenPath` in every respect, including the teardown behavior above. **This key lives in the NewsService hive, not NewsViewer's** — it moved here when wallpaper-**image** ownership migrated to NewsService; NewsViewer retains only the wallpaper **style** keys (`WallpaperStyle`, `WallpaperBackgroundColor`, below). A `DefaultWallpaperPath` value still present under the NewsViewer hive is orphaned and produces a startup diagnostic warning there — see `docs/newsviewer-spec.md`. NewsService-only.
+
+`Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`) — the protected folder `ImagePublisher` copies the applied image into, for **both** surfaces (each in its own content-derived namespace: `lockscreen-*` / `wallpaper-*`), before `PersonalizationCSP` is pointed at it, instead of pointing CSP directly at the `%ProgramData%` cache. The published file name is content-derived (`{prefix}-{hash16}.ext`), and the SHA-256 recorded in the signed index (or, for a configured default image, the file's own hash) is re-verified at publish time. **This folder must not be writable by standard users** — that is the entire point of publishing here rather than applying from the cache; see `docs/anti-tamper.md` for the threat this closes. This value also gates the **teardown** ownership test (Step 2), shared by both surfaces: a live CSP value is only ever cleared when it resolves to a path inside this folder — an empty or unresolvable value makes that test fail closed (nothing is ever cleared). NewsService logs a `Warning` at startup if the configured folder already exists and grants `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`.
 
 `Delivery:LockScreenEnabled` (bool, default `true`) — master enable for the entire lock-screen surface. `false` stops NewsService reading, writing, or clearing **any** `PersonalizationCSP` lock-screen value that cycle — the surface is left exactly as it stands. **This is not a revert**: a machine that already has lock-screen content applied keeps it frozen in place until the values are cleared by hand, or the toggle is turned back on so the ordinary teardown path can clear it. Provision this **before** first run on machines where the surface should never be managed — see the session-host guidance below. NewsService-only.
 
-`Delivery:WallpaperEnabled` (bool, default `true`) — **reserved**; takes effect only when desktop-wallpaper ownership migrates from NewsViewer to NewsService in a later phase. Defined and provisionable now so it can be set in the GPO baseline alongside `LockScreenEnabled` ahead of that migration, but nothing in NewsService reads it in this release — NewsViewer continues to own wallpaper entirely. NewsService-only.
+`Delivery:WallpaperEnabled` (bool, default `true`) — master enable for the entire desktop-wallpaper surface. **Live** — mirrors `LockScreenEnabled` exactly (same NOT-a-revert semantics, same session-host rationale). NewsService owns the wallpaper image via PersonalizationCSP; NewsViewer's per-user HKCU style re-assert is unaffected by this toggle either way (see `docs/newsviewer-spec.md`). NewsService-only.
+
+> **Prerequisite — Windows Enterprise or Education.** Personalization CSP — the mechanism behind both the lock-screen and wallpaper applies — is documented by Microsoft as supported on Windows Enterprise and Education SKUs, and on Pro only under Shared PC / Cloud Config (BootToCloud) configurations. The raw registry writes NewsService performs are widely observed to work on Pro outside those configurations too, but that remains undocumented behavior — do not rely on it for a production fleet running Pro.
 
 > **Session-host guidance.** `LockScreenEnabled` and `WallpaperEnabled` both exist primarily as an opt-out for **RDS session hosts, VDI templates, and RemoteApp hosts**: one machine-wide registry value cannot correctly serve many concurrent user sessions, RDS policy can suppress the desktop background outright, and a non-persistent VDI image rebuilds from its template every boot, making any applied state meaningless past the next reboot. Set both to `0` in the GPO baseline for such machines. NewsService also logs a best-effort startup `Warning` (see `WarnIfSessionHostSurfaceUnmanaged` in `Program.cs`) when a machine looks like a Windows Server with Remote Desktop connections allowed and either toggle is still at its default — a heuristic, not a guarantee; it never fires on a client Windows workstation but is not a substitute for provisioning the toggles correctly.
 
@@ -300,14 +305,13 @@ NewsViewer resolves configuration across three layers (registry always wins):
     "RequireSignedIndex": false
   },
   "Delivery": {
-    "DefaultWallpaperPath": "",
     "WallpaperStyle": "Fit",
     "WallpaperBackgroundColor": "0 0 0"
   }
 }
 ```
 
-`Active` (NewsViewer) — per-machine master switch. `bool`, default `true` (registry `Active` DWORD `0`/`1` at the hive root; absent = `true`, so an unprovisioned machine is never silently disabled). Evaluated first in `Main()`, before every other startup guard. `false` exits at startup with no action taken: no poster is shown, no wallpaper is applied, `viewerstate.json` is not written, no telemetry session file is written, and no dialog is shown. The current wallpaper is deliberately left as-is — deactivation is not a revert.
+`Active` (NewsViewer) — per-machine master switch. `bool`, default `true` (registry `Active` DWORD `0`/`1` at the hive root; absent = `true`, so an unprovisioned machine is never silently disabled). Evaluated first in `Main()`, before every other startup guard. `false` exits at startup with no action taken: no poster is shown, no wallpaper style re-assert runs, `viewerstate.json` is not written, no telemetry session file is written, and no dialog is shown. The current wallpaper style is deliberately left as-is — deactivation is not a revert. (The wallpaper *image* is NewsService's concern and is unaffected by NewsViewer's `Active` switch in either direction.)
 
 `Display:LogicalDayStartHour` (NewsViewer) — the hour (local time) at which the "logical day" for the once-per-day poster gate rolls over. `int`, default `0` (= calendar day), clamped to `0..23`. Example: `5` makes the day run 05:00 → 04:59 next morning, so a night-shift unlock after midnight is still the same logical day and does not re-trigger the poster. See `docs/newsviewer-spec.md` → The daily gate.
 
@@ -315,7 +319,7 @@ NewsViewer resolves configuration across three layers (registry always wins):
 
 **Display duration has NO registry or appsettings default.** `DisplayDurationSeconds` is a per-presentation value carried in the content, not configuration. `0` is a **meaningful** value ("unset") resolved in code to `30` by `PresentationDefaults.ResolveDuration` — it is not a missing setting to be filled from config. See `docs/data-model.md` → PresentationDefaults and `docs/newsviewer-spec.md` → Display Duration.
 
-`Delivery` (NewsViewer) — desktop wallpaper applied in the user session via `SystemParametersInfo` + HKCU. `DefaultWallpaperPath` (absolute path; `""` = leave the current wallpaper, sticky) is applied when no active `IsWallpaper` content is present. `WallpaperStyle` is `Fill | Fit | Stretch | Center | Tile` (default `Fit`). `WallpaperBackgroundColor` is `"R G B"` for the Fit letterbox bars (default `"0 0 0"`). NewsViewer-only; the NewsService `Delivery` section is separate (`DefaultLockScreenPath`).
+`Delivery` (NewsViewer) — desktop wallpaper **style only**, asserted per-user in HKCU on every run regardless of whether any wallpaper content is active. The wallpaper *image* is owned by NewsService, applied machine-wide via PersonalizationCSP (`Delivery:DefaultWallpaperPath` lives in the **NewsService** `Delivery` section, not here — see above). `WallpaperStyle` is `Fill | Fit | Stretch | Center | Tile` (default `Fit`). `WallpaperBackgroundColor` is `"R G B"` for the Fit letterbox bars (default `"0 0 0"`). NewsViewer-only; the NewsService `Delivery` section is separate and also carries `DefaultLockScreenPath`/`DefaultWallpaperPath`/`PublishedImagePath`/`LockScreenEnabled`/`WallpaperEnabled`.
 
 ## Azure Authentication Modes — NewsService only
 

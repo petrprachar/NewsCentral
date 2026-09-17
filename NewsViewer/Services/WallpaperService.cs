@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -6,26 +5,22 @@ using Microsoft.Win32;
 namespace NewsViewer.Services;
 
 /// <summary>
-/// Applies the desktop wallpaper in the current user session via <c>SystemParametersInfo</c> and
-/// per-user HKCU registry values — <b>no COM / IDesktopWallpaper</b>, keeping NewsViewer's
-/// NativeAOT migration path intact (DllImport P/Invoke with simple blittable types +
-/// Microsoft.Win32.Registry, no extra packages, no unsafe code — matching NativeMethods.cs).
+/// Asserts the per-user desktop wallpaper STYLE only — <b>not</b> the wallpaper image. As of the
+/// wallpaper-ownership migration to NewsService, the image itself is enforced machine-wide via
+/// PersonalizationCSP (<c>DesktopImagePath</c>/<c>DesktopImageUrl</c>/<c>DesktopImageStatus</c>),
+/// which NewsService applies from session 0. CSP enforces WHICH image is shown (Settings greys
+/// the picker out), but the HKCU values written here still control HOW that image is fitted
+/// (Fill/Fit/Stretch/Center/Tile) — CSP has no equivalent for style. This class exists only
+/// because style is per-user and unreachable from NewsService's session-0 context; it re-asserts
+/// on every NewsViewer run regardless of whether wallpaper content is active, so the style is
+/// always correct for whatever image CSP currently has applied.
 ///
-/// The applier is a thin, stateless shell: it writes the configured style + background colour and
-/// asks Windows to set the wallpaper, returning the OS result. Selection and the apply/skip decision
-/// live in the caller (re-asserted every run; no per-user state).
+/// No COM / IDesktopWallpaper — keeps NewsViewer's NativeAOT migration path intact
+/// (Microsoft.Win32.Registry only, no extra packages, no unsafe code).
 /// </summary>
 internal sealed class WallpaperService
 {
-    private const uint SPI_SETDESKWALLPAPER = 0x0014;
-    private const uint SPIF_UPDATEINIFILE   = 0x01;
-    private const uint SPIF_SENDCHANGE      = 0x02;
-    private const int  COLOR_DESKTOP        = 1;
-
-    [DllImport("user32.dll", EntryPoint = "SystemParametersInfoW",
-        CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, string pvParam, uint fWinIni);
+    private const int COLOR_DESKTOP = 1;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -43,18 +38,12 @@ internal sealed class WallpaperService
     }
 
     /// <summary>
-    /// Sets the desktop wallpaper to <paramref name="imagePath"/>. Returns true on success, false if
-    /// the file is missing or the OS call fails. Writes WallpaperStyle/TileWallpaper and a uniform
-    /// desktop background colour (so Fit letterbox bars are even) before applying.
+    /// Writes WallpaperStyle/TileWallpaper and a uniform desktop background colour (so Fit
+    /// letterbox bars are even) to the current user's HKCU. Does not touch the wallpaper image
+    /// itself and does not call SystemParametersInfo — the image is CSP-managed by NewsService.
     /// </summary>
-    public bool SetWallpaper(string imagePath)
+    public void ApplyWallpaperStyle()
     {
-        if (!File.Exists(imagePath))
-        {
-            Debug.WriteLine($"[Wallpaper] image not found: {imagePath}");
-            return false;
-        }
-
         var (wallpaperStyle, tileWallpaper) = MapStyle(_style);
         using (var desktop = Registry.CurrentUser.CreateSubKey(@"Control Panel\Desktop"))
         {
@@ -69,9 +58,6 @@ internal sealed class WallpaperService
         }
         // COLORREF = 0x00BBGGRR
         SetSysColors(1, [COLOR_DESKTOP], [(uint)(r | (g << 8) | (b << 16))]);
-
-        return SystemParametersInfo(
-            SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
     }
 
     /// <summary>Maps a style name to the (WallpaperStyle, TileWallpaper) HKCU value pair.</summary>

@@ -32,9 +32,10 @@ static class Program
 
         // Per-machine master switch (registry Active, DWORD 0/1). Evaluated first, ahead of every
         // other guard: the guards below all mean "there is work but conditions block it", whereas
-        // Active = false means "there is no work". Exits silently — no poster, no wallpaper apply,
-        // no viewerstate write, no telemetry. The last-applied wallpaper is deliberately left in
-        // place; deactivation is not a revert.
+        // Active = false means "there is no work". Exits silently — no poster, no wallpaper style
+        // re-assert, no viewerstate write, no telemetry. The last-applied wallpaper style is
+        // deliberately left in place; deactivation is not a revert. (The wallpaper image is
+        // NewsService's concern and is unaffected either way.)
         if (!config.Active) return;
 
         // UI theme — resolved ONCE here and consumed via Theme.Current (the same
@@ -62,57 +63,40 @@ static class Program
         var teams = TeamConfigurationReader.GetTeams(configuration);
         if (teams.Length == 0) return;
 
-        // Remote/virtual sessions get neither the poster nor a wallpaper change. The wallpaper step
-        // otherwise runs on any local interactive session — it is NOT gated behind a qualifying monitor.
+        // Diagnostic-only, non-fatal: DefaultWallpaperPath moved to the NewsService hive when
+        // wallpaper-image ownership migrated there. A value still present in NewsViewer's own
+        // hive is orphaned — nothing reads it — and is worth flagging to an operator.
+        WarnIfOrphanedWallpaperPathConfigured();
+
+        // Remote/virtual sessions get neither the poster nor the wallpaper style re-assert. The
+        // style step otherwise runs on any local interactive session — it is NOT gated behind a
+        // qualifying monitor.
         if (IsRemoteOrVirtualSession()) return;
 
         var selector = new PresentationSelector(
             config.CacheRootPath, configuration, config.BypassImageIntegrityCheck);
 
-        // Terminal wallpaper step — re-asserted every run, stateless (no viewerstate). Selects the
-        // active IsWallpaper winner from the signature-verified cache; falls back to a configurable
-        // default; "no content + no default" leaves the current wallpaper untouched (sticky).
-        void ApplyWallpaper()
+        // Terminal step — re-asserted every run, unconditionally, regardless of whether any
+        // wallpaper content is active. NewsService owns the wallpaper IMAGE machine-wide via
+        // PersonalizationCSP; this only re-applies the per-user HKCU STYLE (Fill/Fit/Stretch/
+        // Center/Tile + letterbox background), which CSP does not cover and NewsService's
+        // session-0 context cannot reach. See WallpaperService for the verified CSP-enforces-
+        // image / HKCU-controls-fit finding.
+        void ApplyWallpaperStyle()
         {
-            var (wp, wpPath) = selector.SelectActiveWallpaper(teams);
-
-            string? intended;
-            string  source;
-            if (wp is not null && wpPath is not null)   // wpPath null => unverified image; fall back
-            {
-                intended = wpPath;
-                source   = $"presentation {wp.PresentationId}, team {wp.SourceTeamFolderName}";
-            }
-            else
-            {
-                var def = config.Delivery.DefaultWallpaperPath;
-                if (!string.IsNullOrEmpty(def) && File.Exists(def)) { intended = def;  source = "default"; }
-                else                                                { intended = null; source = string.Empty; }
-            }
-
-            if (intended is null)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    "[Wallpaper] no active content and no usable default — leaving current (sticky)");
-                return;
-            }
-
-            var applier = new WallpaperService(
-                config.Delivery.WallpaperStyle, config.Delivery.WallpaperBackgroundColor);
-            if (applier.SetWallpaper(intended))
-                System.Diagnostics.Debug.WriteLine($"[Wallpaper] applied: {source} -> {intended}");
-            else
-                System.Diagnostics.Debug.WriteLine($"[Wallpaper] ERROR — apply failed: {source} -> {intended}");
+            new WallpaperService(config.Delivery.WallpaperStyle, config.Delivery.WallpaperBackgroundColor)
+                .ApplyWallpaperStyle();
+            System.Diagnostics.Debug.WriteLine("[Wallpaper] style re-asserted");
         }
 
         // Resolve the active display (poster) assignment — may be absent.
         var (assignment, imagePath) = selector.SelectActive(teams);
 
         // Poster requires an active assignment AND a Full-HD-or-better monitor. When neither poster
-        // can be shown, the wallpaper is still the terminal step before exit.
+        // can be shown, the wallpaper style is still the terminal step before exit.
         if (assignment is null || imagePath is null || !HasQualifyingMonitor())
         {
-            ApplyWallpaper();
+            ApplyWallpaperStyle();
             return;
         }
 
@@ -127,10 +111,10 @@ static class Program
         bool bypass     = config.BypassDailyGate;
         bool alreadyShown = !bypass && viewerState.AlreadyShownToday();
 
-        // Show once per day then exit. The wallpaper still re-asserts on an already-shown day.
+        // Show once per day then exit. The wallpaper style still re-asserts on an already-shown day.
         if (alreadyShown)
         {
-            ApplyWallpaper();
+            ApplyWallpaperStyle();
             return;
         }
 
@@ -173,18 +157,18 @@ static class Program
             uiThread.Join();
 
             // Back on the main thread / original desktop after VD switch-back and teardown.
-            ApplyWallpaper();
+            ApplyWallpaperStyle();
         }
         else
         {
             Application.Run(new ViewerForm(assignment, imagePath, telemetry, viewerState, isOnline, effectiveDuration));
-            ApplyWallpaper();
+            ApplyWallpaperStyle();
         }
 
         // Keep the mutex rooted until the very end. `using var` guarantees disposal at method exit but
         // does NOT keep the object reachable — once the last read is behind us the GC may finalize it
-        // and release the mutex while the VD thread and the wallpaper write are still in flight, which
-        // is exactly the window this guard exists to close.
+        // and release the mutex while the VD thread and the wallpaper style write are still in flight,
+        // which is exactly the window this guard exists to close.
         GC.KeepAlive(mutex);
     }
 
@@ -226,5 +210,31 @@ static class Program
             return doc.RootElement.TryGetProperty("isOnline", out var prop) && prop.GetBoolean();
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Diagnostics only, never fatal: Delivery:DefaultWallpaperPath moved from the NewsViewer
+    /// registry hive to the NewsService hive when wallpaper-image ownership migrated there.
+    /// ViewerConfiguration no longer has a property for it, so this reads the raw registry value
+    /// directly — a value still present here is orphaned (nothing reads it) and worth flagging to
+    /// an operator, but is deliberately left untouched: this method never deletes it.
+    /// </summary>
+    private static void WarnIfOrphanedWallpaperPathConfigured()
+    {
+        try
+        {
+            var hive = $@"SOFTWARE\{SolutionConstants.Company}\{SolutionConstants.SolutionName}\NewsViewer\Delivery";
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(hive);
+            var orphaned = key?.GetValue("DefaultWallpaperPath") as string;
+            if (!string.IsNullOrEmpty(orphaned))
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[Config] WARNING — orphaned registry value: HKLM\\{hive}\\DefaultWallpaperPath = " +
+                    $"'{orphaned}'. NewsViewer no longer reads this key; it moved to the NewsService hive " +
+                    $"(HKLM\\SOFTWARE\\{SolutionConstants.Company}\\{SolutionConstants.SolutionName}\\" +
+                    "NewsService\\Delivery\\DefaultWallpaperPath). Not removed automatically.");
+            }
+        }
+        catch { /* diagnostics only — never fail startup over this */ }
     }
 }

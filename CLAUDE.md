@@ -12,8 +12,8 @@
 |---|---|---|
 | NewsCentral | Content authoring, approval, scheduling, publishing, user/team management | .NET 9 MAUI Blazor Hybrid desktop app |
 | NewsCentral.Shared | Shared domain models referenced by all components | .NET 9 class library |
-| NewsService | Cache agent — syncs content from repository to local machine, applies the lock screen (three-state: writes when content changes, clears its own stale content, never touches a value it did not write; re-verified and published to a protected non-user-writable folder before apply; disable via `Delivery:LockScreenEnabled` — RDS/VDI opt-out, not a revert), uploads telemetry | .NET 9 Windows Service |
-| NewsViewer | End-user presentation layer — displays scheduled content from local cache; applies the desktop wallpaper in the user session (`SystemParametersInfo` + HKCU) | .NET 9 WinForms desktop app |
+| NewsService | Cache agent — syncs content from repository to local machine, applies **both** display surfaces machine-wide via PersonalizationCSP — the lock screen and the desktop wallpaper image (three-state: writes when content changes, clears its own stale content, never touches a value it did not write; re-verified and published to a protected non-user-writable folder before apply; each independently disabled via `Delivery:LockScreenEnabled`/`Delivery:WallpaperEnabled` — RDS/VDI opt-out, not a revert), uploads telemetry | .NET 9 Windows Service |
+| NewsViewer | End-user presentation layer — displays scheduled content from local cache; re-asserts the per-user desktop wallpaper **style** only (HKCU, no `SystemParametersInfo`) — the wallpaper image itself is owned by NewsService | .NET 9 WinForms desktop app |
 | NewsTester | Content preview tool for authors and approvers | Future — independent desktop app |
 
 ---
@@ -107,7 +107,7 @@ new JsonSerializerOptions {
 
 **`Company` is a single build-time constant, not configuration.** Authored once in `Directory.Build.props` (`<Company>`), surfaced to code as `SolutionConstants.Company` (generated into `NewsCentral.Shared`), and consumed by all three components; an MSBuild target fails the build if it is empty. It is **absent from every `appsettings.json`** — no runtime default, no fallback — and is **not** registry-overridable (it defines the hive path `HKLM\Software\{Company}\NewsCentral\{Component}`). A `Company` **mismatch fails silently**: `OpenSubKey` returns `null` with no error, so every GPO/registry override is quietly ignored and the component runs on shipped defaults (the exact drift that motivated making it one constant). See `docs/configuration.md`.
 
-**NewsViewer startup** — `appsettings.json` is required (`optional: false`); the `appsettings.Development.json` overlay is `optional: true`. Missing base file = hard startup failure. `Main()` checks the `Active` master switch first (registry DWORD 0/1, default `true`) and returns silently if `false` — no poster, no wallpaper apply, no state write, no dialog. `Main()` then validates `CacheRootPath` (not `Company` — that is the build constant) and exits with `MessageBox` if it is empty.
+**NewsViewer startup** — `appsettings.json` is required (`optional: false`); the `appsettings.Development.json` overlay is `optional: true`. Missing base file = hard startup failure. `Main()` checks the `Active` master switch first (registry DWORD 0/1, default `true`) and returns silently if `false` — no poster, no wallpaper style re-assert, no state write, no dialog. `Main()` then validates `CacheRootPath` (not `Company` — that is the build constant) and exits with `MessageBox` if it is empty.
 
 ---
 

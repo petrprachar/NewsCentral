@@ -29,13 +29,25 @@ public class DeliverySection
 {
     /// <summary>
     /// Absolute, machine-readable path (SYSTEM-readable in the pre-logon context) to a default
-    /// lock-screen image applied when no lock-screen content is active. Empty = no default
-    /// (the last-applied lock screen is left in place — sticky).
+    /// lock-screen image applied when no lock-screen content is active. Empty = no default. When
+    /// there is neither active content nor a usable default, the three-state apply CLEARS a
+    /// lock-screen value NewsService itself previously published (returning the machine to
+    /// Windows' own default at the next lock) — it is no longer unconditionally left in place
+    /// ("sticky" only describes a value NewsService did not write, which is always left alone).
     /// </summary>
     public string DefaultLockScreenPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Protected folder holding the currently-applied display images; must be a folder no
+    /// Absolute, machine-readable path to a default desktop wallpaper applied when no active
+    /// IsWallpaper content exists. Empty = no default. Same semantics as
+    /// <see cref="DefaultLockScreenPath"/>, including the teardown behavior: no content and no
+    /// usable default CLEARS a wallpaper value NewsService itself previously published.
+    /// </summary>
+    public string DefaultWallpaperPath { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Protected folder holding the currently-applied display images for BOTH surfaces (lock
+    /// screen and wallpaper, in their own content-derived namespaces); must be a folder no
     /// standard user can write to, or the protection ImagePublisher provides is void.
     /// PersonalizationCSP is pointed at the copy published here, not at the ProgramData cache.
     /// </summary>
@@ -54,11 +66,11 @@ public class DeliverySection
     public bool LockScreenEnabled { get; set; } = true;
 
     /// <summary>
-    /// Reserved; takes effect only when desktop-wallpaper ownership migrates here from NewsViewer
-    /// in a later phase. No effect in the current release — NewsViewer still owns wallpaper
-    /// entirely, applied per-user in the user session via SystemParametersInfo + HKCU. Defined,
-    /// validated, and provisionable now so a GPO baseline can set it alongside LockScreenEnabled
-    /// ahead of that migration, but nothing in NewsService reads it yet.
+    /// Master enable for the desktop-wallpaper surface — live, mirrors
+    /// <see cref="LockScreenEnabled"/> exactly, same NOT-a-revert semantics and the same
+    /// RDS/VDI/RemoteApp opt-out rationale. NewsService owns the wallpaper IMAGE via
+    /// PersonalizationCSP; NewsViewer retains only the per-user HKCU wallpaper STYLE assertion
+    /// (unaffected by this toggle — see docs/newsviewer-spec.md).
     /// </summary>
     public bool WallpaperEnabled { get; set; } = true;
 }

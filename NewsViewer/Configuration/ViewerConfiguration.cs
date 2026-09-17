@@ -11,8 +11,9 @@ public class ViewerConfiguration
     /// <summary>
     /// Per-machine master switch (registry: <c>Active</c>, DWORD 0/1, at the hive root). Default
     /// <c>true</c> — an absent key must never disable the fleet. When <c>false</c>, NewsViewer
-    /// exits at startup with no action taken: no poster, no wallpaper apply, no viewerstate write,
-    /// no telemetry, no dialog. The last-applied wallpaper is left as-is (not reverted).
+    /// exits at startup with no action taken: no poster, no wallpaper style re-assert, no
+    /// viewerstate write, no telemetry, no dialog. The last-applied wallpaper style is left as-is
+    /// (not reverted). The wallpaper image is NewsService's concern and is unaffected either way.
     /// </summary>
     public bool Active { get; set; } = true;
 
@@ -43,12 +44,11 @@ public class DisplaySection
 public class DeliverySection
 {
     /// <summary>
-    /// Absolute, machine-readable path to a default wallpaper applied when no active IsWallpaper
-    /// content is present. Empty = leave the current wallpaper in place (sticky).
+    /// Wallpaper STYLE only — how the image is fitted (Fill/Fit/Stretch/Center/Tile). The
+    /// wallpaper IMAGE itself is owned by NewsService (PersonalizationCSP, machine-wide);
+    /// NewsViewer no longer selects or applies any wallpaper content. See
+    /// docs/newsviewer-spec.md.
     /// </summary>
-    public string DefaultWallpaperPath { get; set; } = string.Empty;
-
-    /// <summary>Fill | Fit | Stretch | Center | Tile (default Fit).</summary>
     public string WallpaperStyle { get; set; } = "Fit";
 
     /// <summary>"R G B" desktop background colour for Fit letterbox bars (default "0 0 0").</summary>

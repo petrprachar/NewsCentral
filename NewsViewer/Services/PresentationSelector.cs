@@ -35,15 +35,6 @@ public sealed class PresentationSelector
         SelectActiveMatching(teams, a => a.DisplayTypes.IsNewsOfWeek);
 
     /// <summary>
-    /// Like <see cref="SelectActive"/> but restricted to assignments with
-    /// <see cref="DisplayTypeInfo.IsWallpaper"/> == true — the active desktop-wallpaper winner.
-    /// Uses the same signature-verified index read and active-window/day filter; never bypasses
-    /// verification. Returns (assignment, resolvedImagePath) or (null, null).
-    /// </summary>
-    public (PublishedAssignmentIndex? Assignment, string? ImagePath) SelectActiveWallpaper(string[] teams) =>
-        SelectActiveMatching(teams, a => a.DisplayTypes.IsWallpaper);
-
-    /// <summary>
     /// Shared selection core: enumerate every signature-verified assignment across the effective
     /// team set, pick the newest active one matching <paramref name="predicate"/>, then resolve and
     /// integrity-check its image. Image verification failure returns (best, null) so the caller can

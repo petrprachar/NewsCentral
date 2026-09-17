@@ -94,8 +94,10 @@ present-but-wrong signature (`Invalid`) is rejected.
   **returns for that team** (aborts its sync; no images downloaded, cached index left as-is). Accept
   paths: `Unsigned` → `Warning`, everything else → `Information`.
 - **NewsViewer `PresentationSelector.EnumerateVerifiedAssignments`** — on reject, logs the reason and
-  **`continue`s past the team** (its assignments are never yielded, so nothing from it is shown or
-  applied as wallpaper). Accepted teams' assignments are yielded normally.
+  **`continue`s past the team** (its assignments are never yielded, so nothing from it is shown as
+  the poster). Accepted teams' assignments are yielded normally. (NewsViewer selects only the
+  poster now — lock-screen and wallpaper selection moved to NewsService's `SyncService`, which
+  routes through the same `SignatureGate` verification independently.)
 
 **NewsCentral signer modes** (`IndexGenerationService.GenerateIndexForTeamAsync`):
 
@@ -182,7 +184,7 @@ delivered-key path); it is a deployment prerequisite. A future anchored-root upg
 `docs/future.md`) would harden the delivered-key leg beyond ACLs. The lock-screen leg specifically no
 longer depends solely on this cache ACL for its final apply — see §7.
 
-## 7. Lock-screen publish-folder hardening (NewsService)
+## 7. Display-surface publish-folder hardening (NewsService)
 
 The image hash inside the signed index (§2) protects `index.json` and the recorded hash from
 tampering, and NewsService's download-time comparison against the sidecar hash catches a changed
@@ -193,36 +195,43 @@ image under `%programdata%\NewsCentral\`, trusting two things that were never in
 1. **The bytes on disk at apply time still matched the signed hash.** The hash was checked once,
    at download, and never rechecked when the path was actually handed to the OS moments (or days)
    later.
-2. **The cache folder itself was safe to point a pre-authentication surface at.**
+2. **The cache folder itself was safe to point a machine-wide surface at.**
    `%programdata%\NewsCentral\` inherits `C:\ProgramData`'s ACL, under which the built-in `Users`
    group holds create-file/create-folder rights that inherit downward, and `CREATOR OWNER` gets
    full control of anything it creates. A standard user can pre-create a team's
    `images\generated\` folder before NewsService reaches it and, as owner, retain delete-child
-   rights over everything later written into it — on a folder the lock screen (a machine-wide,
-   pre-authentication surface) was being pointed at directly.
+   rights over everything later written into it — on a folder a system-enforced surface (lock
+   screen, and now wallpaper) was being pointed at directly.
 
-`ImagePublisher` (`NewsService/Services/ImagePublisher.cs`) closes both gaps for the lock screen.
-Before `SetLockScreen` is ever called, the winning image (or the configured default) is
-re-hashed and compared against its expected SHA-256 — the index-recorded hash for content, a
-self-hash for the admin-supplied default — and only a match is copied into
+`ImagePublisher` (`NewsService/Services/ImagePublisher.cs`) closes both gaps for **both** display
+surfaces NewsService manages — the lock screen and, since the wallpaper-ownership migration from
+NewsViewer, the desktop wallpaper — each in its own content-derived namespace (`lockscreen-*` /
+`wallpaper-*`) within the same protected folder. Before `SetLockScreen`/`SetWallpaper` is ever
+called, the winning image for that surface (or its configured default) is re-hashed and compared
+against its expected SHA-256 — the index-recorded hash for content, a self-hash for the
+admin-supplied default — and only a match is copied into
 `Delivery:PublishedImagePath` (default `C:\Windows\Web\NewsCentral`, under `C:\Windows`'s ACL,
 which does not grant standard users write access). The published file name is content-derived
-(`lockscreen-{hash16}.ext`), so CSP is pointed at a file whose name is only ever correct — no
-window exists where the path exists but the bytes don't yet match it. A startup check
-(`ImagePublisher.CheckPublishFolderAcl`) warns if the configured folder is ever found to grant
-`Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`, since a user-writable publish
-folder would defeat the entire mechanism. See `docs/configuration.md` for
-`Delivery:PublishedImagePath` and `docs/newsservice-spec.md` for the full publish-then-apply flow.
+(`{prefix}-{hash16}.ext`, `prefix` = `"lockscreen"` or `"wallpaper"`), so CSP is pointed at a file
+whose name is only ever correct — no window exists where the path exists but the bytes don't yet
+match it. A startup check (`ImagePublisher.CheckPublishFolderAcl`) warns if the configured folder
+is ever found to grant `Write`/`Modify`/`FullControl` to `Users` or `Authenticated Users`, since a
+user-writable publish folder would defeat the entire mechanism for **either** surface. See
+`docs/configuration.md` for `Delivery:PublishedImagePath` and `docs/newsservice-spec.md` for the
+full publish-then-apply flow.
 
-**Residual gap — this milestone is lock-screen only.** The desktop **wallpaper** is still applied
-by NewsViewer directly from the `%programdata%` cache (`docs/newsviewer-spec.md`) and is not yet
-hardened by an equivalent publish step; it remains protected only by the cache ACL described above.
-Wallpaper is a per-user, post-authentication surface with materially lower blast radius than the
-lock screen, which is why it was deprioritized for this milestone rather than addressed alongside
-it — not an oversight.
+**No residual gap — both surfaces are now hardened.** Wallpaper was initially deprioritized in the
+lock-screen-only milestone that introduced this section (wallpaper was, at the time, a per-user,
+post-authentication surface applied by NewsViewer directly from the `%programdata%` cache, with
+materially lower blast radius than the lock screen). That gap closed when wallpaper-**image**
+ownership migrated from NewsViewer to NewsService: the wallpaper image is now a machine-wide,
+system-enforced surface applied through the identical publish-verify-dispatch path as the lock
+screen. NewsViewer's remaining wallpaper code is style-only (HKCU, per-user, no image, no CSP
+interaction) and carries none of the exposure this section addresses — see
+`docs/newsviewer-spec.md`.
 
-> **Prerequisite — Windows Enterprise (verified).** `PersonalizationCSP`, the mechanism the
-> lock-screen apply relies on, is documented by Microsoft as supported on Windows Enterprise and
+> **Prerequisite — Windows Enterprise (verified).** `PersonalizationCSP`, the mechanism both
+> surfaces' applies rely on, is documented by Microsoft as supported on Windows Enterprise and
 > Education SKUs, and on Pro only under Shared PC / Cloud Config (BootToCloud) configurations.
 > **Verified on Windows 11 Enterprise:** `Delivery:PublishedImagePath` inherits `C:\Windows`'s ACL
 > as intended (`Users` get read/execute only — no create-folder or append-data ACE, unlike
@@ -231,53 +240,59 @@ it — not an oversight.
 > writes are widely observed to work on Pro outside the documented configurations too, but that
 > remains undocumented behavior — do not rely on it for a production fleet running Pro.
 
-### Teardown — clearing a stale lock screen
+### Teardown — clearing a stale value, per surface
 
 Publishing to a protected folder (above) closes the integrity and ACL gaps at **apply** time, but
-on its own does nothing about a lock screen that stays applied after the content behind it expires.
+on its own does nothing about a surface that stays applied after the content behind it expires.
 Before this addition, `intended == null` (no active content, no usable default) always left
 whatever was currently applied untouched — described in this document, `docs/configuration.md`,
 and `docs/newsservice-spec.md` as "sticky." That was appropriate for a machine mid-cycle with a
-transient gap, but wrong as a permanent state: a machine whose lock-screen content expired and was
-never replaced would display stale, no-longer-approved content indefinitely.
+transient gap, but wrong as a permanent state: a machine whose content expired and was never
+replaced would display stale, no-longer-approved content indefinitely.
 
-`SyncService` now dispatches three ways instead of two. When there is no active content and no
-usable default:
+`SyncService` dispatches three ways instead of two, identically for **both** surfaces (`IPersonalizationService.ClearLockScreen` / `ClearWallpaper`). Using the lock screen as the illustrative
+example — wallpaper mirrors it exactly, value for value: when there is no active content and no
+usable default,
 
 - If the live `PersonalizationCSP\LockScreenImagePath` value resolves to a path **inside**
   `Delivery:PublishedImagePath` — i.e. a value **NewsService itself published** — it is **cleared**
-  (`ILockScreenService.ClearLockScreen`, which deletes the three CSP values but leaves the
-  `PersonalizationCSP` key itself in place). Windows returns to its own default lock screen at the
-  next lock boundary.
+  (`ClearLockScreen`, which deletes the three CSP values but leaves the `PersonalizationCSP` key
+  itself in place, since the other surface's values live there too). Windows returns to its own
+  default lock screen at the next lock boundary.
 - If the live value resolves **outside** `Delivery:PublishedImagePath` — a value NewsService did
   **not** write — it is left alone. **NewsCentral never clears a CSP value it did not write.** This
   is the load-bearing safety property of the whole feature: without it, a machine whose lock screen
-  is managed by GPO, Intune, or set manually by an admin would have that value silently deleted the
-  first time NewsService itself had nothing to show.
+  (or wallpaper) is managed by GPO, Intune, or set manually by an admin would have that value
+  silently deleted the first time NewsService itself had nothing to show.
 
 **The ownership prefix test.** Distinguishing "ours" from "someone else's" is a fully-normalized
 absolute-path comparison (`Path.GetFullPath` on both the configured root and the live value,
 `OrdinalIgnoreCase`, directory-prefix — never a raw string `StartsWith` on the configured value),
 so a trailing separator, a `..` segment, or different casing on either side cannot produce a false
-match in either direction. An empty or unresolvable `Delivery:PublishedImagePath` makes the test
-fail **closed**: every live value is then treated as foreign, and nothing is ever cleared — the
-safe failure mode for a mechanism whose entire job is deciding what is safe to delete.
+match in either direction. Shared by both surfaces, since they publish into the same protected
+folder. An empty or unresolvable `Delivery:PublishedImagePath` makes the test fail **closed**:
+every live value, for either surface, is then treated as foreign, and nothing is ever cleared —
+the safe failure mode for a mechanism whose entire job is deciding what is safe to delete.
 
-The whole surface can be disabled outright via `Delivery:LockScreenEnabled` (default `true`) — see
+Either surface can be disabled outright — `Delivery:LockScreenEnabled` for the lock screen,
+`Delivery:WallpaperEnabled` for the wallpaper, both default `true` and fully symmetric — see
 `docs/configuration.md` and `docs/newsservice-spec.md` for the opt-out this provides for RDS
-session hosts, VDI templates, and RemoteApp hosts, and for why disabling it is **not** a revert.
+session hosts, VDI templates, and RemoteApp hosts, and for why disabling either is **not** a
+revert.
 
 **Verified: clearing releases the lock screen (Windows 11 Enterprise).** Manually deleting the
-three `PersonalizationCSP` values and then locking the machine was tested directly: Windows returns
-to its default lock screen at the lock boundary, with **no logoff and no Explorer restart
-required**. Clearing works from session 0 (NewsService's own context) alone.
+three `PersonalizationCSP` lock-screen values and then locking the machine was tested directly:
+Windows returns to its default lock screen at the lock boundary, with **no logoff and no Explorer
+restart required**. Clearing works from session 0 (NewsService's own context) alone. The wallpaper
+trio (`DesktopImage*`) uses the identical CSP write/clear mechanism and is expected to behave the
+same way; it was not separately re-verified on hardware, since the code path is shared.
 
 **A caveat on a widely-cited failure report.** A commonly-referenced FileWave deployment script log
 shows an attempt to clear `LockScreenImageUrl` failing with an "unsupported" error. That failure
 was reported against the **WMI MDM Bridge** (`MDM_PersonalizationCSPUrl` / the `Win32_...` MDM
-provider classes), **not** direct registry deletion. `ClearLockScreen` here deletes the registry
-values directly via `Microsoft.Win32.Registry`, exactly as `SetLockScreen` writes them — the same
-mechanism, in reverse. Do not read that report as evidence against this implementation; it is
-evidence against a different delivery mechanism (WMI Bridge / MDM) that this codebase does not use.
-This note exists so nobody later "fixes" working, verified code on the strength of an unrelated
-report.
+provider classes), **not** direct registry deletion. `ClearLockScreen`/`ClearWallpaper` here delete
+the registry values directly via `Microsoft.Win32.Registry`, exactly as `SetLockScreen`/
+`SetWallpaper` write them — the same mechanism, in reverse. Do not read that report as evidence
+against this implementation; it is evidence against a different delivery mechanism (WMI Bridge /
+MDM) that this codebase does not use. This note exists so nobody later "fixes" working, verified
+code on the strength of an unrelated report.

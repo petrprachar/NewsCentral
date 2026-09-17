@@ -329,7 +329,11 @@ HKLM\Software\{Company}\NewsCentral\NewsService\
 │       AttributeSchemes\{scheme}\Mappings\{value}    REG_SZ  <rule>
 │
 ├── Delivery\
-│       DefaultLockScreenPath   REG_SZ   <absolute path>  ("" = leave sticky)
+│       DefaultLockScreenPath   REG_SZ   <absolute path>  ("" = no default; no content + no default CLEARS a value NewsService published)
+│       DefaultWallpaperPath    REG_SZ   <absolute path>  (same semantics; NewsService owns the wallpaper image)
+│       PublishedImagePath      REG_SZ   <absolute path>  (protected folder for both surfaces; must not be user-writable; default C:\Windows\Web\NewsCentral)
+│       LockScreenEnabled       DWORD    1                (0 = lock-screen surface not managed at all — NOT a revert; RDS/VDI/RemoteApp opt-out)
+│       WallpaperEnabled        DWORD    1                (0 = wallpaper surface not managed at all — NOT a revert; mirrors LockScreenEnabled)
 │
 ├── Hmac\
 │       SecretKey               REG_SZ   <Base64 32-byte>  (telemetry only)
@@ -356,8 +360,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 │       LogicalDayStartHour     REG_SZ   "5"     ← REG_SZ; "0"/"1" break as DWORD
 │
 ├── Delivery\
-│       DefaultWallpaperPath        REG_SZ   <absolute path>   ("" = sticky)
-│       WallpaperStyle              REG_SZ   "Fit" | Fill | Stretch | Center | Tile
+│       WallpaperStyle              REG_SZ   "Fit" | Fill | Stretch | Center | Tile   (style only — image is NewsService/CSP-owned)
 │       WallpaperBackgroundColor    REG_SZ   "0 0 0"
 │
 ├── Ui\
@@ -404,9 +407,9 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 | 2 | NewsService starts and reaches the repository | `status.json` shows `isOnline: true` and the expected `syncSource` | `%ProgramData%\NewsCentral\status.json` |
 | 3 | Index signature verifies | Acceptance logged as `Valid` per team on first cycle or on change | Event Log → Application, source `NewsService` |
 | 4 | Content cached | `index.json` + images present under the team folder | `%ProgramData%\NewsCentral\{team}\` |
-| 5 | Lock screen applied | `LockScreenImagePath` points at the cached image | `HKLM\…\PersonalizationCSP` |
+| 5 | Lock screen applied | `LockScreenImagePath` points at a `lockscreen-*` file under `Delivery:PublishedImagePath` (not the ProgramData cache) | `HKLM\…\PersonalizationCSP` |
 | 6 | Poster shows once per logical day | `ViewerForm` appears at logon or unlock, once | Visual |
-| 7 | Wallpaper applied and **re-asserted** | Set on every run, including already-shown days | Visual + `HKCU\Control Panel\Desktop` |
+| 7 | Wallpaper **image** applied by NewsService and **style** re-asserted by NewsViewer | `DesktopImagePath` points at a `wallpaper-*` file under `Delivery:PublishedImagePath`; HKCU style values set on every NewsViewer run, including already-shown days | `HKLM\…\PersonalizationCSP` + Visual + `HKCU\Control Panel\Desktop` |
 | 8 | Telemetry round-trip | `session-*.json` appears in `uploads\`, is forwarded, then removed | `%ProgramData%\NewsCentral\uploads\` |
 | 9 | Dynamic teams *(if enabled)* | `resolved-teams.json` lists the expected teams with `State: Active` | `%ProgramData%\NewsCentral\resolved-teams.json` |
 | 10 | Negative: tampered index rejected | Team skipped, `Error` logged | Event Log |
