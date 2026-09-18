@@ -192,6 +192,10 @@ Both components — remove:
 
 - All installed files under `%ProgramFiles%\{Company}\NewsCentral\{Component}\`.
 - NewsService: stop and delete the `NewsService` Windows Service.
+- NewsService: the six `PersonalizationCSP` display-surface values it applied, and the
+  published-image folder — see **"NewsService — display-surface cleanup"** below. This is **not**
+  optional: skipped, it leaves the machine with a permanently enforced lock screen and wallpaper
+  that no remaining software can ever clear.
 - NewsViewer: delete the `HKLM\...\Run\NewsViewer` value and the scheduled task
   `\{Company}\NewsCentral\NewsViewer`.
 - The machine content cache under `%ProgramData%\NewsCentral\` (and its per-team subfolders).
@@ -203,6 +207,10 @@ Deliberately left in place (do NOT remove):
 - **Per-user state** — `viewerstate.json` under each user's `%LOCALAPPDATA%\NewsCentral\`. An installer
   running as SYSTEM cannot cleanly reach every user profile, and leaving it is harmless: a reinstall
   picks it up without issue.
+- **NewsViewer's per-user HKCU wallpaper style values** — `WallpaperStyle`, `TileWallpaper` under
+  `HKCU\Control Panel\Desktop`, and `Background` under `HKCU\Control Panel\Colors`. Consistent with
+  the per-user-state rule above, and harmless: once the CSP-enforced wallpaper image is cleared
+  (below) these become ordinary Windows personalization settings the user can change freely.
 - **The NewsService EventLog source.** Removing an EventLog source is fussy and unnecessary; an orphaned
   source is conventional and harmless.
 
@@ -212,18 +220,66 @@ it is optional; leaving it is harmless.
 Task-delete must be tolerant: `schtasks /delete` returns non-zero if the task is already gone. The
 uninstall action must not treat that as a failure.
 
+### NewsService — display-surface cleanup
+
+NewsService enforces two machine-wide display surfaces via `PersonalizationCSP`
+(`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP`): the lock screen
+(`LockScreenImagePath`, `LockScreenImageUrl`, `LockScreenImageStatus`) and the desktop wallpaper
+(`DesktopImagePath`, `DesktopImageUrl`, `DesktopImageStatus`). Uninstalling the product removes the
+only thing on the machine capable of clearing them — if the uninstaller doesn't do it, nothing else
+ever will, and the machine keeps an enforced lock screen and wallpaper permanently, with
+Personalization greyed out in Settings. `scripts/Remove-DisplaySurfaces.ps1` is the reference
+implementation for the actions below; an MSI/Intune uninstaller should perform the equivalent, in
+this order and with these rules:
+
+1. **Clear the registry values first, then remove the folder.** A folder removed while CSP still
+   references it leaves Windows pointing at missing files.
+2. **Only clear a value that points inside `Delivery:PublishedImagePath`.** Read the configured path
+   from `HKLM\Software\{Company}\NewsCentral\NewsService\Delivery\PublishedImagePath`, falling back
+   to the default (`C:\Windows\Web\NewsCentral`) when the value is absent. Compare fully-normalized
+   absolute paths. **A value pointing anywhere else belongs to another management system — Intune,
+   GPO, a manual admin change — and must be left untouched.** If the configured path cannot be
+   resolved at all, clear nothing: fail closed, exactly as the runtime teardown in `SyncService`
+   does (`docs/anti-tamper.md` → "Teardown"). The uninstaller is not exempt from that ownership
+   rule — silently clearing a foreign lock screen during an uninstall would be a worse failure than
+   the one this section fixes.
+3. **Do not remove the `PersonalizationCSP` key itself** — other CSP settings may live there.
+4. **Tolerate absence.** A missing value or a missing folder is a normal outcome (already
+   uninstalled, never applied, or `LockScreenEnabled`/`WallpaperEnabled` were off), not a failure —
+   the same precedent as `schtasks /delete` above.
+5. **Remove only the files this product wrote** — `lockscreen-*` and `wallpaper-*` in the publish
+   folder — then remove the folder itself only if it is now empty. **Never a recursive delete of a
+   registry-supplied path**: the folder came from configuration, not from this installer, and the
+   installer must not assume it owns anything else that might be in it.
+
+**Caveat for the admin: uninstall before retiring the GPO.** GPO-provisioned configuration is
+deliberately left in place at uninstall (above). But if the GPO that set a **customized**
+`Delivery:PublishedImagePath` is retired *before* the product is uninstalled, that customization is
+no longer readable, the cleanup falls back to the default path, and the actual (custom) folder is
+left behind untouched. Uninstall NewsCentral before retiring its GPO, not after.
+
 ## Upgrade (critical ordering requirement)
 
 If a future version is delivered as an in-place upgrade, the old version's uninstall actions must
 complete **before** the new version's install actions begin. In MSI terms: schedule
 `RemoveExistingProducts` early (immediately after `InstallInitialize`).
 
-The failure this prevents is silent: if the old product is removed after the new files and task are
-laid down, the old uninstall's "delete scheduled task" action runs after the new install created
-that task — deleting the task the new version just installed. NewsViewer would then have only the Run
-value and no unlock trigger, with no error to indicate why. (For an Intune-only delivery the same
-principle holds — fully remove before install — even though the `RemoveExistingProducts` term is
-MSI-specific.)
+The failure this prevents is silent, and now has two instances:
+
+- **The scheduled task.** If the old product is removed after the new files and task are laid down,
+  the old uninstall's "delete scheduled task" action runs after the new install created that task —
+  deleting the task the new version just installed. NewsViewer would then have only the Run value
+  and no unlock trigger, with no error to indicate why.
+- **The six `PersonalizationCSP` display-surface values.** If the old uninstall's display-surface
+  cleanup (see "NewsService — display-surface cleanup" above) runs *after* the new NewsService has
+  already applied content, it clears the lock screen and wallpaper the new version just wrote — the
+  machine is left with neither surface enforced and no error to explain it. This case is self-healing
+  (the next poll cycle re-applies both surfaces), but it is confusing in the field for the gap between
+  the clear and the next cycle, and it's still worth getting the ordering right rather than relying on
+  the self-heal.
+
+(For an Intune-only delivery the same principle holds — fully remove before install — even though the
+`RemoveExistingProducts` term is MSI-specific.)
 
 ## Field diagnostics (limitation in this release)
 
@@ -256,8 +312,9 @@ register EventLog source → start service.
 **NewsViewer:** files → HKLM Run value → import scheduled task (unlock trigger, Users SID, least
 privilege).
 
-**Uninstall:** remove files, service, Run value, task, ProgramData cache; leave GPO config, per-user
-state, and EventLog source.
+**Uninstall:** remove files, service, the six PersonalizationCSP display-surface values
+(ownership-checked first) and the published-image folder, Run value, task, ProgramData cache; leave
+GPO config, per-user state (including the HKCU wallpaper style values), and EventLog source.
 
 **Hand-off verification:** inspect the ACTUAL publish output for BOTH components — do not infer it
 from project files. Confirm `appsettings.json` IS present and `appsettings.Development.json` is NOT.

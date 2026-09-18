@@ -280,6 +280,12 @@ Either surface can be disabled outright — `Delivery:LockScreenEnabled` for the
 session hosts, VDI templates, and RemoteApp hosts, and for why disabling either is **not** a
 revert.
 
+**The same ownership test governs uninstall.** Removing NewsCentral must clear these values too, or
+the machine is left with a permanently enforced lock screen and wallpaper that no remaining software
+can ever clear — the uninstaller applies the identical fully-normalized-path ownership test before
+clearing anything. See `docs/packaging.md` → "NewsService — display-surface cleanup" and
+`scripts/Remove-DisplaySurfaces.ps1`.
+
 **Verified: clearing releases the lock screen (Windows 11 Enterprise).** Manually deleting the
 three `PersonalizationCSP` lock-screen values and then locking the machine was tested directly:
 Windows returns to its default lock screen at the lock boundary, with **no logoff and no Explorer
