@@ -155,6 +155,9 @@ Hive: `…\NewsCentral\NewsService\`. `RegType`: S=REG_SZ, D=DWORD. `Ovr`: OV/PA
 | `Entra:GroupTeams:ExclusionGroup` | `""` | `Entra\GroupTeams\ExclusionGroup` | S | OV | text | | fleet-wide exclusion group id/name; suppresses every group instance if set but unresolvable |
 | `Delivery:DefaultLockScreenPath` | `""` | `Delivery\DefaultLockScreenPath` | S | OV | path | | absolute; SYSTEM-readable; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty; no content + no default CLEARS a value NewsService itself published, leaves a foreign value alone |
 | `Delivery:DefaultWallpaperPath` | `""` | `Delivery\DefaultWallpaperPath` | S | OV | path | | absolute; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty; same teardown semantics as `Delivery:DefaultLockScreenPath`. Moved here from the NewsViewer manifest — NewsService owns the wallpaper image |
+| `Delivery:PublishedImagePath` | `C:\Windows\Web\NewsCentral` | `Delivery\PublishedImagePath` | S | OV | text | | protected folder for applied display images (both lock screen and wallpaper); must not be user-writable |
+| `Delivery:LockScreenEnabled` | `true` | `Delivery\LockScreenEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1); false = the lock-screen surface is not read, written, or cleared at all — NOT a revert, existing content stays frozen; opt-out for RDS/VDI/RemoteApp hosts |
+| `Delivery:WallpaperEnabled` | `true` | `Delivery\WallpaperEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1); mirrors `Delivery:LockScreenEnabled` exactly — false = the wallpaper surface is not read, written, or cleared at all; NOT a revert; opt-out for RDS/VDI/RemoteApp hosts |
 | `Telemetry:UploadEnabled` | `true` | `Telemetry\UploadEnabled` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1 — genuine bool, DWORD is safe); false = session telemetry is not forwarded to the repository; the fixed 30-day local retention sweep still runs |
 | `Logging:LogLevel:Default` | `Information` | `Logging\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
 | `Logging:EventLog:LogLevel:Default` | `Information` | `Logging\EventLog\LogLevel\Default` | S | OV | dropdown | | `Trace \| Debug \| Information \| Warning \| Error \| Critical \| None` (registry: REG_SZ); standard .NET logging key, honoured by the generic host |
@@ -169,6 +172,7 @@ Hive: `…\NewsCentral\NewsViewer\`.
 |---|---|---|---|---|---|---|---|
 | `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company`; defines hive path; not in appsettings |
 | `CacheRootPath` | `C:\ProgramData\NewsCentral` | `CacheRootPath` (hive root) | S | OV | path | | absolute path |
+| `Active` | `true` | `Active` (hive root) | D | OV | toggle | | `true \| false` (registry: DWORD 0/1); false = NewsViewer exits at startup with no action |
 | `BypassDailyGate` | `false` | `BypassDailyGate` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `BypassImageIntegrityCheck` | `false` | `BypassImageIntegrityCheck` | D | OV | toggle | | `true \| false` (registry: DWORD 0/1) |
 | `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |

@@ -286,7 +286,7 @@ HKLM\Software\{Company}\NewsCentral\NewsViewer\
 |---|---|
 | `REG_SZ` for any integer | Any numeric value whose legitimate range includes `0` or `1` **must** be `REG_SZ`. DWORD `0`→`"False"`, `1`→`"True"`, and the int binder then throws at startup. |
 | `REG_SZ` for doc-specified booleans | Written as `"true"`/`"false"` strings where `docs/configuration.md` specifies `REG_SZ` — `RequireSignedIndex`, `UseWinHttpProxy`, `Entra\Enabled`. |
-| `DWORD` is fine for genuine booleans | `BypassDailyGate`, `BypassImageIntegrityCheck`, `Telemetry\UploadEnabled` — the `0`/`1` coercion is exactly what these want. |
+| `DWORD` is fine for genuine booleans | `BypassDailyGate`, `BypassImageIntegrityCheck`, `Telemetry\UploadEnabled`, `Delivery\LockScreenEnabled`, `Delivery\WallpaperEnabled`, `Active` — the `0`/`1` coercion is exactly what these want. |
 | `teams\` uses value **names** | The team folder name is the value *name*; the data is ignored. Write an empty string as data. |
 
 ### 7.2 NewsService tree
@@ -348,11 +348,27 @@ HKLM\Software\{Company}\NewsCentral\NewsService\
         {teamFolderName}        REG_SZ   ""      (one value per static team)
 ```
 
+> ⚠️ **Prerequisite — Windows Enterprise or Education.** Personalization CSP — the mechanism behind
+> both the `Delivery\LockScreenEnabled` and `Delivery\WallpaperEnabled` applies above — is documented
+> by Microsoft as supported on Windows Enterprise and Education SKUs, and on Pro only under Shared PC
+> / Cloud Config (BootToCloud) configurations. Confirm the pilot fleet's SKU before Step 8; the raw
+> registry writes are widely observed to work on Pro outside those configurations too, but that
+> remains undocumented behavior.
+
+> ⚠️ **Prerequisite — Windows Spotlight.** Disable it via GPO or Intune before enabling
+> `LockScreenEnabled`:
+> `HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent` → `DisableWindowsSpotlightFeatures = 1`,
+> `DisableSpotlightCollectionOnDesktop = 1`. Spotlight is not written by NewsCentral and is owned by
+> GPO/Intune, but left enabled it will intermittently override the CSP-applied lock screen — a
+> symptom ("the lock screen sometimes reverts") that is very hard to diagnose after the fact if this
+> prerequisite was missed during Step 7.
+
 ### 7.3 NewsViewer tree
 
 ```
 HKLM\Software\{Company}\NewsCentral\NewsViewer\
 │   CacheRootPath               REG_SZ   "C:\ProgramData\NewsCentral"
+│   Active                      DWORD    1       (0 = NewsViewer exits at startup with no action; not a revert)
 │   BypassDailyGate             DWORD    0       (1 only on test machines)
 │   BypassImageIntegrityCheck   DWORD    0       (1 only on test machines)
 │

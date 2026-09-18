@@ -63,11 +63,6 @@ static class Program
         var teams = TeamConfigurationReader.GetTeams(configuration);
         if (teams.Length == 0) return;
 
-        // Diagnostic-only, non-fatal: DefaultWallpaperPath moved to the NewsService hive when
-        // wallpaper-image ownership migrated there. A value still present in NewsViewer's own
-        // hive is orphaned — nothing reads it — and is worth flagging to an operator.
-        WarnIfOrphanedWallpaperPathConfigured();
-
         // Remote/virtual sessions get neither the poster nor the wallpaper style re-assert. The
         // style step otherwise runs on any local interactive session — it is NOT gated behind a
         // qualifying monitor.
@@ -210,31 +205,5 @@ static class Program
             return doc.RootElement.TryGetProperty("isOnline", out var prop) && prop.GetBoolean();
         }
         catch { return false; }
-    }
-
-    /// <summary>
-    /// Diagnostics only, never fatal: Delivery:DefaultWallpaperPath moved from the NewsViewer
-    /// registry hive to the NewsService hive when wallpaper-image ownership migrated there.
-    /// ViewerConfiguration no longer has a property for it, so this reads the raw registry value
-    /// directly — a value still present here is orphaned (nothing reads it) and worth flagging to
-    /// an operator, but is deliberately left untouched: this method never deletes it.
-    /// </summary>
-    private static void WarnIfOrphanedWallpaperPathConfigured()
-    {
-        try
-        {
-            var hive = $@"SOFTWARE\{SolutionConstants.Company}\{SolutionConstants.SolutionName}\NewsViewer\Delivery";
-            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(hive);
-            var orphaned = key?.GetValue("DefaultWallpaperPath") as string;
-            if (!string.IsNullOrEmpty(orphaned))
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[Config] WARNING — orphaned registry value: HKLM\\{hive}\\DefaultWallpaperPath = " +
-                    $"'{orphaned}'. NewsViewer no longer reads this key; it moved to the NewsService hive " +
-                    $"(HKLM\\SOFTWARE\\{SolutionConstants.Company}\\{SolutionConstants.SolutionName}\\" +
-                    "NewsService\\Delivery\\DefaultWallpaperPath). Not removed automatically.");
-            }
-        }
-        catch { /* diagnostics only — never fail startup over this */ }
     }
 }

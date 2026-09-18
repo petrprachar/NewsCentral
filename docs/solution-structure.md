@@ -132,7 +132,7 @@ NewsViewer\
 │   └── UiStrings.cs                  static accessor — ResourceManager + CurrentUICulture
 ├── NativeMethods.cs                  Win32 P/Invoke — desktop, thread, process APIs
 ├── JsonDefaults.cs                   shared JsonSerializerOptions (same standard as NewsService)
-├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then re-asserts the wallpaper STYLE as the terminal step (after poster/VD teardown); warns once if an orphaned DefaultWallpaperPath remains in the NewsViewer hive; one-shot, exits after
+├── Program.cs                        entry point; startup checks; remote-session guard; renders poster then re-asserts the wallpaper STYLE as the terminal step (after poster/VD teardown); one-shot, exits after
 └── appsettings.json
 ```
 
