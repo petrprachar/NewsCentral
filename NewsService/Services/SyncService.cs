@@ -58,6 +58,12 @@ public sealed class SyncService(
     private readonly Dictionary<string, VerifyResult> _lastVerifyResult =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // Change-gated across cycles — same rationale as _lastVerifyResult above and _lastSummary in
+    // EntraTeamResolutionService: a machine legitimately without any teams (static or dynamic)
+    // must not warn every poll interval forever, but the transition into and back out of that
+    // state should always be visible at least once.
+    private bool _lastEffectiveTeamsEmpty;
+
     public async Task RunCycleAsync(string[] teams, CancellationToken ct)
     {
         bool online = false;
@@ -73,6 +79,12 @@ public sealed class SyncService(
         // delivered key for dynamic teams → unsigned), so dynamic-only branching never leaks here.
         var (effectiveTeams, dynamicTeams) = ResolveEffectiveTeams(teams, cache.Root);
 
+        // An empty effective set is a legitimate, ongoing state — never a reason to skip the rest
+        // of the cycle. Display-surface teardown, status.json, and telemetry retention all still
+        // need to run below regardless of team count; a machine whose last team just disappeared
+        // needs its stale CSP values cleared precisely BECAUSE there is nothing left to sync.
+        LogEmptyEffectiveTeamsIfNeeded(effectiveTeams.Count == 0);
+
         try
         {
             if (!repository.IsAvailable)
@@ -82,7 +94,7 @@ public sealed class SyncService(
             else
             {
                 online = await SyncAllTeamsAsync(effectiveTeams, dynamicTeams, ct);
-                syncSource = repository.SyncSource;
+                syncSource = online ? repository.SyncSource : "None";
             }
 
             await ApplyDisplaySurfacesAsync(effectiveTeams);
@@ -98,6 +110,37 @@ public sealed class SyncService(
         }
 
         await telemetry.ProcessAsync(ct);
+    }
+
+    /// <summary>
+    /// Warns once when the effective team set (static union dynamic) newly becomes empty, then
+    /// demotes to Debug while that state persists so a machine legitimately without any teams —
+    /// static or Entra-resolved — does not warn every poll interval forever. Warns again if teams
+    /// later appear and subsequently disappear. Names both sources and reports whether Entra is
+    /// enabled, since the fix differs depending on which one is expected to be supplying teams.
+    /// </summary>
+    private void LogEmptyEffectiveTeamsIfNeeded(bool isEmpty)
+    {
+        if (!isEmpty)
+        {
+            _lastEffectiveTeamsEmpty = false;
+            return;
+        }
+
+        var entraState = configuration.GetValue<bool>("Entra:Enabled") ? "enabled" : "disabled";
+
+        if (!_lastEffectiveTeamsEmpty)
+            logger.LogWarning(
+                "No teams to sync this cycle — static team list is empty " +
+                "(HKLM\\Software\\{Company}\\{Solution}\\NewsService\\teams\\) and Entra " +
+                "dynamic-team resolution is {EntraState} (Entra:Enabled, resolved-teams.json).",
+                SolutionConstants.Company, SolutionConstants.SolutionName, entraState);
+        else
+            logger.LogDebug(
+                "No teams to sync (unchanged) — static team list still empty, Entra still {EntraState}.",
+                entraState);
+
+        _lastEffectiveTeamsEmpty = true;
     }
 
     // ── Step 0 — Entra dynamic-team resolution (time-boxed, isolated) ─────────
@@ -138,6 +181,10 @@ public sealed class SyncService(
     private async Task<bool> SyncAllTeamsAsync(
         IReadOnlyList<string> teams, HashSet<string> dynamicTeams, CancellationToken ct)
     {
+        // An empty list is vacuously "no failures" but is not "synced successfully" — without this
+        // check, RunCycleAsync would report isOnline = true on a cycle that synced nothing at all.
+        if (teams.Count == 0) return false;
+
         bool allOk = true;
         foreach (var teamFolder in teams)
         {

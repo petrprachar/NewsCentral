@@ -19,15 +19,14 @@ public sealed class Worker(
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // The effective team set is static (registry/appsettings) union dynamic
+            // (Entra-resolved), and the dynamic half is not known until SyncService has
+            // refreshed Entra INSIDE the cycle itself — so an empty static list here is not an
+            // empty workload. A machine configured purely with dynamic teams would never
+            // bootstrap if the cycle were skipped on an empty static list. Always run the cycle;
+            // SyncService decides what an empty effective set means, once it actually knows.
             var teams = TeamConfigurationReader.GetTeams(configuration);
-
-            if (teams.Length == 0)
-                logger.LogWarning(
-                    "No teams configured. Add team folder names as REG_SZ values under " +
-                    "HKLM\\Software\\{Company}\\{Solution}\\{Component}\\teams\\.",
-                    SolutionConstants.Company, SolutionConstants.SolutionName, "NewsService");
-            else
-                await RunCycleAsync(teams, stoppingToken);
+            await RunCycleAsync(teams, stoppingToken);
 
             try { await Task.Delay(interval, stoppingToken); }
             catch (OperationCanceledException) { break; }
