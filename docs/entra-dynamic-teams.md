@@ -222,6 +222,13 @@ this: a dynamic team's `index.json` is authored, published, and signed exactly l
 See `docs/security.md` for the key-with-content trust model and `docs/data-model.md` for the
 `resolved-teams.json` schema.
 
+This consumption symmetry did not hold until recently: both `NewsService/Worker.cs` and
+`NewsViewer/Program.cs` carried a pre-Entra bootstrap guard that exited before the union was
+computed whenever the **static** team list was empty, so a dynamic-only machine was inert on
+whichever tier still had the guard (NewsService fixed in `f8cd54b`, NewsViewer in the following
+commit) — worth knowing if you are reading an older description of this feature as always having
+worked this way.
+
 ## Auth / Graph setup
 
 Both sources share one app registration and credential with Azure Blob access

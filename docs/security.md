@@ -126,4 +126,6 @@ Entra-resolved **dynamic teams** are not provisioned with a registry public key,
 
 End-to-end flow: **Entra device resolution → `resolved-teams.json` → effective-team union on both tiers → delivered-key precedence with registry-wins / anti-downgrade**. A team present in both the static list and the dynamic set is fine — `Union` de-dupes and registry-wins governs verification, so no special-casing is needed.
 
+This symmetry was incomplete in practice until each tier's pre-Entra bootstrap guard was removed: both `NewsService/Worker.cs` and `NewsViewer/Program.cs` originally exited before the union was ever computed when the **static** team list was empty, which made a dynamic-only machine inert on that tier regardless of what Phase 3b wired downstream (NewsService fixed in `f8cd54b`, NewsViewer in the following commit).
+
 Session telemetry (`session-*.json`) remains on HMAC-SHA256 throughout all phases.

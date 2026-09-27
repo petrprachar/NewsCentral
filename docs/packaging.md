@@ -289,6 +289,10 @@ news," the available troubleshooting is:
 - verify the machine's GPO registry configuration under
   `HKLM\Software\{Company}\NewsCentral\NewsViewer\` (teams configured, signing public keys present,
   `Company` matches);
+- on a machine with no static `teams\` entries, check `{CacheRootPath}\resolved-teams.json` instead
+  — an absent file or an empty `Teams` array means Entra resolved no dynamic team for this machine,
+  which is NewsService's responsibility (device/group provisioning, `Entra:Enabled`, Graph consent —
+  see `docs/entra-dynamic-teams.md`), not something to chase in NewsViewer;
 - clear the per-user gate by deleting `%LOCALAPPDATA%\NewsCentral\viewerstate.json` (forces a
   re-display on next launch).
 

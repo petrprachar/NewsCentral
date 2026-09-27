@@ -60,8 +60,13 @@ static class Program
             return;
         }
 
+        // The effective team set is static (registry/appsettings) union dynamic (Entra-resolved,
+        // read from resolved-teams.json inside PresentationSelector) — an empty static list here is
+        // NOT an empty effective set, so there is deliberately no early return on it. A machine
+        // subscribed only to dynamic teams would otherwise never show a poster and never reach the
+        // wallpaper style re-assert below. Mirrors the equivalent fix on the service side
+        // (NewsService/Worker.cs, commit f8cd54b).
         var teams = TeamConfigurationReader.GetTeams(configuration);
-        if (teams.Length == 0) return;
 
         // Remote/virtual sessions get neither the poster nor the wallpaper style re-assert. The
         // style step otherwise runs on any local interactive session — it is NOT gated behind a
