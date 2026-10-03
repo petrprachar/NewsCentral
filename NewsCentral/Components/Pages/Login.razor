@@ -38,6 +38,17 @@
             @(isLoggingIn ? Localizer["LoadingPleaseWait"] : Localizer["Login"])
         </button>
 
+        @if (showUpnButton)
+        {
+            <button @onclick="HandleUpnLogin" class="btn btn-secondary" disabled="@(isLoggingIn || !upnDetected)">
+                @UpnButtonText
+            </button>
+            @if (!upnDetected)
+            {
+                <p class="upn-hint">@Localizer["UpnNotDetected"]</p>
+            }
+        }
+
         <div class="first-time-hint">
             <p>First time? Default credentials: admin / admin</p>
         </div>
@@ -129,6 +140,31 @@
         cursor: not-allowed;
     }
 
+    .btn-secondary {
+        background: white;
+        color: #667eea;
+        border: 1px solid #667eea;
+        margin-top: 10px;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+        background: #f0f1fd;
+    }
+
+    .btn-secondary:disabled {
+        background: #f5f5f5;
+        color: #999;
+        border-color: #ddd;
+        cursor: not-allowed;
+    }
+
+    .upn-hint {
+        text-align: center;
+        color: #999;
+        font-size: 12px;
+        margin: 6px 0 0 0;
+    }
+
     .alert {
         padding: 10px 15px;
         border-radius: 5px;
@@ -177,82 +213,42 @@
     private string errorMessage = string.Empty;
     private bool isLoggingIn = false;
 
+    // UPN Login button — visible only when Authentication:EnableAutoLogin is true. Detection runs
+    // once at page load; the button never logs anyone in without a click.
+    private bool showUpnButton = false;
+    private bool upnDetected = false;
+    private string? detectedUpn;
+
+    private string UpnButtonText =>
+        upnDetected
+            ? $"{Localizer["UpnLogin"].Value} ({detectedUpn})"
+            : Localizer["UpnLogin"].Value;
+
     protected override async Task OnInitializedAsync()
     {
-        System.Diagnostics.Debug.WriteLine("=== Login Page: OnInitializedAsync START ===");
-    
-        try
+        showUpnButton = WindowsIdentityService.IsAutoLoginEnabled();
+
+        if (showUpnButton)
         {
-            System.Diagnostics.Debug.WriteLine("Step 1: About to call TryAutoLoginAsync");
-        
-            var autoLoginUser = await AuthService.TryAutoLoginAsync();
-        
-            System.Diagnostics.Debug.WriteLine($"Step 2: TryAutoLoginAsync returned: {(autoLoginUser != null ? "User found" : "null")}");
-        
-            if (autoLoginUser != null)
-            {
-                System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {autoLoginUser.Username}");
-                System.Diagnostics.Debug.WriteLine("Step 3: About to navigate to dashboard");
-                Navigation.NavigateTo("/", forceLoad: true);
-                return;
-            }
-        
-            System.Diagnostics.Debug.WriteLine("Auto-login not available, showing login form");
+            // GetCurrentUserUPN() shells out to `whoami /upn` when not in mock mode — run it off
+            // the UI thread so page load stays responsive.
+            detectedUpn = await Task.Run(() => WindowsIdentityService.GetCurrentUserUPN());
+            upnDetected = !string.IsNullOrEmpty(detectedUpn);
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"=== ERROR IN OnInitializedAsync ===");
-            System.Diagnostics.Debug.WriteLine($"Exception Type: {ex.GetType().Name}");
-            System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
-            System.Diagnostics.Debug.WriteLine($"Stack Trace: {ex.StackTrace}");
-        
-            if (ex.InnerException != null)
-            {
-                System.Diagnostics.Debug.WriteLine($"Inner Exception: {ex.InnerException.Message}");
-            }
-        
-            errorMessage = $"Login initialization error: {ex.Message}";
-        }
-    
-        System.Diagnostics.Debug.WriteLine("=== Login Page: OnInitializedAsync END ===");
     }
 
     private async Task HandleLogin()
     {
         errorMessage = string.Empty;
+        isLoggingIn = true;
 
         try
         {
-            var result = await AuthService.LoginAsync(username, password);
+            var user = await AuthService.LoginAsync(username, password);
 
-            if (result != null)
+            if (user != null)
             {
-                System.Diagnostics.Debug.WriteLine($"Login successful: {result.Username}");
-
-                // NEW: Auto-select the first available team
-                try
-                {
-                    var teams = await TeamService.GetAllTeamsAsync();
-                    System.Diagnostics.Debug.WriteLine($"Found {teams.Count} teams");
-
-                    if (teams.Count > 0)
-                    {
-                        var firstTeam = teams[0];
-                        TeamContext.SetCurrentTeam(firstTeam.TeamID, firstTeam.FolderName);
-                        System.Diagnostics.Debug.WriteLine($"Auto-selected team: {firstTeam.Name} ({firstTeam.FolderName})");
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine("No teams available - user will need to select one");
-                    }
-                }
-                catch (Exception teamEx)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Error loading teams: {teamEx.Message}");
-                    // Don't fail login if team selection fails
-                }
-
-                Navigation.NavigateTo("/");
+                await CompleteLoginAsync(user);
             }
             else
             {
@@ -264,5 +260,66 @@
             errorMessage = ex.Message;
             System.Diagnostics.Debug.WriteLine($"Login error: {ex.Message}");
         }
+        finally
+        {
+            isLoggingIn = false;
+        }
+    }
+
+    private async Task HandleUpnLogin()
+    {
+        errorMessage = string.Empty;
+        isLoggingIn = true;
+
+        try
+        {
+            var result = await AuthService.LoginWithUpnAsync();
+
+            switch (result.Outcome)
+            {
+                case UpnLoginOutcome.Success:
+                    await CompleteLoginAsync(result.User!);
+                    break;
+                case UpnLoginOutcome.NoAccountForUpn:
+                    errorMessage = Localizer["NoAccountForUpn", result.Upn ?? string.Empty];
+                    break;
+                case UpnLoginOutcome.UpnNotDetected:
+                    errorMessage = Localizer["UpnNotDetected"];
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            System.Diagnostics.Debug.WriteLine($"UPN login error: {ex.Message}");
+        }
+        finally
+        {
+            isLoggingIn = false;
+        }
+    }
+
+    // Shared by both login paths: auto-select the first available team (moved from the old
+    // HandleLogin, not rewritten), then navigate home without forceLoad — MainLayout refreshes via
+    // AuthService.OnAuthenticationStateChanged, which both LoginAsync and LoginWithUpnAsync raise.
+    private async Task CompleteLoginAsync(User user)
+    {
+        try
+        {
+            var teams = await TeamService.GetAllTeamsAsync();
+
+            if (teams.Count > 0)
+            {
+                var firstTeam = teams[0];
+                TeamContext.SetCurrentTeam(firstTeam.TeamID, firstTeam.FolderName);
+            }
+        }
+        catch (Exception teamEx)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading teams: {teamEx.Message}");
+            // Don't fail login if team selection fails
+        }
+
+        Navigation.NavigateTo("/");
     }
 }

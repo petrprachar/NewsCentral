@@ -8,6 +8,20 @@ using NewsCentral.Configuration;
 
 namespace NewsCentral.Services;
 
+public enum UpnLoginOutcome
+{
+    UpnNotDetected,
+    NoAccountForUpn,
+    Success
+}
+
+/// <summary>
+/// Result of <see cref="AuthenticationService.LoginWithUpnAsync"/>. <see cref="User"/> is set only
+/// when <see cref="Outcome"/> is <see cref="UpnLoginOutcome.Success"/>; <see cref="Upn"/> is the
+/// detected UPN when one was found, for use in error messages (null when detection itself failed).
+/// </summary>
+public sealed record UpnLoginResult(UpnLoginOutcome Outcome, User? User = null, string? Upn = null);
+
 public class AuthenticationService
 {
     private readonly JsonFileRepository<UsersCollection> _userRepo;
@@ -86,12 +100,18 @@ public class AuthenticationService
         }
     }
 
-    public async Task<User?> TryAutoLoginAsync()
+    /// <summary>
+    /// Explicit, user-initiated UPN login — the counterpart to <see cref="LoginAsync"/>. Never
+    /// called automatically; Login.razor invokes it only from the "UPN Login" button click.
+    /// </summary>
+    public async Task<UpnLoginResult> LoginWithUpnAsync()
     {
+        // Defense in depth: Login.razor only shows the UPN Login button when this is true, but the
+        // service itself must still refuse if it is ever called while the feature is off.
         if (!_windowsIdentityService.IsAutoLoginEnabled())
         {
-            System.Diagnostics.Debug.WriteLine("Auto-login is disabled");
-            return null;
+            System.Diagnostics.Debug.WriteLine("UPN login is disabled");
+            return new UpnLoginResult(UpnLoginOutcome.UpnNotDetected);
         }
 
         var upn = _windowsIdentityService.GetCurrentUserUPN();
@@ -99,17 +119,17 @@ public class AuthenticationService
         if (string.IsNullOrEmpty(upn))
         {
             System.Diagnostics.Debug.WriteLine("Could not detect UPN");
-            return null;
+            return new UpnLoginResult(UpnLoginOutcome.UpnNotDetected);
         }
 
-        System.Diagnostics.Debug.WriteLine($"Attempting auto-login with UPN: {upn}");
+        System.Diagnostics.Debug.WriteLine($"Attempting UPN login with UPN: {upn}");
 
         var usersCollection = await _userRepo.GetByIdAsync("users");
 
         if (usersCollection == null)
         {
             System.Diagnostics.Debug.WriteLine("No users collection found in system");
-            return null;
+            return new UpnLoginResult(UpnLoginOutcome.NoAccountForUpn, Upn: upn);
         }
 
         var user = usersCollection.Users.FirstOrDefault(u =>
@@ -127,12 +147,12 @@ public class AuthenticationService
 
             OnAuthenticationStateChanged?.Invoke();
 
-            System.Diagnostics.Debug.WriteLine($"✓ Auto-login successful: {user.Username}");
-            return user;
+            System.Diagnostics.Debug.WriteLine($"✓ UPN login successful: {user.Username}");
+            return new UpnLoginResult(UpnLoginOutcome.Success, User: user, Upn: upn);
         }
 
         System.Diagnostics.Debug.WriteLine($"No active user found with UPN: {upn}");
-        return null;
+        return new UpnLoginResult(UpnLoginOutcome.NoAccountForUpn, Upn: upn);
     }
 
     public void Logout()

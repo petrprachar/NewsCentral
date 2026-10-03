@@ -23,4 +23,7 @@
   <data name="Password" xml:space="preserve"><value>Contraseña</value></data>
   <data name="LoadingPleaseWait" xml:space="preserve"><value>Cargando...</value></data>
   <data name="InvalidCredentials" xml:space="preserve"><value>Nombre de usuario o contraseña no válidos</value></data>
+  <data name="UpnLogin" xml:space="preserve"><value>Inicio de sesión con UPN</value></data>
+  <data name="UpnNotDetected" xml:space="preserve"><value>No se pudo detectar su UPN.</value></data>
+  <data name="NoAccountForUpn" xml:space="preserve"><value>No hay ninguna cuenta activa para {0} en este entorno.</value></data>
 </root>

@@ -99,7 +99,8 @@
         InvokeAsync(StateHasChanged);
     }
 
-    // Reuse the existing Logout() (clears the session; auto-login stays suppressed on /login).
+    // Clears the session; the login page then waits at /login for an explicit Login or
+    // UPN Login click — nothing logs the user back in automatically.
     private void SignOut()
     {
         AuthService.Logout();

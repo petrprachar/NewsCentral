@@ -52,4 +52,7 @@
   <data name="Password" xml:space="preserve"><value>Password</value></data>
   <data name="LoadingPleaseWait" xml:space="preserve"><value>Loading...</value></data>
   <data name="InvalidCredentials" xml:space="preserve"><value>Invalid username or password</value></data>
+  <data name="UpnLogin" xml:space="preserve"><value>UPN Login</value></data>
+  <data name="UpnNotDetected" xml:space="preserve"><value>Your UPN could not be detected.</value></data>
+  <data name="NoAccountForUpn" xml:space="preserve"><value>No active account for {0} in this environment.</value></data>
 </root>
