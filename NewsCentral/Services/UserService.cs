@@ -1,4 +1,3 @@
-using System.Text.Json;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
 
@@ -9,13 +8,6 @@ public class UserService
     private readonly IStorageService _storage;
     private readonly JsonFileRepository<UsersCollection> _userRepo;
     private readonly AuthenticationService _authService;
-
-    // Shared options — consistent enum handling across read and write
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-    };
 
     public UserService(IStorageService storage, AuthenticationService authService)
     {
@@ -307,43 +299,5 @@ public class UserService
 
         await _userRepo.UpdateAsync(usersCollection);
         return true;
-    }
-
-    // ── Admin password reset ──────────────────────────────────────────────────
-
-    /// <summary>
-    /// Directly reads and writes users.json to reset the admin password
-    /// without going through the full authentication stack.
-    /// Uses IStorageService with the same relative path as JsonFileRepository:
-    /// "config/users.json"
-    /// </summary>
-    public async Task<bool> ResetAdminPasswordAsync(string newPassword)
-    {
-        try
-        {
-            const string relativePath = "config/users.json";
-
-            var json = await _storage.ReadTextAsync(relativePath);
-            if (json == null) return false;
-
-            var usersCollection = JsonSerializer.Deserialize<UsersCollection>(json, JsonOptions);
-            if (usersCollection == null) return false;
-
-            var adminUser = usersCollection.Users.FirstOrDefault(u => u.Username == "admin");
-            if (adminUser == null) return false;
-
-            adminUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
-
-            await _storage.WriteTextAsync(
-                relativePath,
-                JsonSerializer.Serialize(usersCollection, JsonOptions));
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error resetting admin password: {ex.Message}");
-            return false;
-        }
     }
 }
