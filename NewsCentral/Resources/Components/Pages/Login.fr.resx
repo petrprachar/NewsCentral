@@ -26,4 +26,5 @@
   <data name="UpnLogin" xml:space="preserve"><value>Connexion UPN</value></data>
   <data name="UpnNotDetected" xml:space="preserve"><value>Votre UPN n'a pas pu être détecté.</value></data>
   <data name="NoAccountForUpn" xml:space="preserve"><value>Aucun compte actif pour {0} dans cet environnement.</value></data>
+  <data name="MockSuffix" xml:space="preserve"><value>simulé</value></data>
 </root>

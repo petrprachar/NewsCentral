@@ -12,7 +12,8 @@ public enum UpnLoginOutcome
 {
     UpnNotDetected,
     NoAccountForUpn,
-    Success
+    Success,
+    Disabled
 }
 
 /// <summary>
@@ -111,7 +112,7 @@ public class AuthenticationService
         if (!_windowsIdentityService.IsAutoLoginEnabled())
         {
             System.Diagnostics.Debug.WriteLine("UPN login is disabled");
-            return new UpnLoginResult(UpnLoginOutcome.UpnNotDetected);
+            return new UpnLoginResult(UpnLoginOutcome.Disabled);
         }
 
         var upn = _windowsIdentityService.GetCurrentUserUPN();

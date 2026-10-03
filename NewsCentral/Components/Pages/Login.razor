@@ -195,9 +195,12 @@
         get
         {
             if (isLoggingIn || isInitializing) return Localizer["LoadingPleaseWait"].Value;
-            return upnDetected
-                ? $"{Localizer["UpnLogin"].Value} ({detectedUpn})"
-                : Localizer["UpnLogin"].Value;
+            if (!upnDetected) return Localizer["UpnLogin"].Value;
+
+            var label = $"{Localizer["UpnLogin"].Value} ({detectedUpn})";
+            if (WindowsIdentityService.IsMockUpnActive)
+                label += $" ({Localizer["MockSuffix"].Value})";
+            return label;
         }
     }
 
@@ -273,6 +276,10 @@
                     break;
                 case UpnLoginOutcome.UpnNotDetected:
                     errorMessage = Localizer["UpnNotDetected"];
+                    break;
+                case UpnLoginOutcome.Disabled:
+                    // Defensive only — the button is hidden whenever this would be the outcome.
+                    errorMessage = Localizer["InvalidCredentials"];
                     break;
             }
         }

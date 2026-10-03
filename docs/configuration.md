@@ -116,8 +116,8 @@ HKLM\Software\[Company]\NewsCentral\NewsCentral\
 │   LockExpirationMinutes  REG_SZ    (int minutes; MUST be REG_SZ — a 1-minute lock is valid, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 ├── Authentication\
 │       EnableAutoLogin   DWORD     (dev/test only — not for registry deployment)
-│       UseMockUPN        DWORD     (dev/test only — not for registry deployment)
-│       MockUPN           REG_SZ    (dev/test only — not for registry deployment)
+│       UseMockUPN        DWORD     (Debug builds only — ignored in Release; not for registry deployment)
+│       MockUPN           REG_SZ    (Debug builds only — ignored in Release; not for registry deployment)
 ├── Storage\
 │       EnableBlobDistribution   DWORD
 │       DistributionMode         REG_SZ   ("Local" or "AzureBlob")

@@ -194,8 +194,8 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 | `Initialization:DefaultAdminPassword` | `admin` | `Initialization\DefaultAdminPassword` | S | OV | redacted | ✔ | seed admin password |
 | `LockExpirationMinutes` | `15` | `LockExpirationMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (a 1-minute lock is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Authentication:EnableAutoLogin` | `false` | `Authentication\EnableAutoLogin` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
-| `Authentication:UseMockUPN` | `false` | `Authentication\UseMockUPN` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
-| `Authentication:MockUPN` | `""` | `Authentication\MockUPN` | S | OV | text | | UPN string |
+| `Authentication:UseMockUPN` | `false` | `Authentication\UseMockUPN` | S | OV | toggle | | `true \| false` (registry: REG_SZ); Debug builds only — ignored in Release |
+| `Authentication:MockUPN` | `""` | `Authentication\MockUPN` | S | OV | text | | UPN string; Debug builds only — ignored in Release |
 | `Storage:EnableBlobDistribution` | `false` | `Storage\EnableBlobDistribution` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Storage:DistributionMode` | `Local` | `Storage\DistributionMode` | S | OV | dropdown | | `Local \| AzureBlob` |
 | `Storage:LocalDistributionPath` | `""` | `Storage\LocalDistributionPath` | S | OV | path | | absolute; must differ from DataPath |

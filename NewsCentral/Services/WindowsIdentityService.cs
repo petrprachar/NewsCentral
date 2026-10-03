@@ -81,16 +81,45 @@ namespace NewsCentral.Services
 
         public string? GetCurrentUserUPN()
         {
-            var useMock = _configuration.GetValue<bool>("Authentication:UseMockUPN");
-
-            if (useMock)
+#if DEBUG
+            // Dev-only shortcut for non-domain machines — Authentication:UseMockUPN /:MockUPN.
+            // Honored in Debug builds only; see IsMockUpnActive and the #else branch below for why.
+            if (_configuration.GetValue<bool>("Authentication:UseMockUPN"))
             {
                 var mockUPN = _configuration.GetValue<string>("Authentication:MockUPN");
                 System.Diagnostics.Debug.WriteLine($"Using mock UPN: {mockUPN}");
                 return mockUPN;
             }
+#else
+            // Fail-closed in Release: anyone with local admin could otherwise set MockUPN to a
+            // System Administrator's UPN in the registry and log in as that admin anywhere they
+            // can reach. Trace (not Debug) so this is actually visible in a Release build.
+            if (_configuration.GetValue<bool>("Authentication:UseMockUPN"))
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "Authentication:UseMockUPN is set but is ignored in Release builds.");
+            }
+#endif
 
             return GetUserPrincipalNameNative();
+        }
+
+        /// <summary>
+        /// True only in a Debug build with Authentication:UseMockUPN=true and a non-empty
+        /// Authentication:MockUPN — i.e. exactly when <see cref="GetCurrentUserUPN"/> will return
+        /// the mock value rather than a real UPN. Always false in Release.
+        /// </summary>
+        public bool IsMockUpnActive
+        {
+            get
+            {
+#if DEBUG
+                return _configuration.GetValue<bool>("Authentication:UseMockUPN") &&
+                       !string.IsNullOrEmpty(_configuration.GetValue<string>("Authentication:MockUPN"));
+#else
+                return false;
+#endif
+            }
         }
 
         public bool IsAutoLoginEnabled()

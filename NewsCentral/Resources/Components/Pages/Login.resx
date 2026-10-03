@@ -55,4 +55,5 @@
   <data name="UpnLogin" xml:space="preserve"><value>UPN Login</value></data>
   <data name="UpnNotDetected" xml:space="preserve"><value>Your UPN could not be detected.</value></data>
   <data name="NoAccountForUpn" xml:space="preserve"><value>No active account for {0} in this environment.</value></data>
+  <data name="MockSuffix" xml:space="preserve"><value>mock</value></data>
 </root>
