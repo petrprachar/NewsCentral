@@ -207,8 +207,8 @@
 
         if (showUpnButton)
         {
-            // GetCurrentUserUPN() shells out to `whoami /upn` when not in mock mode — run it off
-            // the UI thread so page load stays responsive.
+            // GetCurrentUserUPN() blocks briefly on a native Win32 call when not in mock mode —
+            // run it off the UI thread so page load stays responsive.
             detectedUpn = await Task.Run(() => WindowsIdentityService.GetCurrentUserUPN());
             upnDetected = !string.IsNullOrEmpty(detectedUpn);
         }

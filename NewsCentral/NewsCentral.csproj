@@ -21,6 +21,12 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
 
+        <!-- Required by [LibraryImport] (WindowsIdentityService.GetUserNameExW): the source
+             generator's forwarding stub always uses function pointers, which only compile in an
+             unsafe context, regardless of the P/Invoke signature's own parameter shapes. No
+             hand-written unsafe code exists in this project. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
         <!-- Display name -->
         <ApplicationTitle>NewsCentral</ApplicationTitle>
 
