@@ -9,6 +9,7 @@
 @inject TeamContextService TeamContext
 @inject IStringLocalizer<Login> Localizer
 @inject WindowsIdentityService WindowsIdentityService
+@inject DataSeederService DataSeeder
 
 <PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>
 
@@ -34,13 +35,13 @@
             <div class="alert alert-danger">@errorMessage</div>
         }
 
-        <button @onclick="HandleLogin" class="btn btn-primary" disabled="@isLoggingIn">
-            @(isLoggingIn ? Localizer["LoadingPleaseWait"] : Localizer["Login"])
+        <button @onclick="HandleLogin" class="btn btn-primary" disabled="@(isLoggingIn || isInitializing)">
+            @((isLoggingIn || isInitializing) ? Localizer["LoadingPleaseWait"] : Localizer["Login"])
         </button>
 
         @if (showUpnButton)
         {
-            <button @onclick="HandleUpnLogin" class="btn btn-secondary" disabled="@(isLoggingIn || !upnDetected)">
+            <button @onclick="HandleUpnLogin" class="btn btn-secondary" disabled="@(isLoggingIn || isInitializing || !upnDetected)">
                 @UpnButtonText
             </button>
             @if (!upnDetected)
@@ -178,16 +179,27 @@
     private string errorMessage = string.Empty;
     private bool isLoggingIn = false;
 
+    // Starts true: data seeding is awaited below, before either button may be used. Cleared only
+    // on success — if seeding faults it stays true forever, keeping both buttons disabled for the
+    // rest of this page's lifetime (the process is restarted to retry, same as before this change).
+    private bool isInitializing = true;
+
     // UPN Login button — visible only when Authentication:EnableAutoLogin is true. Detection runs
     // once at page load; the button never logs anyone in without a click.
     private bool showUpnButton = false;
     private bool upnDetected = false;
     private string? detectedUpn;
 
-    private string UpnButtonText =>
-        upnDetected
-            ? $"{Localizer["UpnLogin"].Value} ({detectedUpn})"
-            : Localizer["UpnLogin"].Value;
+    private string UpnButtonText
+    {
+        get
+        {
+            if (isLoggingIn || isInitializing) return Localizer["LoadingPleaseWait"].Value;
+            return upnDetected
+                ? $"{Localizer["UpnLogin"].Value} ({detectedUpn})"
+                : Localizer["UpnLogin"].Value;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -199,6 +211,17 @@
             // the UI thread so page load stays responsive.
             detectedUpn = await Task.Run(() => WindowsIdentityService.GetCurrentUserUPN());
             upnDetected = !string.IsNullOrEmpty(detectedUpn);
+        }
+
+        try
+        {
+            await DataSeeder.EnsureInitializedAsync();
+            isInitializing = false;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Data initialization failed: {ex.Message}";
+            // isInitializing stays true — both buttons remain disabled.
         }
     }
 

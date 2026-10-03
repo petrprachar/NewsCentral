@@ -10,6 +10,7 @@ public class DataSeederService
     private readonly IStorageService _storage;
     private readonly string _basePath;          // kept only for BasePathExists check
     private readonly IConfiguration _configuration;
+    private readonly Lazy<Task> _initialization;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -25,9 +26,18 @@ public class DataSeederService
         _storage       = storage;
         _basePath      = config.DataPath;       // used only by GetInitializationStatus
         _configuration = configuration;
+        _initialization = new Lazy<Task>(InitializeIfNeededAsync);
     }
 
     // ── Bootstrap ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Runs <see cref="InitializeIfNeededAsync"/> at most once per process; every caller — the
+    /// fire-and-forget call from App.CreateWindow and the awaited call from Login.razor — receives
+    /// the same Task and observes the same completion or fault. Exceptions from initialization
+    /// propagate to every caller through this Task; none are swallowed here.
+    /// </summary>
+    public Task EnsureInitializedAsync() => _initialization.Value;
 
     /// <summary>
     /// Runs once on startup. If config/users.json is absent the entire
