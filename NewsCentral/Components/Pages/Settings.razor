@@ -2,9 +2,11 @@
 @using System.IO
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Configuration
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
 @inject EnvironmentContext EnvironmentContext
+@inject EnvironmentSettingsService EnvironmentSettingsService
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Settings> Localizer
 
@@ -119,6 +121,60 @@
         </div>
     </div>
 
+    @* Environment (M3a, read-only) — TODO(i18n): plain English for now. *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="bi bi-hdd-network me-2"></i>Environment</h5>
+        </div>
+        <div class="card-body">
+            <div class="row mb-2">
+                <div class="col-md-3"><strong>Source:</strong></div>
+                <div class="col-md-9">@environmentSourceText</div>
+            </div>
+            @if (environmentSettings != null)
+            {
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Display name:</strong></div>
+                    <div class="col-md-9">@(environmentSettings.DisplayName ?? "—")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Distribution enabled:</strong></div>
+                    <div class="col-md-9">@(environmentSettings.Distribution.Enabled ? "Yes" : "No")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Mode:</strong></div>
+                    <div class="col-md-9">@environmentSettings.Distribution.Mode</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Target:</strong></div>
+                    <div class="col-md-9"><code>@environmentTargetText</code></div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Fingerprint:</strong></div>
+                    <div class="col-md-9"><code>@(environmentFingerprint ?? "—")</code></div>
+                </div>
+                @if (environmentSettings.ModifiedBy != null || environmentSettings.ModifiedUtc != null)
+                {
+                    <div class="row mb-2">
+                        <div class="col-md-3"><strong>Modified by:</strong></div>
+                        <div class="col-md-9">@(environmentSettings.ModifiedBy ?? "—")</div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-md-3"><strong>Modified (UTC):</strong></div>
+                        <div class="col-md-9">@(environmentSettings.ModifiedUtc?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</div>
+                    </div>
+                }
+            }
+            @if (environmentError != null)
+            {
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Error:</strong></div>
+                    <div class="col-md-9 text-danger">@environmentError</div>
+                </div>
+            }
+        </div>
+    </div>
+
     @* Admin Section *@
     @if (currentUser?.IsSystemAdmin == true)
     {
@@ -152,7 +208,13 @@
     private string? errorMessage;
     private string dataStorePath = string.Empty;
 
-    protected override void OnInitialized()
+    private string environmentSourceText = string.Empty;
+    private EnvironmentSettings? environmentSettings;
+    private string? environmentTargetText;
+    private string? environmentFingerprint;
+    private string? environmentError;
+
+    protected override async Task OnInitializedAsync()
     {
         currentUser = AuthService.GetCurrentUser();
 
@@ -164,6 +226,27 @@
 
         // Informational: where the JSON data store lives (moved here from Home).
         dataStorePath = Path.Combine(EnvironmentContext.DataPath ?? string.Empty, "config", "users.json");
+
+        await LoadEnvironmentSectionAsync();
+    }
+
+    private async Task LoadEnvironmentSectionAsync()
+    {
+        var effective = await EnvironmentSettingsService.GetAsync();
+
+        environmentSourceText = effective.Source switch
+        {
+            EnvironmentSettingsSource.EnvironmentFile => "Environment file",
+            EnvironmentSettingsSource.MachineDefaults => "This machine's defaults",
+            _ => "Invalid"
+        };
+
+        environmentSettings = effective.Settings;
+        environmentFingerprint = effective.DistributionFingerprint;
+        environmentError = effective.Error;
+        environmentTargetText = environmentSettings != null
+            ? EnvironmentSettingsService.DescribeDistributionTarget(environmentSettings.Distribution, EnvironmentContext.DataPath)
+            : null;
     }
 
     private async Task ChangePassword()

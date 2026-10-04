@@ -1,9 +1,12 @@
 @inherits LayoutComponentBase
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Configuration
 @inject AuthenticationService AuthService
 @inject TeamContextService TeamContext
 @inject TeamService TeamService
+@inject EnvironmentSettingsService EnvironmentSettingsService
+@inject EnvironmentContext EnvironmentContext
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -36,6 +39,33 @@
             }
         </div>
 
+        @* M3a — environment settings visibility banners. TODO(i18n): plain English for now. *@
+        @if (currentUser != null)
+        {
+            @if (environmentBanner == EnvironmentBannerKind.MachineDefaults && currentUser.IsSystemAdmin)
+            {
+                <div class="alert alert-info d-flex justify-content-between align-items-center mx-4 mt-2 mb-0">
+                    <span>
+                        This environment has no stored settings — using this machine's defaults (@bannerTargetText).
+                        @if (!string.IsNullOrEmpty(saveBannerError))
+                        {
+                            <strong class="text-danger ms-2">@saveBannerError</strong>
+                        }
+                    </span>
+                    <button class="btn btn-sm btn-outline-primary ms-3" @onclick="SaveCurrentDefaults" disabled="@isSavingEnvironmentDefaults">
+                        @(isSavingEnvironmentDefaults ? "Saving..." : "Save to environment")
+                    </button>
+                </div>
+            }
+            else if (environmentBanner == EnvironmentBannerKind.Invalid)
+            {
+                <div class="alert alert-warning mx-4 mt-2 mb-0">
+                    Distribution settings for this environment are invalid: @environmentError.
+                    Publishing to clients is unavailable until an administrator fixes config/environment.json.
+                </div>
+            }
+        }
+
         <article class="content px-4">
             @Body
         </article>
@@ -47,10 +77,18 @@
     private string? currentTeamName;
     private Dictionary<string, string> teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
 
+    private enum EnvironmentBannerKind { None, MachineDefaults, Invalid }
+    private EnvironmentBannerKind environmentBanner = EnvironmentBannerKind.None;
+    private string? bannerTargetText;
+    private string? environmentError;
+    private string? saveBannerError;
+    private bool isSavingEnvironmentDefaults;
+
     protected override async Task OnInitializedAsync()
     {
         AuthService.OnAuthenticationStateChanged += HandleAuthChanged;
         TeamContext.OnTeamChanged += HandleTeamChanged;
+        EnvironmentSettingsService.SettingsChanged += HandleEnvironmentSettingsChanged;
         await RefreshAsync();
     }
 
@@ -73,6 +111,71 @@
         }
 
         UpdateTeamName();
+
+        // Environment banners are loaded on login (here) and on SettingsChanged (below) — no
+        // polling, no FileSystemWatcher.
+        if (currentUser != null)
+            await RefreshEnvironmentBannerAsync();
+        else
+            environmentBanner = EnvironmentBannerKind.None;
+    }
+
+    private async Task RefreshEnvironmentBannerAsync()
+    {
+        var effective = await EnvironmentSettingsService.GetAsync();
+
+        switch (effective.Source)
+        {
+            case EnvironmentSettingsSource.MachineDefaults:
+                environmentBanner = EnvironmentBannerKind.MachineDefaults;
+                bannerTargetText = ComposeBannerTarget(effective.Settings!.Distribution);
+                environmentError = null;
+                break;
+
+            case EnvironmentSettingsSource.Invalid:
+                environmentBanner = EnvironmentBannerKind.Invalid;
+                environmentError = effective.Error;
+                break;
+
+            default: // EnvironmentFile — fully configured; nothing to show.
+                environmentBanner = EnvironmentBannerKind.None;
+                environmentError = null;
+                break;
+        }
+    }
+
+    // "Local: C:\...", "AzureBlob: account/container", or just "distribution disabled".
+    private string ComposeBannerTarget(DistributionSettings distribution)
+    {
+        var target = EnvironmentSettingsService.DescribeDistributionTarget(distribution, EnvironmentContext.DataPath);
+        return distribution.Enabled ? $"{distribution.Mode}: {target}" : target;
+    }
+
+    private async Task SaveCurrentDefaults()
+    {
+        saveBannerError = null;
+        isSavingEnvironmentDefaults = true;
+        try
+        {
+            // On success this raises SettingsChanged, which HandleEnvironmentSettingsChanged
+            // picks up to refresh the banner (it will disappear, since Source becomes
+            // EnvironmentFile) and re-render.
+            await EnvironmentSettingsService.SaveCurrentDefaultsAsync();
+        }
+        catch (Exception ex)
+        {
+            saveBannerError = ex.Message;
+        }
+        finally
+        {
+            isSavingEnvironmentDefaults = false;
+        }
+    }
+
+    private async void HandleEnvironmentSettingsChanged()
+    {
+        await RefreshEnvironmentBannerAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     // Resolve the friendly team name from the current folder; fall back to the folder name.
@@ -111,5 +214,6 @@
     {
         AuthService.OnAuthenticationStateChanged -= HandleAuthChanged;
         TeamContext.OnTeamChanged -= HandleTeamChanged;
+        EnvironmentSettingsService.SettingsChanged -= HandleEnvironmentSettingsChanged;
     }
 }

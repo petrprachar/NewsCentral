@@ -124,4 +124,23 @@ public sealed class EnvironmentSettingsService
     /// </summary>
     public Task SaveCurrentDefaultsAsync() =>
         SaveAsync(EnvironmentSettingsResolver.FromMachineConfiguration(_config));
+
+    /// <summary>
+    /// Human-readable description of where distribution currently points — the resolved local
+    /// root, or "account/container" for AzureBlob, or "distribution disabled". Pure presentation
+    /// helper (not used by any validation or build logic); shared by MainLayout's banner and the
+    /// Settings page's Environment section so both render the same text for the same settings.
+    /// </summary>
+    public static string DescribeDistributionTarget(DistributionSettings distribution, string dataPath)
+    {
+        if (!distribution.Enabled)
+            return "distribution disabled";
+
+        if (string.Equals(distribution.Mode, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+            return $"{distribution.AzureBlob.AccountName}/{distribution.AzureBlob.ContainerName}";
+
+        return string.IsNullOrWhiteSpace(distribution.LocalPath)
+            ? Path.Combine(dataPath, "_distribution")
+            : distribution.LocalPath;
+    }
 }
