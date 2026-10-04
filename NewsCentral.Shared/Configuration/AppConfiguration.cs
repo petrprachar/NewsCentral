@@ -26,6 +26,12 @@ public class AppConfiguration
 
     // ── Distribution tier (IBlobDistributionService) ─────────────────────────
     //
+    // M3a: these five properties are now consumed only by
+    // EnvironmentSettingsResolver.FromMachineConfiguration, as the defaults used when no
+    // config/environment.json exists for the current DataPath. DistributionServiceRouter and
+    // AzureBlobDistributionService read the resolved EnvironmentSettings instead of this class
+    // directly. Kept here (not removed) because FromMachineConfiguration still needs them.
+    //
     // EnableBlobDistribution = false → NullBlobDistributionService (logs only)
     // EnableBlobDistribution = true
     //   DistributionMode = "Local"    → LocalBlobDistributionService

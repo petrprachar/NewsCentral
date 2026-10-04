@@ -3,70 +3,82 @@ using NewsCentral.Configuration;
 namespace NewsCentral.Services;
 
 /// <summary>
-/// IBlobDistributionService that rebuilds its inner implementation whenever
-/// EnvironmentContext.DataPath changes, instead of the inner service being chosen once at DI
-/// resolution time (as MauiProgram used to do inline). Selection logic — EnableBlobDistribution,
-/// then DistributionMode, then Null/Local/AzureBlob — moved here unchanged from MauiProgram.
+/// IBlobDistributionService that rebuilds its inner implementation whenever the effective
+/// per-environment distribution settings change — either EnvironmentContext.DataPath switches
+/// (M4) or EnvironmentSettingsService.SettingsChanged fires (a save to config/environment.json),
+/// instead of the inner service being chosen once at DI resolution time (as MauiProgram used to
+/// do inline, pre-M3a). Selection logic — Distribution.Enabled, then Distribution.Mode, then
+/// Null/Local/AzureBlob — now reads EnvironmentSettingsService.GetAsync() instead of
+/// AppConfiguration directly.
 ///
-/// Building the inner service is lazy (first call after construction or after an environment
-/// change) and never throws out of DI resolution: a failure (e.g. missing Azure settings) is
-/// caught and swapped in for an UnavailableBlobDistributionService instead, whose every method
-/// throws InvalidOperationException naming the reason. <see cref="ConfigurationError"/> surfaces
-/// that reason for future UI; it is null exactly when the real inner service built successfully.
+/// Building the inner service is lazy (first call after construction or after a rebuild trigger)
+/// and never throws out of DI resolution: a failure — an Invalid environment.json, or a build
+/// failure such as missing Azure settings — is caught and swapped in for an
+/// UnavailableBlobDistributionService instead, whose every method throws
+/// InvalidOperationException naming the reason. <see cref="ConfigurationError"/> surfaces that
+/// reason for future UI; it is null exactly when the real inner service built successfully.
 /// </summary>
 public sealed class DistributionServiceRouter : IBlobDistributionService
 {
     private const string Tag = "[BlobDist ROUTER]";
 
-    private readonly AppConfiguration _config;
+    private readonly EnvironmentSettingsService _settingsService;
     private readonly EnvironmentContext _environment;
 
-    // volatile: Inner's read-then-maybe-build races only with OnEnvironmentChanged's write (which
-    // just discards the reference), never with I/O, so a plain volatile swap is enough — no lock.
+    // volatile: GetInnerAsync's read-then-maybe-build races only with OnRebuildTriggered's write
+    // (which just discards the reference), never with I/O, so a plain volatile swap is enough —
+    // no lock. Concurrent first calls may build twice; that is acceptable.
     private volatile IBlobDistributionService? _inner;
 
     public string? ConfigurationError { get; private set; }
 
-    public DistributionServiceRouter(AppConfiguration config, EnvironmentContext environment)
+    public DistributionServiceRouter(EnvironmentSettingsService settingsService, EnvironmentContext environment)
     {
-        _config = config;
+        _settingsService = settingsService;
         _environment = environment;
-        _environment.Changed += OnEnvironmentChanged;
+        _environment.Changed += OnRebuildTriggered;
+        _settingsService.SettingsChanged += OnRebuildTriggered;
     }
 
-    private void OnEnvironmentChanged() => _inner = null;
+    private void OnRebuildTriggered() => _inner = null;
 
-    private IBlobDistributionService Inner
+    private async Task<IBlobDistributionService> GetInnerAsync()
     {
-        get
-        {
-            var current = _inner;
-            if (current != null)
-                return current;
+        var current = _inner;
+        if (current != null)
+            return current;
 
-            var built = Build();
-            _inner = built;
-            return built;
-        }
+        var built = await BuildAsync();
+        _inner = built;
+        return built;
     }
 
-    private IBlobDistributionService Build()
+    private async Task<IBlobDistributionService> BuildAsync()
     {
         try
         {
+            var effective = await _settingsService.GetAsync();
+
+            if (effective.Source == EnvironmentSettingsSource.Invalid)
+            {
+                ConfigurationError = $"environment.json is invalid: {effective.Error}";
+                System.Diagnostics.Debug.WriteLine(
+                    $"{Tag} Build failed — using UnavailableBlobDistributionService: {ConfigurationError}");
+                return new UnavailableBlobDistributionService(ConfigurationError);
+            }
+
+            var distribution = effective.Settings!.Distribution;
             IBlobDistributionService service;
 
-            if (!_config.EnableBlobDistribution)
+            if (!distribution.Enabled)
             {
                 service = new NullBlobDistributionService();
             }
             else
             {
-                service = _config.DistributionMode switch
-                {
-                    "AzureBlob" => (IBlobDistributionService)new AzureBlobDistributionService(_config),
-                    _ => new LocalBlobDistributionService(ResolveLocalDistributionRoot())
-                };
+                service = string.Equals(distribution.Mode, "AzureBlob", StringComparison.OrdinalIgnoreCase)
+                    ? new AzureBlobDistributionService(distribution.AzureBlob)
+                    : new LocalBlobDistributionService(ResolveLocalDistributionRoot(distribution));
             }
 
             ConfigurationError = null;
@@ -82,26 +94,38 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
         }
     }
 
-    // Mirrors LocalBlobDistributionService's old fallback: LocalDistributionPath if configured,
-    // else a "_distribution" subfolder next to the current DataPath.
-    private string ResolveLocalDistributionRoot() =>
-        string.IsNullOrWhiteSpace(_config.LocalDistributionPath)
+    // Mirrors the pre-M3a fallback: LocalPath if configured, else a "_distribution" subfolder
+    // next to the current DataPath.
+    private string ResolveLocalDistributionRoot(DistributionSettings distribution) =>
+        string.IsNullOrWhiteSpace(distribution.LocalPath)
             ? Path.Combine(_environment.DataPath, "_distribution")
-            : _config.LocalDistributionPath;
+            : distribution.LocalPath;
 
-    // ── IBlobDistributionService — delegate to whichever instance Inner resolves to ──────────
+    // ── IBlobDistributionService — each method awaits GetInnerAsync() then delegates ─────────
 
-    public Task UploadTextAsync(string relativePath, string content) =>
-        Inner.UploadTextAsync(relativePath, content);
+    public async Task UploadTextAsync(string relativePath, string content)
+    {
+        var inner = await GetInnerAsync();
+        await inner.UploadTextAsync(relativePath, content);
+    }
 
-    public Task UploadStreamAsync(string relativePath, Stream content) =>
-        Inner.UploadStreamAsync(relativePath, content);
+    public async Task UploadStreamAsync(string relativePath, Stream content)
+    {
+        var inner = await GetInnerAsync();
+        await inner.UploadStreamAsync(relativePath, content);
+    }
 
-    public Task DeleteAsync(string relativePath) =>
-        Inner.DeleteAsync(relativePath);
+    public async Task DeleteAsync(string relativePath)
+    {
+        var inner = await GetInnerAsync();
+        await inner.DeleteAsync(relativePath);
+    }
 
-    public Task<bool> ExistsAsync(string relativePath) =>
-        Inner.ExistsAsync(relativePath);
+    public async Task<bool> ExistsAsync(string relativePath)
+    {
+        var inner = await GetInnerAsync();
+        return await inner.ExistsAsync(relativePath);
+    }
 
     // ── Fallback when building the real inner service failed ─────────────────────────────────
 

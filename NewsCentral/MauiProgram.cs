@@ -143,11 +143,12 @@ public static class MauiProgram
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
 
-        // ── Distribution tier storage (config-driven, rebuildable on environment switch) ─────
-        // DistributionServiceRouter holds the actual EnableBlobDistribution/DistributionMode
-        // selection logic (moved from here) and rebuilds its inner service whenever
-        // EnvironmentContext.Changed fires; a build failure (e.g. missing Azure settings) never
-        // fails DI resolution — see DistributionServiceRouter.cs.
+        // ── Distribution tier storage (config-driven, rebuildable on environment switch or save) ──
+        // DistributionServiceRouter holds the actual Distribution.Enabled/Mode selection logic
+        // (moved from here in M2) and rebuilds its inner service whenever EnvironmentContext.Changed
+        // or EnvironmentSettingsService.SettingsChanged fires; a build failure (e.g. missing Azure
+        // settings, or an invalid config/environment.json) never fails DI resolution — see
+        // DistributionServiceRouter.cs.
         builder.Services.AddSingleton<DistributionServiceRouter>();
         builder.Services.AddSingleton<IBlobDistributionService>(
             sp => sp.GetRequiredService<DistributionServiceRouter>());
@@ -158,6 +159,10 @@ public static class MauiProgram
         // AuthenticationService now takes IStorageService + WindowsIdentityService — both already
         // registered above, so plain constructor injection is enough (no custom factory needed).
         builder.Services.AddSingleton<AuthenticationService>();
+
+        // Per-environment distribution settings (config/environment.json) — DistributionServiceRouter
+        // reads this instead of AppConfiguration directly; see EnvironmentSettingsService.cs.
+        builder.Services.AddSingleton<EnvironmentSettingsService>();
 
         // Register other services
         builder.Services.AddSingleton<TeamService>();

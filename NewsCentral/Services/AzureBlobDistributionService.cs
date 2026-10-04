@@ -9,7 +9,8 @@ namespace NewsCentral.Services;
 /// Distribution service backed by Azure Blob Storage.
 /// Authentication: InteractiveBrowserCredential (MSAL) — user signs in on first upload,
 /// subsequent calls reuse the persisted token cache ("NewsCentral").
-/// Active when EnableBlobDistribution = true and DistributionMode = "AzureBlob".
+/// Active when Distribution.Enabled and Distribution.Mode == "AzureBlob" in the effective
+/// environment settings (DistributionServiceRouter selects and constructs this).
 /// </summary>
 public class AzureBlobDistributionService : IBlobDistributionService
 {
@@ -17,27 +18,27 @@ public class AzureBlobDistributionService : IBlobDistributionService
     private volatile bool _containerEnsured;
     private const string Tag = "[BlobDist AZURE]";
 
-    public AzureBlobDistributionService(AppConfiguration config)
+    public AzureBlobDistributionService(AzureBlobSettings settings)
     {
-        if (string.IsNullOrWhiteSpace(config.AzureBlobAccountName))
+        if (string.IsNullOrWhiteSpace(settings.AccountName))
             throw new InvalidOperationException(
                 "AzureBlob:AccountName must be set when DistributionMode is AzureBlob.");
-        if (string.IsNullOrWhiteSpace(config.AzureBlobClientId))
+        if (string.IsNullOrWhiteSpace(settings.ClientId))
             throw new InvalidOperationException(
                 "AzureBlob:ClientId must be set when DistributionMode is AzureBlob.");
 
         var credential = new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
         {
-            TenantId = config.AzureBlobTenantId,
-            ClientId = config.AzureBlobClientId,
+            TenantId = settings.TenantId,
+            ClientId = settings.ClientId,
             TokenCachePersistenceOptions = new TokenCachePersistenceOptions { Name = "NewsCentral" }
         });
 
-        var serviceUri  = new Uri($"https://{config.AzureBlobAccountName}.blob.core.windows.net");
+        var serviceUri  = new Uri($"https://{settings.AccountName}.blob.core.windows.net");
         var blobService = new BlobServiceClient(serviceUri, credential);
-        _container = blobService.GetBlobContainerClient(config.AzureBlobContainerName);
+        _container = blobService.GetBlobContainerClient(settings.ContainerName);
 
-        System.Diagnostics.Debug.WriteLine($"{Tag} Container: {config.AzureBlobContainerName}");
+        System.Diagnostics.Debug.WriteLine($"{Tag} Container: {settings.ContainerName}");
     }
 
     // ── IBlobDistributionService ─────────────────────────────────────────────

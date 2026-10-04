@@ -7,9 +7,10 @@ namespace NewsCentral.Services;
 /// Mirrors the Azure Blob path structure exactly so that switching to
 /// AzureBlobDistributionService requires zero path changes anywhere else.
 ///
-/// Root: resolved by DistributionServiceRouter (AppConfiguration.LocalDistributionPath if set,
-/// else EnvironmentContext.DataPath + "_distribution") and passed in here — this class takes no
-/// dependency on either and performs no disk access of its own at construction.
+/// Root: resolved by DistributionServiceRouter (the effective environment settings'
+/// Distribution.LocalPath if set, else EnvironmentContext.DataPath + "_distribution") and passed
+/// in here — this class takes no dependency on either and performs no disk access of its own at
+/// construction.
 ///   (the root must be DIFFERENT from DataPath — the separation is the point)
 ///
 /// Example layout after a publish:
