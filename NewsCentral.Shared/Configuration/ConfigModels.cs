@@ -74,4 +74,7 @@ public sealed record ComponentManifest
     public bool HasSigningHive { get; init; }
     public bool HasEntraAttributeSchemes { get; init; }
     public bool HasEntraGroupTeams { get; init; }
+
+    /// <summary>NewsCentral only (M3b) — projects a <see cref="EnvironmentCatalog"/> sub-block.</summary>
+    public bool HasEnvironmentCatalog { get; init; }
 }

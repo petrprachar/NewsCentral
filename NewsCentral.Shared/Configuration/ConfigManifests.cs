@@ -140,6 +140,7 @@ public static class ConfigManifests
         ComponentName = "NewsCentral",
         HasTeamsHive = false,
         HasSigningHive = false,
+        HasEnvironmentCatalog = true,
         Keys = new[]
         {
             Key("Company", SolutionConstants.Company, null, RegistryValueType.None, ControlKind.Text,
@@ -180,6 +181,9 @@ public static class ConfigManifests
                 ControlKind.Redacted, OverridableState.Overridable,
                 "Base64, 32 bytes; warning: an empty REG_SZ is a PRESENT value — creating the registry value with empty data overrides the appsettings key with empty and disables HMAC",
                 isSecret: true),
+            Key("AllowUserEnvironments", "true", "AllowUserEnvironments", RegistryValueType.Dword,
+                ControlKind.Toggle, OverridableState.RegistryOnly,
+                "Group Policy: allow operators to add their own environments (enforced from M4)"),
         }
     };
 

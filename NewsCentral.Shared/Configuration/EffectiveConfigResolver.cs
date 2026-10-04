@@ -44,6 +44,9 @@ public sealed record ComponentResolution
     public IReadOnlyList<EntraSchemeMapping> EntraSchemeMappings { get; init; } = System.Array.Empty<EntraSchemeMapping>();
     public IReadOnlyList<EntraGroupTeamInstance> EntraGroupTeamInstances { get; init; } = System.Array.Empty<EntraGroupTeamInstance>();
     public string? EntraGlobalExclusionGroup { get; init; }
+
+    /// <summary>NewsCentral only (M3b) — null unless the manifest has <c>HasEnvironmentCatalog</c>.</summary>
+    public EnvironmentCatalog? EnvironmentCatalog { get; init; }
 }
 
 /// <summary>
@@ -248,6 +251,10 @@ public static class EffectiveConfigResolver
             ? registryLayer["Entra:GroupTeams:ExclusionGroup"]
             : null;
 
+        var environmentCatalog = manifest.HasEnvironmentCatalog
+            ? EnvironmentCatalogReader.Read(registryLayer)
+            : null;
+
         return new ComponentResolution
         {
             ComponentName = manifest.ComponentName,
@@ -256,7 +263,8 @@ public static class EffectiveConfigResolver
             Signing = signing,
             EntraSchemeMappings = schemeMappings,
             EntraGroupTeamInstances = groupInstances,
-            EntraGlobalExclusionGroup = globalExclusion
+            EntraGlobalExclusionGroup = globalExclusion,
+            EnvironmentCatalog = environmentCatalog
         };
     }
 

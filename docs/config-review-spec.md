@@ -110,12 +110,17 @@ Path-defining rows (`Company`) render their Default cell as `Contoso (build cons
 
 ## 6. Structural Hives
 
-Non-scalar registry subtrees, rendered as sub-blocks below the config table. **NewsService and NewsViewer only** — NewsCentral has none (its teams come from the data store, its signing keys from `team-signing.json`).
+Non-scalar registry subtrees, rendered as sub-blocks below the config table.
+
+**NewsService and NewsViewer only** for teams/Signing/Entra — NewsCentral has none of those (its
+teams come from the data store, its signing keys from `team-signing.json`). **NewsCentral only**
+(M3b) for the policy environment catalog below — NewsService and NewsViewer never project it.
 
 - **`teams\`** — list of team folder names (surfaced by `RegistryConfigurationProvider` as `teams:0…N`). Registry-only.
 - **`Signing\`** — `RequireSignedIndex` renders as a normal scalar row in the config table; the per-team keys render here as a sub-table (`Team` · `PublicKey` · `PublicKeyPrevious`). Public keys are **not secret** — show truncated but copyable, as Key Management already does. Each component maintains its own separate `Signing\` subtree.
 - **`Entra\AttributeSchemes\`** (NewsService only) — dictionary of named schemes, each with a `Selector` and a `Mappings\` sub-dictionary (selector value → rule); sub-table of `Scheme` · `Selector` · `Selector value` · `Rule`.
 - **`Entra\GroupTeams\Instances\`** (NewsService only) — dictionary of named instances, each with `InclusionGroup` and optional `ExclusionGroup`; sub-table of `Label` · `InclusionGroup` · `ExclusionGroup`. (The fleet-wide `Entra:GroupTeams:ExclusionGroup` is a normal scalar row, not part of this structural block — see §7.2.) Superseded the single `Entra:GroupTeam` pair and the flat `Entra:Mappings` table this section originally specified; see `docs/entra-dynamic-teams.md` for the current model.
+- **`Environments\`** (NewsCentral only, M3b) — the policy environment catalog: dictionary of named entries (plus an implicit `Default` entry derived from the flat `DataPath`/`Storage\*`/`AzureBlob\*` values when those are set directly at the component root); sub-table of `Name` · `Display name` · `DataPath` · `Mode` · `Target overrides` (only the fields the entry actually sets) · `Implicit`. Read via `EnvironmentCatalogReader.Read` against the same registry-only layer §8 already builds — never the merged layer. Any resolution warnings (a duplicate DataPath, an entry with no DataPath, an explicit `Environments\Default` shadowing the implicit one) are listed below the table. The sibling scalar row `AllowUserEnvironments` (§7.4) is Group-Policy-only and not part of this structural block.
 
 ## 7. The Config Manifest
 
@@ -184,7 +189,7 @@ Structural: `Signing\{team}\PublicKey` + `PublicKeyPrevious` (RO, **not secret**
 
 ### 7.4 NewsCentral manifest
 
-Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an ad-hoc `IConfiguration` read; entirely hand-tracked. **No structural hives.**
+Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an ad-hoc `IConfiguration` read; entirely hand-tracked. **One structural hive** — the policy environment catalog (M3b), `Environments\`, projected only when `HasEnvironmentCatalog` is set; see §6.
 
 | Canonical key | Default | Subkey | RegType | Ovr | Control | Secret | ValueHint |
 |---|---|---|---|---|---|---|---|
@@ -204,6 +209,9 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 | `AzureBlob:ClientId` | `""` | `AzureBlob\ClientId` | S | OV | text | | GUID |
 | `AzureBlob:AccountName` | `""` | `AzureBlob\AccountName` | S | OV | text | | storage account, no suffix |
 | `Hmac:SecretKey` | `""` | `Hmac\SecretKey` | S | OV | redacted | ✔ | Base64, 32 bytes; warning: empty REG_SZ is a PRESENT value — overrides appsettings with empty and disables HMAC |
+| `AllowUserEnvironments` | `true` | `AllowUserEnvironments` | D | RO | toggle | | `true \| false` (registry: DWORD 0/1); default true when absent; Group Policy — allow operators to add their own environments; read and displayed only, enforced from M4 |
+
+Structural (M3b): `Environments\{Name}\DataPath` (required) + `DisplayName`, `Storage\EnableBlobDistribution`/`DistributionMode`/`LocalDistributionPath`/`AzureBlobContainerName`, `AzureBlob\TenantId`/`ClientId`/`AccountName` (all optional overrides) — see §6.
 
 ## 8. Data Resolution
 

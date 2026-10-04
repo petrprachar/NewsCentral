@@ -223,6 +223,53 @@ public sealed class EffectiveConfigResolverTests
         Assert.Null(brno.ExclusionGroup);
     }
 
+    // ── Environment catalog projection (M3b) ──────────────────────────────────
+
+    [Fact]
+    public void Project_PopulatesEnvironmentCatalog_WhenManifestHasEnvironmentCatalog()
+    {
+        var manifest = new ComponentManifest
+        {
+            ComponentName = "Test",
+            HasEnvironmentCatalog = true,
+            Keys = new[] { Desc("Company") }
+        };
+
+        var empty = new ConfigurationBuilder().Build();
+        var reg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Environments:Dev:DataPath"] = "C:\\Download\\NewsCentral"
+        }).Build();
+
+        var result = EffectiveConfigResolver.Project(manifest, empty, reg);
+
+        Assert.NotNull(result.EnvironmentCatalog);
+        Assert.Single(result.EnvironmentCatalog!.Entries);
+        Assert.Equal("Dev", result.EnvironmentCatalog!.Entries[0].Name);
+    }
+
+    [Fact]
+    public void Project_LeavesEnvironmentCatalogNull_WhenManifestFlagIsFalse()
+    {
+        var manifest = new ComponentManifest
+        {
+            ComponentName = "NewsService",
+            HasEnvironmentCatalog = false,
+            Keys = new[] { Desc("Company") }
+        };
+
+        var empty = new ConfigurationBuilder().Build();
+        var reg = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            // Present but irrelevant — NewsService's manifest doesn't project this hive.
+            ["Environments:Dev:DataPath"] = "C:\\Download\\NewsCentral"
+        }).Build();
+
+        var result = EffectiveConfigResolver.Project(manifest, empty, reg);
+
+        Assert.Null(result.EnvironmentCatalog);
+    }
+
     // ── Resolve install-dir override (spec §4) ────────────────────────────────
 
     [Fact]

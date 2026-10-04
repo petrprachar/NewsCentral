@@ -129,9 +129,38 @@ HKLM\Software\[Company]\NewsCentral\NewsCentral\
 │       AccountName   REG_SZ
 ├── Hmac\
 │       SecretKey   REG_SZ
+├── AllowUserEnvironments   DWORD   (0/1; default 1 when absent; Group Policy — allow operators to add their own environments; read and displayed only — M4 enforces it)
+├── Environments\
+│   └── <Name>\
+│           DataPath                       REG_SZ   (required; the rest are optional per-environment overrides)
+│           DisplayName                    REG_SZ
+│       ├── Storage\
+│       │       EnableBlobDistribution     REG_SZ   "true" or "false"
+│       │       DistributionMode           REG_SZ   ("Local" or "AzureBlob")
+│       │       LocalDistributionPath      REG_SZ
+│       │       AzureBlobContainerName     REG_SZ
+│       └── AzureBlob\
+│               TenantId      REG_SZ
+│               ClientId      REG_SZ
+│               AccountName   REG_SZ
+│       (one subtree per policy-defined environment; <Name> IS the entry's identity — unlike the
+│        Entra GroupTeams instance label, it is never derived from anything else)
 └── teams\
         (one REG_SZ value per team)
 ```
+
+Precedence per field: the M3a result (environment.json if present and valid, else this machine's
+own `Storage:*`/`AzureBlob:*` values) is overlaid field-by-field with whatever the matching policy
+entry sets — an `Invalid` environment.json is never rescued by policy. A matching entry's canonical
+DataPath (`Path.GetFullPath`, trailing separator trimmed, case-insensitive) must equal the current
+`EnvironmentContext.DataPath`.
+
+**Implicit "Default" entry.** If the flat `DataPath` value is set directly under
+`HKLM\Software\{Company}\NewsCentral\NewsCentral\` (not in `appsettings.json` — appsettings alone
+never creates a policy entry), the flat `DataPath`, `Storage\*` and `AzureBlob\*` values form an
+implicit entry named `Default`. An explicit `Environments\Default` subkey, if present, takes
+precedence over the implicit one (a warning is recorded when both exist). Duplicate DataPaths
+across entries: the first entry in name order wins, with a warning for every entry it shadows.
 
 **NewsTester** (future — stub, no values defined yet)
 ```

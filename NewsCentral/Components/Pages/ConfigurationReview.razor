@@ -292,6 +292,52 @@
                         <small class="text-muted">@Localizer["GroupTeamsNote"]</small>
                     }
                 }
+
+                @* ── Policy environment catalog (M3b, NewsCentral only) ──────── *@
+                @if (r.EnvironmentCatalog != null &&
+                     (r.EnvironmentCatalog.Entries.Count > 0 || r.EnvironmentCatalog.Warnings.Count > 0))
+                {
+                    <h6 class="mt-4">@Localizer["PolicyEnvironments"]</h6>
+                    @if (r.EnvironmentCatalog.Entries.Count > 0)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>@Localizer["ColName"]</th>
+                                        <th>@Localizer["ColDisplayName"]</th>
+                                        <th>@Localizer["ColDataPath"]</th>
+                                        <th>@Localizer["ColMode"]</th>
+                                        <th>@Localizer["ColTargetOverrides"]</th>
+                                        <th>@Localizer["ColImplicit"]</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var e in r.EnvironmentCatalog.Entries)
+                                    {
+                                        <tr>
+                                            <td><code>@e.Name</code></td>
+                                            <td>@(e.DisplayName ?? Localizer["Empty"].Value)</td>
+                                            <td><code>@e.DataPath</code></td>
+                                            <td>@(e.DistributionMode ?? Localizer["Empty"].Value)</td>
+                                            <td>@TargetOverridesCell(e)</td>
+                                            <td>@(e.IsImplicitDefault ? Localizer["Yes"].Value : Localizer["No"].Value)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    @if (r.EnvironmentCatalog.Warnings.Count > 0)
+                    {
+                        <ul class="mb-3">
+                            @foreach (var w in r.EnvironmentCatalog.Warnings)
+                            {
+                                <li class="text-warning">@w</li>
+                            }
+                        </ul>
+                    }
+                }
             </div>
         </div>
     }
@@ -408,6 +454,28 @@
         {
             <code class="user-select-all d-inline-block text-truncate" style="max-width: 340px; vertical-align: bottom;"
                   title="@key">@key</code>
+        }
+    };
+
+    // Lists only the PolicyEnvironment override fields that are actually set, excluding DataPath/
+    // DisplayName/Mode (each already has its own column).
+    private RenderFragment TargetOverridesCell(PolicyEnvironment e) => __builder =>
+    {
+        var parts = new List<string>();
+        if (e.EnableBlobDistribution.HasValue) parts.Add($"EnableBlobDistribution={e.EnableBlobDistribution.Value}");
+        if (e.LocalDistributionPath != null) parts.Add($"LocalDistributionPath={e.LocalDistributionPath}");
+        if (e.AzureBlobContainerName != null) parts.Add($"AzureBlobContainerName={e.AzureBlobContainerName}");
+        if (e.AzureTenantId != null) parts.Add($"AzureTenantId={e.AzureTenantId}");
+        if (e.AzureClientId != null) parts.Add($"AzureClientId={e.AzureClientId}");
+        if (e.AzureAccountName != null) parts.Add($"AzureAccountName={e.AzureAccountName}");
+
+        if (parts.Count == 0)
+        {
+            <span class="text-muted">@Localizer["Empty"]</span>
+        }
+        else
+        {
+            <code>@string.Join(", ", parts)</code>
         }
     };
 
