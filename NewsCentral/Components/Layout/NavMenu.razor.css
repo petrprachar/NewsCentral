@@ -24,14 +24,16 @@
     font-size: 1.1rem;
 }
 
+/* M4a.1: width/height/background-size were sized for the old data-URI background-image icon
+   technique (the "-nav-menu"-suffixed rules below, which no current markup references — NavMenu.razor
+   uses plain "bi bi-xxx" classes). Bootstrap Icons renders via a font glyph on ::before instead, which
+   needs no fixed box or background-image; a fixed width/height/background-size would clip or
+   misalign that glyph instead of sizing a background image that no longer exists. */
 .bi {
     display: inline-block;
     position: relative;
-    width: 1.25rem;
-    height: 1.25rem;
     margin-right: 0.75rem;
     top: -1px;
-    background-size: cover;
 }
 
 .bi-house-door-fill-nav-menu {
