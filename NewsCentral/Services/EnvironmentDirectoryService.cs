@@ -286,6 +286,12 @@ public sealed class EnvironmentDirectoryService
     public async Task SyncSharedDirectoryAsync(EnvironmentInitStatus status)
     {
         var environmentPath = _environment.DataPath;
+        // M4b.1 guard: IStorageService resolves every path against the LIVE EnvironmentContext.DataPath,
+        // so if the environment is switched between this read and the eventual write (below), the
+        // merged file would otherwise be written into the NEW environment instead of the one this
+        // sync actually read from. Captured once, up front, and re-checked immediately before the
+        // write.
+        var startPath = EnvironmentPaths.Canonicalize(_environment.DataPath);
         IReadOnlyList<SharedDirectoryEntry> remoteEntries = Array.Empty<SharedDirectoryEntry>();
         var rejectedCount = 0;
 
@@ -342,6 +348,12 @@ public sealed class EnvironmentDirectoryService
                 if (status != EnvironmentInitStatus.Ready)
                 {
                     writeResult = "skipped (environment not initialized)";
+                }
+                else if (EnvironmentPaths.Canonicalize(_environment.DataPath) != startPath)
+                {
+                    writeResult = "skipped (environment changed during sync)";
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[EnvironmentDirectoryService] Sync '{startPath}': environment changed during sync — remote write skipped");
                 }
                 else
                 {

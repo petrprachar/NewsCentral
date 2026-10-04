@@ -110,23 +110,30 @@
     }
 </div>
 
-<ConfirmDialog IsVisible="showSwitchConfirm"
-               Title="Switch environment?"
-               Message="@($"Switch to {pendingSwitchName}? You will be signed out; unsaved changes will be lost.")"
-               ConfirmText="Switch"
-               CancelText="Cancel"
-               DialogType="warning"
-               OnConfirm="DoSwitch"
-               OnCancel="CancelSwitch" />
+@* M4b.1: .top-row's inherited white-space:nowrap reaches straight through this component
+   boundary into ConfirmDialog's own rendered markup — wrapping each usage in an element that
+   resets white-space back to normal is the fix, without touching ConfirmDialog.razor itself. *@
+<div class="env-picker-dialog-wrap">
+    <ConfirmDialog IsVisible="showSwitchConfirm"
+                   Title="Switch environment?"
+                   Message="@($"Switch to {pendingSwitchName}? You will be signed out; unsaved changes will be lost.")"
+                   ConfirmText="Switch"
+                   CancelText="Cancel"
+                   DialogType="warning"
+                   OnConfirm="DoSwitch"
+                   OnCancel="CancelSwitch" />
+</div>
 
-<ConfirmDialog IsVisible="showRemoveConfirm"
-               Title="Remove shared environment?"
-               Message="@($"Remove {pendingRemoveOption?.DisplayName} for everyone? It will disappear from every environment's directory as they synchronize.")"
-               ConfirmText="Remove"
-               CancelText="Cancel"
-               DialogType="danger"
-               OnConfirm="ConfirmRemove"
-               OnCancel="CancelRemove" />
+<div class="env-picker-dialog-wrap">
+    <ConfirmDialog IsVisible="showRemoveConfirm"
+                   Title="Remove shared environment?"
+                   Message="@($"Remove {pendingRemoveOption?.DisplayName} for everyone? It will disappear from every environment's directory as they synchronize.")"
+                   ConfirmText="Remove"
+                   CancelText="Cancel"
+                   DialogType="danger"
+                   OnConfirm="ConfirmRemove"
+                   OnCancel="CancelRemove" />
+</div>
 
 @if (showAddDialog)
 {
@@ -176,7 +183,26 @@
 }
 
 <style>
-    .env-picker { position: relative; display: inline-block; }
+    .env-picker {
+        position: relative;
+        display: inline-block;
+        /* .top-row is a flex container; a flex item's default min-width:auto uses its content's
+           unwrapped intrinsic width (white-space:nowrap makes that the FULL text width), which
+           defeats any inner max-width/ellipsis and can force the row wider than the window. No
+           overflow:hidden here — the dropdown menu is an absolutely-positioned descendant that
+           intentionally extends well beyond this element's own box, and clipping would hide it. */
+        min-width: 0;
+    }
+
+    /* M4b.1: resets .top-row's inherited white-space:nowrap for both ConfirmDialog usages below,
+       without touching ConfirmDialog.razor itself. */
+    .env-picker-dialog-wrap {
+        white-space: normal;
+    }
+
+        .env-picker-dialog-wrap .confirm-dialog p {
+            overflow-wrap: anywhere;
+        }
 
     .env-picker-locked {
         color: #6c757d;
@@ -205,6 +231,15 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         vertical-align: middle;
+    }
+
+    /* M4b.1: below 641px there is no sidebar, so the header has less room overall — shrink the
+       toggle name's budget too, matching the mobile treatment MainLayout.razor.css applies to the
+       user's own display name. */
+    @@media (max-width: 640.98px) {
+        .env-picker-toggle-name {
+            max-width: 120px;
+        }
     }
 
     .env-picker-backdrop {
@@ -330,6 +365,9 @@
         align-items: center;
         justify-content: center;
         z-index: 2000;
+        /* M4b.1: resets the inherited white-space:nowrap from .top-row (see the dialog-wrap
+           comment above) — the Add dialog lives in the same component tree, not inside a wrapper. */
+        white-space: normal;
     }
 
     .env-picker-add-panel {
@@ -339,6 +377,10 @@
         width: min(520px, calc(100vw - 2rem));
         box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         text-align: left;
+        white-space: normal;
+        /* Inherited, so it reaches every descendant's text (the title, the note, the error alert)
+           without needing a rule per element — breaks an unbroken UNC path instead of overflowing. */
+        overflow-wrap: anywhere;
     }
 
     .env-picker-add-title { margin: 0 0 15px 0; }

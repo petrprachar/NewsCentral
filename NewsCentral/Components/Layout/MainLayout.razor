@@ -24,7 +24,7 @@
             @* Display-only identity — reflects the Home team selector, updates on change *@
             @if (currentUser != null)
             {
-                <span class="me-3">
+                <span class="me-3 env-identity-chip" title="@currentUser.DisplayName">
                     <i class="bi bi-person-circle me-1"></i><span class="env-user-name">@currentUser.DisplayName</span>
                     @if (currentUser.IsSystemAdmin)
                     {

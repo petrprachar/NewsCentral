@@ -34,6 +34,16 @@ main {
         vertical-align: middle;
     }
 
+    /* M4b.1: these are flex children of .top-row holding text — their default min-width:auto
+       uses their content's unwrapped intrinsic width (white-space:nowrap makes that the FULL
+       text width), which would force .top-row wider than the window regardless of any inner
+       max-width/ellipsis on .env-user-name/.env-team-name. */
+    .top-row ::deep .env-identity-chip,
+    .top-row ::deep .env-team-name {
+        min-width: 0;
+        overflow: hidden;
+    }
+
 @media (max-width: 999.98px) {
     /* Below 1000px, drop the lowest-priority identity details first. */
     .top-row ::deep .env-admin-badge,
@@ -45,6 +55,14 @@ main {
 @media (max-width: 759.98px) {
     /* Below 760px, Sign out shows only its icon — title/aria-label (always present) carry the label. */
     .top-row ::deep .env-signout-text {
+        display: none;
+    }
+}
+
+@media (max-width: 640.98px) {
+    /* Below 641px (no sidebar) there's even less room — drop the user's name text too, keeping
+       only the person icon; the chip's own title (the full display name) carries the label. */
+    .top-row ::deep .env-user-name {
         display: none;
     }
 }
