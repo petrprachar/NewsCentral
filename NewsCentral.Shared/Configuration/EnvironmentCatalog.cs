@@ -65,6 +65,33 @@ public static class EnvironmentPaths
         full = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         return full.ToLowerInvariant();
     }
+
+    /// <summary>
+    /// True when <paramref name="path"/> is a drive-rooted or UNC absolute path
+    /// (<see cref="Path.IsPathFullyQualified(string)"/>) — false for a relative path, an empty
+    /// string, or null. Used to reject relative DataPath values wherever one must be authoritative
+    /// (policy catalog entries, user-added environments).
+    /// </summary>
+    public static bool IsAbsolute(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path);
+
+    /// <summary>
+    /// True when <paramref name="path"/> is a UNC path (<c>\\server\share\...</c>) reachable from
+    /// another machine — as opposed to a local drive letter. Deliberately excludes the
+    /// device-namespace forms <c>\\?\</c> and <c>\\.\</c>, which are local-only despite the leading
+    /// double backslash. Drives the picker's "this computer only" badge; reused unchanged by M4b.
+    /// </summary>
+    public static bool IsShareable(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        if (!path.StartsWith(@"\\", StringComparison.Ordinal))
+            return false;
+
+        return !path.StartsWith(@"\\?\", StringComparison.Ordinal) &&
+               !path.StartsWith(@"\\.\", StringComparison.Ordinal);
+    }
 }
 
 /// <summary>
@@ -149,6 +176,12 @@ public static class EnvironmentCatalogReader
                 continue;
             }
 
+            if (!EnvironmentPaths.IsAbsolute(dataPath))
+            {
+                warnings.Add($"Environment \"{name}\" has a relative DataPath and is skipped.");
+                continue;
+            }
+
             result.Add(new PolicyEnvironment(
                 Name: name,
                 DataPath: dataPath,
@@ -171,6 +204,12 @@ public static class EnvironmentCatalogReader
         var dataPath = registryLayer["DataPath"];
         if (string.IsNullOrWhiteSpace(dataPath))
             return null;
+
+        if (!EnvironmentPaths.IsAbsolute(dataPath))
+        {
+            warnings.Add("Environment \"Default\" has a relative DataPath and is skipped.");
+            return null;
+        }
 
         return new PolicyEnvironment(
             Name: "Default",
