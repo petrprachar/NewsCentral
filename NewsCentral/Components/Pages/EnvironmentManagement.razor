@@ -1,0 +1,617 @@
+@page "/environment-management"
+@using System.Threading
+@using NewsCentral.Configuration
+@using NewsCentral.Services
+@using NewsCentral.Components.Shared
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@inject EnvironmentContext EnvironmentContext
+@inject EnvironmentSettingsService EnvironmentSettingsService
+@inject EnvironmentDirectoryService EnvironmentDirectory
+@inject DistributionServiceRouter DistributionRouter
+@inject DistributionStatusTracker DistributionStatus
+@inject AppConfiguration AppConfig
+@inject IndexGenerationService IndexService
+
+@* M5a — Environment Management page. TODO(i18n): plain English for now, following M3a/M4a. *@
+
+<PageTitle>Environment Management</PageTitle>
+
+<div class="page-container">
+    <div class="page-header">
+        <h1>Environment Management</h1>
+        <p class="page-description">Distribution settings for the current environment.</p>
+    </div>
+
+    @if (isAuthorized)
+    {
+        @* ── 1. Current environment ─────────────────────────────────────── *@
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-hdd-network me-2"></i>Current environment</h5></div>
+            <div class="card-body">
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Display name:</strong></div>
+                    <div class="col-md-9">@current?.DisplayName</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>DataPath:</strong></div>
+                    <div class="col-md-9"><code>@EnvironmentContext.DataPath</code></div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Kind:</strong></div>
+                    <div class="col-md-9">
+                        @if (current?.Kind == EnvironmentKind.Policy)
+                        {
+                            <span class="badge bg-secondary me-1">policy</span>
+                        }
+                        @if (current?.Kind == EnvironmentKind.Shared)
+                        {
+                            <span class="badge bg-info text-dark me-1">shared</span>
+                        }
+                        @if (current != null && !current.IsShareable)
+                        {
+                            <span class="badge bg-light text-dark me-1">this computer only</span>
+                        }
+                    </div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Settings source:</strong></div>
+                    <div class="col-md-9">@sourceText</div>
+                </div>
+                @if (effective?.PolicyEnvironmentName != null)
+                {
+                    <div class="row mb-2">
+                        <div class="col-md-3"></div>
+                        <div class="col-md-9 text-muted">managed by policy: @effective.PolicyEnvironmentName</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── 2. Distribution status ─────────────────────────────────────── *@
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-cloud-upload me-2"></i>Distribution status</h5></div>
+            <div class="card-body">
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Target:</strong></div>
+                    <div class="col-md-9"><code>@targetText</code></div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Fingerprint:</strong></div>
+                    <div class="col-md-9"><code>@(effective?.DistributionFingerprint ?? "—")</code></div>
+                </div>
+                @if (routerConfigurationError != null)
+                {
+                    <div class="row mb-2">
+                        <div class="col-md-3"><strong>Configuration error:</strong></div>
+                        <div class="col-md-9 text-danger">@routerConfigurationError</div>
+                    </div>
+                }
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Last success:</strong></div>
+                    <div class="col-md-9">@(DistributionStatus.LastSuccessUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Last failure:</strong></div>
+                    <div class="col-md-9">
+                        @(DistributionStatus.LastFailureUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")
+                        @if (DistributionStatus.LastFailureReason != null)
+                        {
+                            <text> — @DistributionStatus.LastFailureReason</text>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── 3. Settings editor ─────────────────────────────────────────── *@
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-gear me-2"></i>Settings</h5></div>
+            <div class="card-body">
+                @if (startNote != null)
+                {
+                    <div class="alert alert-info">@startNote</div>
+                }
+                @if (sourceErrorText != null)
+                {
+                    <div class="alert alert-warning">@sourceErrorText</div>
+                }
+                @if (validationErrors.Count > 0)
+                {
+                    <div class="alert alert-danger">
+                        <ul class="mb-0">
+                            @foreach (var error in validationErrors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                @if (saveError != null)
+                {
+                    <div class="alert alert-danger">@saveError</div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Display name</label>
+                    @if (IsPolicyField("displayName"))
+                    {
+                        <input class="form-control" value="@formDisplayName" disabled />
+                        <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                    }
+                    else
+                    {
+                        <input class="form-control" @bind="formDisplayName" />
+                    }
+                </div>
+
+                <div class="mb-3 form-check">
+                    @if (IsPolicyField("distribution.enabled"))
+                    {
+                        <input type="checkbox" class="form-check-input" checked="@formDistributionEnabled" disabled />
+                        <label class="form-check-label">
+                            Distribution enabled <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                        </label>
+                    }
+                    else
+                    {
+                        <input type="checkbox" class="form-check-input" id="distEnabled" @bind="formDistributionEnabled" />
+                        <label class="form-check-label" for="distEnabled">Distribution enabled</label>
+                    }
+                </div>
+
+                @if (formDistributionEnabled)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Mode</label>
+                        @if (IsPolicyField("distribution.mode"))
+                        {
+                            <input class="form-control" value="@formMode" disabled />
+                            <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                        }
+                        else
+                        {
+                            <select class="form-select" @bind="formMode">
+                                <option value="Local">Local</option>
+                                <option value="AzureBlob">AzureBlob</option>
+                            </select>
+                        }
+                    </div>
+
+                    @if (string.Equals(formMode, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Tenant ID</label>
+                            @if (IsPolicyField("distribution.azureBlob.tenantId"))
+                            {
+                                <input class="form-control" value="@formAzureTenantId" disabled />
+                                <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                            }
+                            else
+                            {
+                                <input class="form-control" @bind="formAzureTenantId" />
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Client ID</label>
+                            @if (IsPolicyField("distribution.azureBlob.clientId"))
+                            {
+                                <input class="form-control" value="@formAzureClientId" disabled />
+                                <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                            }
+                            else
+                            {
+                                <input class="form-control" @bind="formAzureClientId" />
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Account name</label>
+                            @if (IsPolicyField("distribution.azureBlob.accountName"))
+                            {
+                                <input class="form-control" value="@formAzureAccountName" disabled />
+                                <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                            }
+                            else
+                            {
+                                <input class="form-control" @bind="formAzureAccountName" />
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Container name</label>
+                            @if (IsPolicyField("distribution.azureBlob.containerName"))
+                            {
+                                <input class="form-control" value="@formAzureContainerName" disabled />
+                                <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                            }
+                            else
+                            {
+                                <input class="form-control" @bind="formAzureContainerName" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Local path</label>
+                            @if (IsPolicyField("distribution.localPath"))
+                            {
+                                <input class="form-control" value="@formLocalPath" disabled />
+                                <small class="text-muted"><i class="bi bi-lock me-1"></i>set by policy</small>
+                            }
+                            else
+                            {
+                                <input class="form-control" @bind="formLocalPath"
+                                       placeholder="(defaults to DataPath\_distribution if left blank)" />
+                            }
+                        </div>
+                    }
+                }
+
+                @if (testResult != null)
+                {
+                    <div class="alert @(IsTestSuccess(testResult) ? "alert-success" : "alert-warning")">@testResult</div>
+                }
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="RunTestAsync" disabled="@isTesting">
+                        @(isTesting ? "Testing…" : "Test")
+                    </button>
+                    <button class="btn btn-primary" @onclick="SaveAsync" disabled="@isSaving">
+                        @(isSaving ? "Saving…" : "Save")
+                    </button>
+                </div>
+
+                @if (showRegenerateOffer)
+                {
+                    <div class="alert alert-success mt-3">
+                        Settings saved.
+                        <button class="btn btn-sm btn-outline-success ms-2" @onclick="RegenerateAllAsync" disabled="@isRegenerating">
+                            @(isRegenerating ? "Regenerating…" : "Regenerate all team indexes now")
+                        </button>
+                        @if (regenerateSummary != null)
+                        {
+                            <div class="mt-2">@regenerateSummary</div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── 4. Same distribution target ────────────────────────────────── *@
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-diagram-3 me-2"></i>Same distribution target</h5></div>
+            <div class="card-body">
+                @if (!isCurrentShared)
+                {
+                    <p class="text-muted mb-0">This environment is not in the shared directory — collision check not available.</p>
+                }
+                else if (collisions.Count == 0)
+                {
+                    <p class="text-muted mb-0">No other shared environment uses this target.</p>
+                }
+                else
+                {
+                    <ul class="mb-0">
+                        @foreach (var collision in collisions)
+                        {
+                            var name = string.IsNullOrWhiteSpace(collision.DisplayName) ? collision.DataPath : collision.DisplayName;
+                            <li>@name (@collision.DataPath) publishes to the same target.</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<ConfirmDialog IsVisible="showRetargetConfirm"
+               Title="Change distribution target?"
+               Message="@retargetMessage"
+               ConfirmText="Continue"
+               CancelText="Cancel"
+               DialogType="warning"
+               OnConfirm="ConfirmSaveAsync"
+               OnCancel="CancelRetarget" />
+
+@code {
+    private bool isAuthorized;
+    private EnvironmentOption? current;
+    private EffectiveEnvironmentSettings? effective;
+    private string? routerConfigurationError;
+    private string sourceText = string.Empty;
+    private string? sourceErrorText;
+    private string? startNote;
+    private string targetText = string.Empty;
+
+    private string? formDisplayName;
+    private bool formDistributionEnabled;
+    private string formMode = "Local";
+    private string? formLocalPath;
+    private string? formAzureTenantId;
+    private string? formAzureClientId;
+    private string? formAzureAccountName;
+    private string? formAzureContainerName;
+
+    private IReadOnlyList<string> policyFields = Array.Empty<string>();
+    private List<string> validationErrors = new();
+
+    private bool showRetargetConfirm;
+    private string? retargetMessage;
+    private EnvironmentSettings? pendingSettings;
+    private string? pendingNewFingerprint;
+
+    private bool isSaving;
+    private string? saveError;
+    private bool showRegenerateOffer;
+    private bool isRegenerating;
+    private string? regenerateSummary;
+
+    private bool isTesting;
+    private string? testResult;
+
+    private bool isCurrentShared;
+    private IReadOnlyList<SharedDirectoryEntry> collisions = Array.Empty<SharedDirectoryEntry>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = AuthService.GetCurrentUser();
+        if (user == null || !user.IsSystemAdmin)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        isAuthorized = true;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        current = EnvironmentDirectory.Current;
+        effective = await EnvironmentSettingsService.GetAsync();
+
+        // Forces the router to build (if it hasn't yet this session) so ConfigurationError
+        // reflects the CURRENT settings even if nothing has actually tried to distribute anything.
+        await DistributionRouter.EnsureBuiltAsync();
+        routerConfigurationError = DistributionRouter.ConfigurationError;
+
+        policyFields = effective.PolicyFields;
+
+        sourceText = effective.Source switch
+        {
+            EnvironmentSettingsSource.EnvironmentFile => "Environment file",
+            EnvironmentSettingsSource.MachineDefaults => "This machine's defaults",
+            EnvironmentSettingsSource.Unreachable => "Could not be read",
+            _ => "Invalid"
+        };
+
+        EnvironmentSettings baseSettings;
+        if (effective.Source == EnvironmentSettingsSource.EnvironmentFile ||
+            effective.Source == EnvironmentSettingsSource.MachineDefaults)
+        {
+            baseSettings = effective.Settings!;
+            startNote = effective.Source == EnvironmentSettingsSource.MachineDefaults
+                ? "Not yet stored in this environment — Save stores them."
+                : null;
+            sourceErrorText = null;
+        }
+        else // Invalid / Unreachable — Settings is null; start from this machine's own defaults.
+        {
+            baseSettings = EnvironmentSettingsResolver.FromMachineConfiguration(AppConfig);
+            startNote = "Saving replaces the stored settings.";
+            sourceErrorText = effective.Error;
+        }
+
+        formDisplayName = baseSettings.DisplayName;
+        formDistributionEnabled = baseSettings.Distribution.Enabled;
+        formMode = baseSettings.Distribution.Mode;
+        formLocalPath = baseSettings.Distribution.LocalPath;
+        formAzureTenantId = baseSettings.Distribution.AzureBlob.TenantId;
+        formAzureClientId = baseSettings.Distribution.AzureBlob.ClientId;
+        formAzureAccountName = baseSettings.Distribution.AzureBlob.AccountName;
+        formAzureContainerName = baseSettings.Distribution.AzureBlob.ContainerName;
+
+        targetText = effective.Settings != null
+            ? EnvironmentSettingsService.DescribeDistributionTarget(effective.Settings.Distribution, EnvironmentContext.DataPath)
+            : "—";
+
+        RefreshCollisions();
+    }
+
+    private void RefreshCollisions()
+    {
+        isCurrentShared = EnvironmentDirectory.FindCurrentSharedEntry() != null;
+        collisions = EnvironmentChangeRules.FindCollisions(
+            EnvironmentContext.DataPath, effective?.DistributionFingerprint, EnvironmentDirectory.SharedEntries);
+    }
+
+    private bool IsPolicyField(string name) => policyFields.Contains(name);
+
+    private static bool IsTestSuccess(string result) =>
+        result == "OK" || result.StartsWith("Container exists", StringComparison.Ordinal);
+
+    private EnvironmentSettings BuildFormSettings() => new()
+    {
+        SchemaVersion = EnvironmentSettingsResolver.CurrentSchemaVersion,
+        DisplayName = string.IsNullOrWhiteSpace(formDisplayName) ? null : formDisplayName,
+        Distribution = new DistributionSettings
+        {
+            Enabled = formDistributionEnabled,
+            Mode = formMode,
+            LocalPath = string.IsNullOrWhiteSpace(formLocalPath) ? null : formLocalPath,
+            AzureBlob = new AzureBlobSettings
+            {
+                TenantId = formAzureTenantId ?? string.Empty,
+                ClientId = formAzureClientId ?? string.Empty,
+                AccountName = formAzureAccountName ?? string.Empty,
+                ContainerName = formAzureContainerName ?? string.Empty
+            }
+        }
+    };
+
+    private async Task SaveAsync()
+    {
+        saveError = null;
+        validationErrors.Clear();
+        showRegenerateOffer = false;
+        regenerateSummary = null;
+
+        var newSettings = BuildFormSettings();
+        var errors = EnvironmentSettingsResolver.Validate(newSettings);
+        if (errors.Count > 0)
+        {
+            validationErrors = errors.ToList();
+            return;
+        }
+
+        var newFingerprint = EnvironmentSettingsResolver.Fingerprint(newSettings, EnvironmentContext.DataPath);
+        var oldFingerprint = effective?.DistributionFingerprint;
+        var oldEnabled = effective?.Settings?.Distribution.Enabled ?? false;
+
+        if (EnvironmentChangeRules.RequiresRetargetConfirmation(oldFingerprint, oldEnabled, newFingerprint))
+        {
+            var oldTarget = effective?.Settings != null
+                ? EnvironmentSettingsService.DescribeDistributionTarget(effective.Settings.Distribution, EnvironmentContext.DataPath)
+                : "nothing";
+            var newTarget = newFingerprint != null
+                ? EnvironmentSettingsService.DescribeDistributionTarget(newSettings.Distribution, EnvironmentContext.DataPath)
+                : "nothing (distribution disabled)";
+
+            retargetMessage =
+                $"Clients currently receive content from {oldTarget}. After this change they will stop receiving " +
+                $"updates until they are reconfigured to {newTarget}. Continue?";
+            pendingSettings = newSettings;
+            pendingNewFingerprint = newFingerprint;
+            showRetargetConfirm = true;
+            return;
+        }
+
+        await DoSaveAsync(newSettings, newFingerprint);
+    }
+
+    private async Task ConfirmSaveAsync()
+    {
+        showRetargetConfirm = false;
+        if (pendingSettings == null)
+            return;
+
+        var settings = pendingSettings;
+        var fingerprint = pendingNewFingerprint;
+        pendingSettings = null;
+        pendingNewFingerprint = null;
+
+        await DoSaveAsync(settings, fingerprint);
+    }
+
+    private void CancelRetarget()
+    {
+        showRetargetConfirm = false;
+        pendingSettings = null;
+        pendingNewFingerprint = null;
+    }
+
+    private async Task DoSaveAsync(EnvironmentSettings settings, string? newFingerprint)
+    {
+        isSaving = true;
+        var oldFingerprint = effective?.DistributionFingerprint;
+        try
+        {
+            await EnvironmentSettingsService.SaveAsync(settings);
+            await EnvironmentDirectory.UpdateCurrentFingerprintAsync(newFingerprint);
+
+            await LoadAsync();
+
+            if (newFingerprint != null && !string.Equals(oldFingerprint, newFingerprint, StringComparison.Ordinal))
+                showRegenerateOffer = true;
+        }
+        catch (Exception ex)
+        {
+            saveError = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task RegenerateAllAsync()
+    {
+        isRegenerating = true;
+        try
+        {
+            var result = await IndexService.RegenerateAllIndexesAsync();
+            regenerateSummary = result.DistributionFailures.Count == 0
+                ? $"Regenerated {result.Regenerated} team index(es), 0 distribution failures."
+                : $"Regenerated {result.Regenerated} team index(es), {result.DistributionFailures.Count} distribution failure(s): " +
+                  string.Join("; ", result.DistributionFailures);
+        }
+        catch (Exception ex)
+        {
+            regenerateSummary = $"Regeneration failed: {ex.Message}";
+        }
+        finally
+        {
+            isRegenerating = false;
+        }
+    }
+
+    private async Task RunTestAsync()
+    {
+        testResult = null;
+        isTesting = true;
+        try
+        {
+            if (string.Equals(formMode, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                var azureSettings = new AzureBlobSettings
+                {
+                    TenantId = formAzureTenantId ?? string.Empty,
+                    ClientId = formAzureClientId ?? string.Empty,
+                    AccountName = formAzureAccountName ?? string.Empty,
+                    ContainerName = formAzureContainerName ?? string.Empty
+                };
+                testResult = await AzureBlobDistributionService.TestContainerAsync(azureSettings, cts.Token);
+            }
+            else
+            {
+                testResult = await TestLocalRootAsync(formLocalPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            testResult = ex.Message;
+        }
+        finally
+        {
+            isTesting = false;
+        }
+    }
+
+    private async Task<string> TestLocalRootAsync(string? localPath)
+    {
+        var root = string.IsNullOrWhiteSpace(localPath)
+            ? Path.Combine(EnvironmentContext.DataPath, "_distribution")
+            : localPath;
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            if (!Directory.Exists(root))
+                return $"Folder does not exist: {root}";
+
+            var testFile = Path.Combine(root, $".newscentral-write-test-{Guid.NewGuid()}.tmp");
+            await File.WriteAllTextAsync(testFile, "test", cts.Token);
+            File.Delete(testFile);
+            return "OK";
+        }
+        catch (OperationCanceledException)
+        {
+            return "Timed out after 10 seconds.";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+}

@@ -83,4 +83,47 @@ public class AzureBlobDistributionService : IBlobDistributionService
         await _container.CreateIfNotExistsAsync(PublicAccessType.None);
         _containerEnsured = true;
     }
+
+    /// <summary>
+    /// Environment Management page's Test button (M5a): uses the FORM values directly (never the
+    /// saved environment.json), the same credential options as the constructor above (interactive
+    /// MSAL, "NewsCentral" token cache), and ONLY checks <see cref="BlobContainerClient.ExistsAsync"/>
+    /// — it never calls <see cref="BlobContainerClient.CreateIfNotExistsAsync"/>, unlike the
+    /// constructor's own <see cref="EnsureContainerAsync"/>, so testing a non-existent container
+    /// name never creates one.
+    /// </summary>
+    public static async Task<string> TestContainerAsync(AzureBlobSettings settings, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(settings.AccountName))
+            return "Account name is required.";
+        if (string.IsNullOrWhiteSpace(settings.ClientId))
+            return "Client ID is required.";
+        if (string.IsNullOrWhiteSpace(settings.ContainerName))
+            return "Container name is required.";
+
+        try
+        {
+            var credential = new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
+            {
+                TenantId = settings.TenantId,
+                ClientId = settings.ClientId,
+                TokenCachePersistenceOptions = new TokenCachePersistenceOptions { Name = "NewsCentral" }
+            });
+
+            var serviceUri  = new Uri($"https://{settings.AccountName}.blob.core.windows.net");
+            var blobService = new BlobServiceClient(serviceUri, credential);
+            var container   = blobService.GetBlobContainerClient(settings.ContainerName);
+
+            var exists = await container.ExistsAsync(ct);
+            return exists.Value ? "Container exists" : "Container not found";
+        }
+        catch (OperationCanceledException)
+        {
+            return "Timed out.";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
 }

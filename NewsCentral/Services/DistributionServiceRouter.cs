@@ -45,6 +45,14 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
 
     private void OnRebuildTriggered() => _inner = null;
 
+    /// <summary>
+    /// Forces the inner service to build (if it hasn't already) purely so
+    /// <see cref="ConfigurationError"/> reflects the CURRENT settings — the Environment Management
+    /// page (M5a) needs to show a configuration problem even when nothing has actually attempted a
+    /// distribution call yet this session.
+    /// </summary>
+    public async Task EnsureBuiltAsync() => await GetInnerAsync();
+
     private async Task<IBlobDistributionService> GetInnerAsync()
     {
         var current = _inner;

@@ -87,6 +87,52 @@ public sealed class EnvironmentDirectoryService
         EnvironmentListBuilder.Build(_catalog, _config.DataPath, GetState(), _environment.DataPath, includeHidden);
 
     /// <summary>
+    /// The locally-cached Shared entries this machine has learned of — including tombstones — for
+    /// the Environment Management page's collision check (M5a). Read-only; callers never mutate
+    /// the returned list directly.
+    /// </summary>
+    public IReadOnlyList<SharedDirectoryEntry> SharedEntries => GetState().SharedEntries;
+
+    /// <summary>
+    /// The current environment's own (non-tombstoned) entry in the local Shared-entry cache, or
+    /// null when the current environment is not in the shared directory at all — the Environment
+    /// Management page uses this to decide whether to show the collision section or the
+    /// "not in the shared directory" message.
+    /// </summary>
+    public SharedDirectoryEntry? FindCurrentSharedEntry()
+    {
+        var canonical = EnvironmentPaths.Canonicalize(_environment.DataPath);
+        return GetState().SharedEntries.FirstOrDefault(
+            e => e.DeletedUtc == null && EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
+    }
+
+    /// <summary>
+    /// After a successful Save on the Environment Management page: if the current environment is
+    /// in the local Shared-entry cache, updates that entry's DistributionFingerprint (ModifiedUtc =
+    /// now) and syncs. A no-op (no state change, no sync) when the current environment is not in
+    /// the shared directory.
+    /// </summary>
+    public async Task UpdateCurrentFingerprintAsync(string? fingerprint)
+    {
+        var canonical = EnvironmentPaths.Canonicalize(_environment.DataPath);
+        var state = GetState();
+        var index = state.SharedEntries.FindIndex(
+            e => e.DeletedUtc == null && EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
+        if (index < 0)
+            return;
+
+        state.SharedEntries[index] = state.SharedEntries[index] with
+        {
+            DistributionFingerprint = fingerprint,
+            ModifiedUtc = DateTime.UtcNow
+        };
+
+        await SaveStateAsync(state);
+        Changed?.Invoke();
+        await SyncSharedDirectoryAsync(EnvironmentInitStatus.Ready);
+    }
+
+    /// <summary>
     /// The option matching the live <see cref="EnvironmentContext.DataPath"/> — always shown even if
     /// it is a hidden Policy entry. Synthesizes a fallback option (last path segment as display name)
     /// in the edge case where the current path matches none of Policy/Configured/User, so the picker
