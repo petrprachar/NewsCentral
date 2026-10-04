@@ -10,6 +10,13 @@ namespace NewsCentral.Services;
 /// see <see cref="EnvironmentSettingsResolver"/> for the resolution/validation rules themselves,
 /// which are pure and live in NewsCentral.Shared.
 ///
+/// M3b: after resolving (unless the result is Invalid), <see cref="GetAsync"/> also overlays a
+/// matching Group Policy <see cref="PolicyEnvironment"/> from the injected
+/// <see cref="EnvironmentCatalog"/> — read once at startup from a registry-only configuration — via
+/// <see cref="EnvironmentSettingsResolver.ApplyPolicy"/>, and computes the fingerprint afterward so
+/// it reflects the overlaid settings. <see cref="SaveAsync"/> is unaffected: it always writes
+/// exactly what it is given, and the next read overlays policy on top again.
+///
 /// Caching note: an external edit to config/environment.json (e.g. by hand, or by a second
 /// NewsCentral instance) is picked up only after a restart or an <see cref="EnvironmentContext"/>
 /// switch — this is not a FileSystemWatcher, and there is deliberately no polling.
@@ -23,6 +30,7 @@ public sealed class EnvironmentSettingsService
     private readonly EnvironmentContext _environment;
     private readonly AppConfiguration _config;
     private readonly AuthenticationService _authService;
+    private readonly EnvironmentCatalog _catalog;
 
     // volatile, no lock: a concurrent first GetAsync() may resolve from disk twice, same
     // acceptable race as DistributionServiceRouter's inner-service build.
@@ -34,12 +42,14 @@ public sealed class EnvironmentSettingsService
         IStorageService storage,
         EnvironmentContext environment,
         AppConfiguration config,
-        AuthenticationService authService)
+        AuthenticationService authService,
+        EnvironmentCatalog catalog)
     {
         _storage = storage;
         _environment = environment;
         _config = config;
         _authService = authService;
+        _catalog = catalog;
         _environment.Changed += OnEnvironmentChanged;
     }
 
@@ -78,11 +88,32 @@ public sealed class EnvironmentSettingsService
         var machineDefaults = EnvironmentSettingsResolver.FromMachineConfiguration(_config);
         var resolved = EnvironmentSettingsResolver.Resolve(fileJson, machineDefaults);
 
-        var fingerprint = resolved.Settings != null
-            ? EnvironmentSettingsResolver.Fingerprint(resolved.Settings, _environment.DataPath)
-            : null;
+        // Policy (M3b) never rescues a corrupt file — an Invalid result is returned as-is.
+        if (resolved.Source == EnvironmentSettingsSource.Invalid)
+            return resolved;
 
-        return resolved with { DistributionFingerprint = fingerprint };
+        var effectiveSettings = resolved.Settings!;
+        string? policyEnvironmentName = null;
+        IReadOnlyList<string> policyFields = Array.Empty<string>();
+
+        var policy = _catalog.FindByDataPath(_environment.DataPath);
+        if (policy != null)
+        {
+            (effectiveSettings, policyFields) = EnvironmentSettingsResolver.ApplyPolicy(effectiveSettings, policy);
+            policyEnvironmentName = policy.IsImplicitDefault ? $"{policy.Name} (implicit Default)" : policy.Name;
+        }
+
+        // Fingerprint is computed AFTER the policy overlay, so it reflects what will actually be
+        // used to publish, not the pre-overlay value.
+        var fingerprint = EnvironmentSettingsResolver.Fingerprint(effectiveSettings, _environment.DataPath);
+
+        return resolved with
+        {
+            Settings = effectiveSettings,
+            DistributionFingerprint = fingerprint,
+            PolicyEnvironmentName = policyEnvironmentName,
+            PolicyFields = policyFields
+        };
     }
 
     /// <summary>

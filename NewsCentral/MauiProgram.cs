@@ -160,6 +160,17 @@ public static class MauiProgram
         // registered above, so plain constructor injection is enough (no custom factory needed).
         builder.Services.AddSingleton<AuthenticationService>();
 
+        // Policy environment catalog (M3b) — read ONCE at startup from a dedicated registry-only
+        // configuration (never the merged appsettings+registry one above), so appsettings can never
+        // impersonate a Group Policy-defined environment. See EnvironmentCatalog.cs.
+        var registryOnlyConfig = new ConfigurationBuilder()
+            .AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsCentral")
+            .Build();
+        var environmentCatalog = EnvironmentCatalogReader.Read(registryOnlyConfig);
+        foreach (var warning in environmentCatalog.Warnings)
+            System.Diagnostics.Debug.WriteLine($"[EnvironmentCatalog] {warning}");
+        builder.Services.AddSingleton(environmentCatalog);
+
         // Per-environment distribution settings (config/environment.json) — DistributionServiceRouter
         // reads this instead of AppConfiguration directly; see EnvironmentSettingsService.cs.
         builder.Services.AddSingleton<EnvironmentSettingsService>();

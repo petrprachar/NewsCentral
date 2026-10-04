@@ -46,7 +46,7 @@
             {
                 <div class="alert alert-info d-flex justify-content-between align-items-center mx-4 mt-2 mb-0">
                     <span>
-                        This environment has no stored settings — using this machine's defaults (@bannerTargetText).
+                        This environment has no stored settings — using this machine's defaults (@bannerTargetText).@bannerPolicySuffix
                         @if (!string.IsNullOrEmpty(saveBannerError))
                         {
                             <strong class="text-danger ms-2">@saveBannerError</strong>
@@ -80,6 +80,7 @@
     private enum EnvironmentBannerKind { None, MachineDefaults, Invalid }
     private EnvironmentBannerKind environmentBanner = EnvironmentBannerKind.None;
     private string? bannerTargetText;
+    private string? bannerPolicySuffix;
     private string? environmentError;
     private string? saveBannerError;
     private bool isSavingEnvironmentDefaults;
@@ -129,6 +130,9 @@
             case EnvironmentSettingsSource.MachineDefaults:
                 environmentBanner = EnvironmentBannerKind.MachineDefaults;
                 bannerTargetText = ComposeBannerTarget(effective.Settings!.Distribution);
+                bannerPolicySuffix = effective.PolicyEnvironmentName != null
+                    ? $" (managed by policy: {effective.PolicyEnvironmentName})"
+                    : null;
                 environmentError = null;
                 break;
 

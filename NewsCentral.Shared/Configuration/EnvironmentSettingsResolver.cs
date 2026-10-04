@@ -24,12 +24,32 @@ public enum EnvironmentSettingsSource
 /// <see cref="DistributionFingerprint"/> is not populated by <see cref="EnvironmentSettingsResolver.Resolve"/>
 /// itself (that method has no DataPath to compute it from) — callers that have one combine it in,
 /// typically via <c>result with { DistributionFingerprint = Fingerprint(result.Settings, dataPath) }</c>.
+///
+/// <see cref="PolicyEnvironmentName"/> and <see cref="PolicyFields"/> (M3b) are populated only by
+/// NewsCentral.Services.EnvironmentSettingsService, after overlaying a matching
+/// <see cref="PolicyEnvironment"/> via <see cref="EnvironmentSettingsResolver.ApplyPolicy"/> — never
+/// by <see cref="Resolve"/> itself, which has no catalog to consult. Both default to "no policy
+/// applied" (null / empty) so existing positional construction of this record is unaffected.
 /// </summary>
 public sealed record EffectiveEnvironmentSettings(
     EnvironmentSettingsSource Source,
     EnvironmentSettings? Settings,
     string? Error,
-    string? DistributionFingerprint);
+    string? DistributionFingerprint)
+{
+    /// <summary>
+    /// The matching policy entry's name when one applied, "{Name} (implicit Default)" for the
+    /// implicit Default entry, or null when no policy entry matched this DataPath.
+    /// </summary>
+    public string? PolicyEnvironmentName { get; init; }
+
+    /// <summary>
+    /// JSON-path-like names of exactly the fields the policy entry overrode (e.g.
+    /// "distribution.localPath") — see <see cref="EnvironmentSettingsResolver.ApplyPolicy"/>. Empty
+    /// when <see cref="PolicyEnvironmentName"/> is null.
+    /// </summary>
+    public IReadOnlyList<string> PolicyFields { get; init; } = Array.Empty<string>();
+}
 
 /// <summary>
 /// Pure, static, no I/O — parsing, validation and fingerprinting for per-environment distribution

@@ -153,6 +153,16 @@
                     <div class="col-md-3"><strong>Fingerprint:</strong></div>
                     <div class="col-md-9"><code>@(environmentFingerprint ?? "—")</code></div>
                 </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Managed by policy:</strong></div>
+                    <div class="col-md-9">@(environmentPolicyName ?? "No")</div>
+                </div>
+                <div class="row mb-2">
+                    <div class="col-md-3"><strong>Overridden by policy:</strong></div>
+                    <div class="col-md-9">
+                        <code>@(environmentPolicyFields.Count > 0 ? string.Join(", ", environmentPolicyFields) : "—")</code>
+                    </div>
+                </div>
                 @if (environmentSettings.ModifiedBy != null || environmentSettings.ModifiedUtc != null)
                 {
                     <div class="row mb-2">
@@ -213,6 +223,8 @@
     private string? environmentTargetText;
     private string? environmentFingerprint;
     private string? environmentError;
+    private string? environmentPolicyName;
+    private IReadOnlyList<string> environmentPolicyFields = Array.Empty<string>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -244,6 +256,8 @@
         environmentSettings = effective.Settings;
         environmentFingerprint = effective.DistributionFingerprint;
         environmentError = effective.Error;
+        environmentPolicyName = effective.PolicyEnvironmentName;
+        environmentPolicyFields = effective.PolicyFields;
         environmentTargetText = environmentSettings != null
             ? EnvironmentSettingsService.DescribeDistributionTarget(environmentSettings.Distribution, EnvironmentContext.DataPath)
             : null;
