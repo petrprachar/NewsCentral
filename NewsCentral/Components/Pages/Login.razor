@@ -10,6 +10,7 @@
 @inject IStringLocalizer<Login> Localizer
 @inject WindowsIdentityService WindowsIdentityService
 @inject DataSeederService DataSeeder
+@inject EnvironmentDirectoryService EnvironmentDirectory
 
 <PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>
 
@@ -314,6 +315,11 @@
             System.Diagnostics.Debug.WriteLine($"Error loading teams: {teamEx.Message}");
             // Don't fail login if team selection fails
         }
+
+        // "Last used" is recorded only after a successful login, never on mere picker selection —
+        // best-effort: EnvironmentDirectoryService swallows and Debug-logs its own failures, so a
+        // write failure here can never block login.
+        await EnvironmentDirectory.RecordSuccessfulLoginAsync();
 
         Navigation.NavigateTo("/");
     }

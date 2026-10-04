@@ -1,19 +1,47 @@
 using NewsCentral.Models;
+using NewsCentral.Configuration;
 using Microsoft.Extensions.Configuration;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace NewsCentral.Services;
 
+/// <summary>
+/// Result of <see cref="DataSeederService.EnsureInitializedAsync"/> for the environment that was
+/// current at the time of the call. <see cref="NotInitialized"/> is not an error — it means this is
+/// a non-Configured environment with no <c>config/users.json</c> yet, which M4a deliberately never
+/// seeds (see the type's own remarks). An unreachable/unwritable DataPath instead faults the Task.
+/// </summary>
+public enum EnvironmentInitStatus
+{
+    Ready,
+    NotInitialized
+}
+
+/// <summary>
+/// Seeds the default admin user into a fresh data store. M4a: seeding is now per-environment and
+/// gated to the Configured environment only — switching to any OTHER environment (a Policy or
+/// User-added one) that has no <c>config/users.json</c> yet reports
+/// <see cref="EnvironmentInitStatus.NotInitialized"/> and seeds nothing; an administrator will
+/// initialize it from Environment Management (M5). Seeding only ever happens for the one
+/// environment this machine's own appsettings/registry DataPath names — never for an environment
+/// reached by switching, even as a SystemAdmin — because seeding silently creates a brand-new admin
+/// account, which is the wrong thing to do to someone else's existing (if momentarily unreachable)
+/// environment.
+/// </summary>
 public class DataSeederService
 {
     private readonly IStorageService _storage;
     private readonly EnvironmentContext _environment;
     private readonly IConfiguration _configuration;
+    private readonly AppConfiguration _appConfig;
 
-    // TODO(M3): this memoizes one seed check for the process lifetime, regardless of which
-    // environment DataPath currently points at. Per-environment seeding (so switching
-    // environments at runtime re-evaluates seeding for the new DataPath) is designed in M3/M5.
-    private readonly Lazy<Task> _initialization;
+    // Memoized per canonical DataPath — not per process — so switching between environments
+    // re-evaluates seeding/readiness independently for each one, while still never re-checking an
+    // environment this process has already resolved once. Every caller for the same canonical path
+    // receives the same Task and observes the same completion or fault.
+    private readonly ConcurrentDictionary<string, Task<EnvironmentInitStatus>> _initialization =
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,41 +52,62 @@ public class DataSeederService
     public DataSeederService(
         IStorageService storage,
         EnvironmentContext environment,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        AppConfiguration appConfig)
     {
         _storage       = storage;
         _environment   = environment;
         _configuration = configuration;
-        _initialization = new Lazy<Task>(InitializeIfNeededAsync);
+        _appConfig     = appConfig;
     }
 
     // ── Bootstrap ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Runs <see cref="InitializeIfNeededAsync"/> at most once per process; every caller — the
-    /// fire-and-forget call from App.CreateWindow and the awaited call from Login.razor — receives
-    /// the same Task and observes the same completion or fault. Exceptions from initialization
-    /// propagate to every caller through this Task; none are swallowed here.
+    /// Ensures the CURRENT environment (<see cref="EnvironmentContext.DataPath"/> at the moment of
+    /// the call) is seeded, if it is allowed to be, and reports whether it is ready to log into.
+    /// Every caller — the fire-and-forget call from App.CreateWindow and the awaited call from
+    /// Login.razor — for the same canonical DataPath receives the same Task and observes the same
+    /// result or fault; I/O exceptions propagate to every caller through that Task, none are
+    /// swallowed here.
     /// </summary>
-    public Task EnsureInitializedAsync() => _initialization.Value;
+    public Task<EnvironmentInitStatus> EnsureInitializedAsync()
+    {
+        var dataPath = _environment.DataPath;
+        var canonical = EnvironmentPaths.Canonicalize(dataPath);
+        return _initialization.GetOrAdd(canonical, _ => InitializeIfNeededAsync(dataPath));
+    }
 
     /// <summary>
-    /// Runs once on startup. If config/users.json is absent the entire
-    /// data store is considered uninitialised and seeded from scratch.
+    /// If <c>config/users.json</c> already exists, the environment is <see cref="EnvironmentInitStatus.Ready"/>
+    /// regardless of which environment it is. Otherwise: the Configured environment (this machine's
+    /// own appsettings/registry DataPath) is seeded from scratch and becomes Ready; any other
+    /// environment is reported <see cref="EnvironmentInitStatus.NotInitialized"/> and is never seeded.
     /// </summary>
-    public async Task InitializeIfNeededAsync()
+    private async Task<EnvironmentInitStatus> InitializeIfNeededAsync(string dataPath)
     {
         System.Diagnostics.Debug.WriteLine(
-            "=== DataSeeder: Checking if initialization needed ===");
+            $"=== DataSeeder: Checking if initialization needed for '{dataPath}' ===");
 
         if (await _storage.FileExistsAsync("config/users.json"))
         {
             System.Diagnostics.Debug.WriteLine("✓ Users file exists — initialization not needed");
-            return;
+            return EnvironmentInitStatus.Ready;
+        }
+
+        var isConfiguredEnvironment =
+            EnvironmentPaths.Canonicalize(dataPath) == EnvironmentPaths.Canonicalize(_appConfig.DataPath);
+
+        if (!isConfiguredEnvironment)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "✗ Users file not found and this is not the Configured environment — reporting NotInitialized, seeding nothing");
+            return EnvironmentInitStatus.NotInitialized;
         }
 
         System.Diagnostics.Debug.WriteLine("✗ Users file not found - starting initialization");
         await InitializeAsync();
+        return EnvironmentInitStatus.Ready;
     }
 
     public async Task InitializeAsync()

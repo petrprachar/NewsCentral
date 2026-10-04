@@ -136,9 +136,43 @@ public static class MauiProgram
             new HmacService(new HmacOptions { SecretKey = appConfig.HmacSecretKey }));
         builder.Services.AddSingleton<EcdsaSignatureService>();
 
+        // Policy environment catalog (M3b) — read ONCE at startup from a dedicated registry-only
+        // configuration (never the merged appsettings+registry one above), so appsettings can never
+        // impersonate a Group Policy-defined environment. Computed here (moved up from later in M4a)
+        // because EnvironmentContext's startup DataPath selection, just below, needs it.
+        var registryOnlyConfig = new ConfigurationBuilder()
+            .AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsCentral")
+            .Build();
+        var environmentCatalog = EnvironmentCatalogReader.Read(registryOnlyConfig);
+        foreach (var warning in environmentCatalog.Warnings)
+            System.Diagnostics.Debug.WriteLine($"[EnvironmentCatalog] {warning}");
+        builder.Services.AddSingleton(environmentCatalog);
+
+        // Per-user environment list (M4a) — the same instance is used here to pick the startup
+        // DataPath and then registered for EnvironmentDirectoryService to read/write at runtime.
+        var userEnvironmentStore = new UserEnvironmentStore();
+        builder.Services.AddSingleton(userEnvironmentStore);
+
+        var startupState = userEnvironmentStore.Load();
+        var startupOptions = EnvironmentListBuilder.Build(
+            environmentCatalog, appConfig.DataPath, startupState, currentDataPath: null, includeHidden: false);
+        var selectedStartupPath = EnvironmentStartupSelector.Select(
+            startupOptions, startupState.LastUsedDataPath, environmentCatalog, appConfig.DataPath);
+
+        // EnvironmentStartupSelector never falls back to an environment that isn't shown — if the
+        // visible list is empty (no Policy entries, no Configured DataPath, no user entries), fall
+        // back to AppConfiguration.DataPath directly here, outside that pure function's concern.
+        var startupDataPath = !string.IsNullOrWhiteSpace(selectedStartupPath)
+            ? selectedStartupPath
+            : appConfig.DataPath;
+
+        System.Diagnostics.Debug.WriteLine(
+            $"[EnvironmentContext] Startup DataPath: '{startupDataPath}' " +
+            $"(selected: {(selectedStartupPath != null ? $"'{selectedStartupPath}'" : "none — fell back to Configured")})");
+
         // Single runtime source of DataPath — everything below reads it on every call instead of
         // capturing AppConfiguration.DataPath once at construction (see EnvironmentContext.cs).
-        builder.Services.AddSingleton<EnvironmentContext>();
+        builder.Services.AddSingleton(new EnvironmentContext(startupDataPath));
 
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
@@ -160,20 +194,14 @@ public static class MauiProgram
         // registered above, so plain constructor injection is enough (no custom factory needed).
         builder.Services.AddSingleton<AuthenticationService>();
 
-        // Policy environment catalog (M3b) — read ONCE at startup from a dedicated registry-only
-        // configuration (never the merged appsettings+registry one above), so appsettings can never
-        // impersonate a Group Policy-defined environment. See EnvironmentCatalog.cs.
-        var registryOnlyConfig = new ConfigurationBuilder()
-            .AddRegistryOverrides(SolutionConstants.Company, SolutionConstants.SolutionName, "NewsCentral")
-            .Build();
-        var environmentCatalog = EnvironmentCatalogReader.Read(registryOnlyConfig);
-        foreach (var warning in environmentCatalog.Warnings)
-            System.Diagnostics.Debug.WriteLine($"[EnvironmentCatalog] {warning}");
-        builder.Services.AddSingleton(environmentCatalog);
-
         // Per-environment distribution settings (config/environment.json) — DistributionServiceRouter
         // reads this instead of AppConfiguration directly; see EnvironmentSettingsService.cs.
         builder.Services.AddSingleton<EnvironmentSettingsService>();
+
+        // Environment picker / switch / add / remove / hide (M4a) — needs TeamContextService,
+        // registered a few lines below in "Register other services"; constructor-injection order
+        // doesn't matter to the DI container, only presence at resolution time.
+        builder.Services.AddSingleton<EnvironmentDirectoryService>();
 
         // Register other services
         builder.Services.AddSingleton<TeamService>();
@@ -192,7 +220,8 @@ public static class MauiProgram
             var environment = sp.GetRequiredService<EnvironmentContext>();
             var configuration = sp.GetRequiredService<IConfiguration>();
             var storageService = sp.GetRequiredService<IStorageService>();
-            return new DataSeederService(storageService, environment, configuration);
+            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
+            return new DataSeederService(storageService, environment, configuration, appConfiguration);
         });
 
         // Add localization — ResourcesPath tells the factory where to find per-type .resx files

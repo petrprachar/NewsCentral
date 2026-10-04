@@ -30,9 +30,9 @@ namespace NewsCentral
             {
                 System.Diagnostics.Debug.WriteLine("=== App: Starting background initialization ===");
 
-                await _dataSeeder.EnsureInitializedAsync();
+                var status = await _dataSeeder.EnsureInitializedAsync();
 
-                System.Diagnostics.Debug.WriteLine("=== App: Background initialization complete ===");
+                System.Diagnostics.Debug.WriteLine($"=== App: Background initialization complete ({status}) ===");
             }
             catch (Exception ex)
             {
