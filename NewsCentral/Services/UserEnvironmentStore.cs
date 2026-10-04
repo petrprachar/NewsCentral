@@ -36,7 +36,7 @@ public sealed class UserEnvironmentStore
                 return new UserEnvironmentState();
 
             var json = File.ReadAllText(_filePath);
-            var state = JsonSerializer.Deserialize<UserEnvironmentState>(json, UserEnvironmentStateJson.Options);
+            var state = UserEnvironmentStateJson.Deserialize(json);
             return state ?? new UserEnvironmentState();
         }
         catch (Exception ex)

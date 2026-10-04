@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace NewsCentral.Configuration;
 
@@ -16,8 +17,9 @@ public sealed class UserEnvironmentEntry
 
 /// <summary>
 /// The full contents of <c>%LocalAppData%\{Company}\NewsCentral\user-environments.json</c> — this
-/// machine+user's local environment list, hidden-policy-entry preferences, and last-used path for
-/// startup selection. Never shared, never synced (that is M4b).
+/// machine+user's local environment list, the Shared entries this machine has learned of (M4b, via
+/// <c>config/environments.json</c> sync), hidden-entry preferences, and last-used path for startup
+/// selection.
 /// </summary>
 public sealed class UserEnvironmentState
 {
@@ -25,8 +27,26 @@ public sealed class UserEnvironmentState
     public string? LastUsedDataPath { get; set; }
     public List<UserEnvironmentEntry> Entries { get; set; } = new();
 
-    /// <summary>Canonical (<see cref="EnvironmentPaths.Canonicalize"/>) DataPaths of policy entries hidden locally.</summary>
-    public List<string> HiddenPolicyPaths { get; set; } = new();
+    /// <summary>
+    /// The union of Shared-directory entries (<see cref="SharedDirectoryEntry"/>) this machine has
+    /// learned of from any environment it has opened — including tombstones, so a deletion already
+    /// known to this machine is never resurrected by a later merge. M4b.
+    /// </summary>
+    public List<SharedDirectoryEntry> SharedEntries { get; set; } = new();
+
+    /// <summary>
+    /// Canonical (<see cref="EnvironmentPaths.Canonicalize"/>) DataPaths of Policy or Shared entries
+    /// hidden locally. Renamed from <c>HiddenPolicyPaths</c> in M4b when Shared entries became
+    /// hideable too; <see cref="UserEnvironmentStateJson.Deserialize"/> folds an old file's
+    /// <c>hiddenPolicyPaths</c> key into this property on read, so existing local state survives the
+    /// rename unchanged.
+    /// </summary>
+    public List<string> HiddenPaths { get; set; } = new();
+
+    /// <summary>Landing pad for the pre-M4b JSON key — never read directly; see <see cref="UserEnvironmentStateJson.Deserialize"/>.</summary>
+    [JsonPropertyName("hiddenPolicyPaths")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? HiddenPolicyPathsLegacy { get; set; }
 }
 
 public static class UserEnvironmentStateJson
@@ -37,9 +57,28 @@ public static class UserEnvironmentStateJson
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true
     };
+
+    /// <summary>
+    /// Deserializes <paramref name="json"/> and folds a legacy <c>hiddenPolicyPaths</c> key into
+    /// <see cref="UserEnvironmentState.HiddenPaths"/> when the new key is absent/empty — a one-time
+    /// read-side migration. The legacy field is always cleared afterward, so a subsequent save never
+    /// writes the old key back out (see its <c>JsonIgnore</c>).
+    /// </summary>
+    public static UserEnvironmentState? Deserialize(string json)
+    {
+        var state = JsonSerializer.Deserialize<UserEnvironmentState>(json, Options);
+        if (state == null)
+            return null;
+
+        if (state.HiddenPaths.Count == 0 && state.HiddenPolicyPathsLegacy is { Count: > 0 } legacy)
+            state.HiddenPaths = legacy;
+
+        state.HiddenPolicyPathsLegacy = null;
+        return state;
+    }
 }
 
-/// <summary>Which of the three sources produced an <see cref="EnvironmentOption"/>.</summary>
+/// <summary>Which of the four sources produced an <see cref="EnvironmentOption"/>.</summary>
 public enum EnvironmentKind
 {
     /// <summary>A Group Policy-defined entry from <see cref="EnvironmentCatalog"/>. Cannot be removed.</summary>
@@ -47,6 +86,13 @@ public enum EnvironmentKind
 
     /// <summary>This machine's own appsettings/registry <c>DataPath</c> (<see cref="AppConfiguration.DataPath"/>).</summary>
     Configured,
+
+    /// <summary>
+    /// An entry from the shared <c>config/environments.json</c> directory (M4b), learned by this
+    /// machine via <see cref="SharedDirectoryMerger"/>. Removable (as a tombstone) only by a System
+    /// Administrator; hideable by anyone.
+    /// </summary>
+    Shared,
 
     /// <summary>A path the user added themselves, stored in <see cref="UserEnvironmentState"/>.</summary>
     User
@@ -75,20 +121,22 @@ public static class EnvironmentListBuilder
     /// <summary>
     /// Builds the visible (or, with <paramref name="includeHidden"/>, full) environment list.
     ///
-    /// Precedence: Policy entries always win a DataPath collision over Configured or User (they are
-    /// added first and later duplicates by canonical path are dropped). The Configured path is
-    /// listed unless a Policy entry already occupies that exact canonical path. User entries are
-    /// listed only when <paramref name="catalog"/> allows them
-    /// (<see cref="EnvironmentCatalog.AllowUserEnvironments"/>) or when the catalog has no entries at
-    /// all (an unmanaged machine), and are dropped if they collide by canonical path with a Policy or
-    /// Configured entry already in the list.
+    /// Precedence: Policy &gt; Configured &gt; Shared &gt; User, by canonical DataPath — each source
+    /// is processed in that order and a later source's entry is dropped if an earlier source already
+    /// claimed the same canonical path. User entries are listed only when <paramref name="catalog"/>
+    /// allows them (<see cref="EnvironmentCatalog.AllowUserEnvironments"/>) or when the catalog has no
+    /// entries at all (an unmanaged machine); Shared entries (M4b) follow that identical rule — see
+    /// the "shared" note below.
     ///
-    /// A Policy entry hidden via <see cref="UserEnvironmentState.HiddenPolicyPaths"/> is excluded
+    /// A Policy or Shared entry hidden via <see cref="UserEnvironmentState.HiddenPaths"/> is excluded
     /// unless <paramref name="includeHidden"/> is true, or it is the current environment
     /// (<paramref name="currentDataPath"/>) — the current environment is always shown even if hidden.
+    /// A Shared entry whose <see cref="SharedDirectoryEntry.DeletedUtc"/> is set (a tombstone) is
+    /// never shown, under any circumstance — tombstones exist only to propagate; see
+    /// <see cref="SharedDirectoryMerger"/>.
     ///
-    /// Ordering: Policy entries first (by name, ordinal-ignore-case), then Configured, then User
-    /// entries (by display name, ordinal-ignore-case).
+    /// Ordering: Policy (by name, ordinal-ignore-case), then Configured, then Shared (by display
+    /// name, ordinal-ignore-case), then User (by display name, ordinal-ignore-case).
     /// </summary>
     public static IReadOnlyList<EnvironmentOption> Build(
         EnvironmentCatalog catalog,
@@ -101,7 +149,7 @@ public static class EnvironmentListBuilder
             ? null
             : EnvironmentPaths.Canonicalize(currentDataPath);
 
-        var hiddenPaths = new HashSet<string>(state.HiddenPolicyPaths, StringComparer.OrdinalIgnoreCase);
+        var hiddenPaths = new HashSet<string>(state.HiddenPaths, StringComparer.OrdinalIgnoreCase);
 
         var seenPaths = new HashSet<string>();
         var policyOptions = new List<EnvironmentOption>();
@@ -153,6 +201,47 @@ public static class EnvironmentListBuilder
         }
 
         var userOptionsAllowed = catalog.AllowUserEnvironments || catalog.Entries.Count == 0;
+
+        var sharedOptions = new List<EnvironmentOption>();
+        if (userOptionsAllowed)
+        {
+            foreach (var entry in state.SharedEntries)
+            {
+                if (entry.DeletedUtc != null) // tombstoned — never shown, exists only to propagate
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(entry.DataPath))
+                    continue;
+
+                var canonical = EnvironmentPaths.Canonicalize(entry.DataPath);
+                if (!seenPaths.Add(canonical))
+                    continue;
+
+                var isCurrent = currentCanonical != null && canonical == currentCanonical;
+                var isHidden = hiddenPaths.Contains(canonical);
+
+                if (isHidden && !includeHidden && !isCurrent)
+                    continue;
+
+                var displayName = !string.IsNullOrWhiteSpace(entry.DisplayName)
+                    ? entry.DisplayName!
+                    : LastPathSegmentOrPath(entry.DataPath);
+
+                sharedOptions.Add(new EnvironmentOption(
+                    DataPath: entry.DataPath,
+                    DisplayName: displayName,
+                    Kind: EnvironmentKind.Shared,
+                    PolicyName: null,
+                    IsHidden: isHidden,
+                    IsShareable: EnvironmentPaths.IsShareable(entry.DataPath),
+                    IsCurrent: isCurrent));
+            }
+
+            sharedOptions = sharedOptions
+                .OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         var userOptions = new List<EnvironmentOption>();
 
         if (userOptionsAllowed)
@@ -189,6 +278,7 @@ public static class EnvironmentListBuilder
         var result = new List<EnvironmentOption>(policyOptions);
         if (configuredOption != null)
             result.Add(configuredOption);
+        result.AddRange(sharedOptions);
         result.AddRange(userOptions);
         return result;
     }

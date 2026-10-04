@@ -205,10 +205,10 @@ public sealed class EnvironmentDirectoryService
             return false;
 
         var state = GetState();
-        if (state.HiddenPolicyPaths.Any(p => string.Equals(p, canonical, StringComparison.OrdinalIgnoreCase)))
+        if (state.HiddenPaths.Any(p => string.Equals(p, canonical, StringComparison.OrdinalIgnoreCase)))
             return true; // already hidden — no-op, still a success from the caller's point of view
 
-        state.HiddenPolicyPaths.Add(canonical);
+        state.HiddenPaths.Add(canonical);
         await SaveStateAsync(state);
         Changed?.Invoke();
         return true;
@@ -218,10 +218,10 @@ public sealed class EnvironmentDirectoryService
     public async Task UnhideAllAsync()
     {
         var state = GetState();
-        if (state.HiddenPolicyPaths.Count == 0)
+        if (state.HiddenPaths.Count == 0)
             return;
 
-        state.HiddenPolicyPaths.Clear();
+        state.HiddenPaths.Clear();
         await SaveStateAsync(state);
         Changed?.Invoke();
     }

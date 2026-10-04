@@ -23,7 +23,7 @@ public sealed class EnvironmentDirectoryTests
             {
                 new() { DataPath = "C:\\Download\\Other", DisplayName = "Other box", AddedUtc = new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc) }
             },
-            HiddenPolicyPaths = new List<string> { "c:\\download\\hidden" }
+            HiddenPaths = new List<string> { "c:\\download\\hidden" }
         };
 
         var json = JsonSerializer.Serialize(state, UserEnvironmentStateJson.Options);
@@ -34,7 +34,7 @@ public sealed class EnvironmentDirectoryTests
         Assert.Equal("C:\\Download\\NewsCentral", roundTripped.LastUsedDataPath);
         Assert.Single(roundTripped.Entries);
         Assert.Equal("Other box", roundTripped.Entries[0].DisplayName);
-        Assert.Single(roundTripped.HiddenPolicyPaths);
+        Assert.Single(roundTripped.HiddenPaths);
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public sealed class EnvironmentDirectoryTests
         Assert.NotNull(roundTripped);
         Assert.Null(roundTripped!.LastUsedDataPath);
         Assert.Empty(roundTripped.Entries);
-        Assert.Empty(roundTripped.HiddenPolicyPaths);
+        Assert.Empty(roundTripped.HiddenPaths);
     }
 
     // ── EnvironmentPaths.IsAbsolute / IsShareable ───────────────────────────
@@ -218,7 +218,7 @@ public sealed class EnvironmentDirectoryTests
         var catalog = CatalogWith(Policy("Dev", "C:\\Policy\\Dev"));
         var state = new UserEnvironmentState
         {
-            HiddenPolicyPaths = new List<string> { EnvironmentPaths.Canonicalize("C:\\Policy\\Dev") }
+            HiddenPaths = new List<string> { EnvironmentPaths.Canonicalize("C:\\Policy\\Dev") }
         };
 
         var hidden = EnvironmentListBuilder.Build(catalog, null, state, currentDataPath: null, includeHidden: false);
