@@ -179,7 +179,7 @@
             {
                 <div class="row mb-2">
                     <div class="col-md-3"><strong>Error:</strong></div>
-                    <div class="col-md-9 text-danger">@environmentError</div>
+                    <div class="col-md-9 text-danger">@environmentError.</div>
                 </div>
             }
         </div>
@@ -255,7 +255,9 @@
 
         environmentSettings = effective.Settings;
         environmentFingerprint = effective.DistributionFingerprint;
-        environmentError = effective.Error;
+        // Trim any pre-existing trailing "." — the markup supplies exactly one itself, so the
+        // message ends with exactly one period regardless of how the raw error was formatted.
+        environmentError = effective.Error?.TrimEnd('.');
         environmentPolicyName = effective.PolicyEnvironmentName;
         environmentPolicyFields = effective.PolicyFields;
         environmentTargetText = environmentSettings != null
