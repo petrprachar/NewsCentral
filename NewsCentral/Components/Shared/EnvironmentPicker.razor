@@ -192,6 +192,9 @@
            overflow:hidden here — the dropdown menu is an absolutely-positioned descendant that
            intentionally extends well beyond this element's own box, and clipping would hide it. */
         min-width: 0;
+        /* M5a: at every width, not just narrow ones — the toggle's own border otherwise touches
+           the user icon directly next to it. */
+        margin-right: 0.75rem;
     }
 
     /* M4b.1: resets .top-row's inherited white-space:nowrap for both ConfirmDialog usages below,
@@ -275,6 +278,21 @@
     @@media (min-width: 641px) {
         .env-picker-menu {
             width: min(460px, calc(100vw - 250px - 2rem));
+        }
+    }
+
+    /* M5a: below 641px (no sidebar, header collapsed to the hamburger toggle) the menu is anchored
+       to the viewport instead of the toggle button — right:0 (relative to .env-picker-dropdown)
+       could still push the menu past the window's left edge at some in-between widths depending on
+       where the toggle itself sits; fixed positioning with symmetric margins guarantees it never
+       does. top:3.5rem matches .top-row's own height in MainLayout.razor.css. */
+    @@media (max-width: 640.98px) {
+        .env-picker-menu {
+            position: fixed;
+            left: 1rem;
+            right: 1rem;
+            top: 3.5rem;
+            width: auto;
         }
     }
 
