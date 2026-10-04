@@ -1,4 +1,5 @@
-@* M4a — environment picker. TODO(i18n): plain English for now, following MainLayout/ConfirmDialog. *@
+@* M4a — environment picker. M4a.1 — menu containment, row layout, tooltips, Add dialog's own
+   styling. TODO(i18n): plain English for now, following MainLayout/ConfirmDialog. *@
 @using NewsCentral.Configuration
 @using NewsCentral.Services
 @inject EnvironmentDirectoryService EnvironmentDirectory
@@ -16,46 +17,72 @@
     else
     {
         <div class="env-picker-dropdown">
-            <button class="btn btn-sm btn-outline-secondary env-picker-toggle" @onclick="ToggleOpen">
-                <i class="bi bi-hdd-network me-1"></i>@current?.DisplayName
+            <button class="btn btn-sm btn-outline-secondary env-picker-toggle" @onclick="ToggleOpen"
+                    title="@ToggleTooltip" aria-expanded="@AriaExpanded">
+                <i class="bi bi-hdd-network me-1"></i>
+                <span class="env-picker-toggle-name">@current?.DisplayName</span>
                 <i class="bi bi-chevron-down ms-1"></i>
             </button>
 
             @if (isOpen)
             {
-                <div class="env-picker-menu">
+                @* Transparent full-window backdrop, below the menu — closes the menu on an outside
+                   click without needing to stopPropagation inside the menu itself (the menu paints
+                   on top, so a click inside it never reaches the backdrop). *@
+                <div class="env-picker-backdrop" @onclick="CloseMenu"></div>
+
+                <div class="env-picker-menu" tabindex="-1" @ref="menuElement" @onkeydown="HandleMenuKeyDown">
                     @foreach (var option in options)
                     {
+                        var showBadges = option.Kind == EnvironmentKind.Policy || !option.IsShareable;
+
                         <div class="env-picker-row @(option.IsCurrent ? "env-picker-row-current" : "")">
                             <div class="env-picker-row-main" @onclick="() => RequestSwitch(option)">
                                 <span class="env-picker-check">@(option.IsCurrent ? "✓" : "")</span>
-                                <span class="env-picker-row-text">
-                                    <span class="env-picker-row-name">@option.DisplayName</span>
-                                    <span class="env-picker-row-path">@option.DataPath</span>
-                                </span>
-                                @if (option.Kind == EnvironmentKind.Policy)
-                                {
-                                    <span class="badge bg-secondary env-picker-badge">policy</span>
-                                }
-                                @if (!option.IsShareable)
-                                {
-                                    <span class="badge bg-light text-dark env-picker-badge">this computer only</span>
-                                }
+                                <div class="env-picker-row-body">
+                                    <div class="env-picker-row-name">@option.DisplayName</div>
+                                    <div class="env-picker-row-path" title="@option.DataPath">@option.DataPath</div>
+                                    @if (showBadges)
+                                    {
+                                        <div class="env-picker-row-badges">
+                                            @if (option.Kind == EnvironmentKind.Policy)
+                                            {
+                                                <span class="badge bg-secondary env-picker-badge">policy</span>
+                                            }
+                                            @if (!option.IsShareable)
+                                            {
+                                                <span class="badge bg-light text-dark env-picker-badge">this computer only</span>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             </div>
 
-                            @if (option.Kind == EnvironmentKind.Policy && isAuthenticated)
-                            {
-                                <button class="btn btn-sm btn-link env-picker-action" @onclick="() => Hide(option)">Hide</button>
-                            }
-                            @if (option.Kind == EnvironmentKind.User && isSystemAdmin)
-                            {
-                                <button class="btn btn-sm btn-link text-danger env-picker-action"
-                                         disabled="@option.IsCurrent"
-                                         title="@(option.IsCurrent ? "Cannot remove the current environment." : "Remove")"
-                                         @onclick="() => Remove(option)">
-                                    Remove
-                                </button>
-                            }
+                            <div class="env-picker-row-actions">
+                                @if (option.Kind == EnvironmentKind.Policy && isAuthenticated)
+                                {
+                                    <button class="btn btn-sm btn-link env-picker-action" @onclick="() => Hide(option)">Hide</button>
+                                }
+                                @if (option.Kind == EnvironmentKind.User && isSystemAdmin)
+                                {
+                                    @if (option.IsCurrent)
+                                    {
+                                        <span class="d-inline-block" title="Cannot remove the current environment." tabindex="0">
+                                            <button class="btn btn-sm btn-link text-danger env-picker-action" disabled
+                                                     style="pointer-events:none" @onclick="() => Remove(option)">
+                                                Remove
+                                            </button>
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-link text-danger env-picker-action" title="Remove"
+                                                 @onclick="() => Remove(option)">
+                                            Remove
+                                        </button>
+                                    }
+                                }
+                            </div>
                         </div>
                     }
 
@@ -86,9 +113,9 @@
 
 @if (showAddDialog)
 {
-    <div class="modal-overlay" @onclick="CloseAddDialogIfIdle">
-        <div class="modal-content env-picker-add-dialog" @onclick:stopPropagation="true">
-            <h3>Add environment</h3>
+    <div class="env-picker-add-overlay" @onclick="CloseAddDialogIfIdle">
+        <div class="env-picker-add-panel" @onclick:stopPropagation="true">
+            <h5 class="env-picker-add-title">Add environment</h5>
 
             @if (addNotInitializedNote != null)
             {
@@ -130,18 +157,37 @@
 
     .env-picker-locked {
         color: #6c757d;
-        font-size: 14px;
+        font-size: 0.875rem; /* matches .btn-sm's font-size, for consistency with the dropdown toggle */
         margin-right: 0.5rem;
     }
 
     .env-picker-dropdown { position: relative; }
 
+    .env-picker-toggle-name {
+        display: inline-block;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .env-picker-backdrop {
+        position: fixed;
+        inset: 0;
+        background: transparent;
+        z-index: 1499;
+    }
+
     .env-picker-menu {
         position: absolute;
         top: 100%;
-        left: 0;
+        right: 0;
+        left: auto;
         margin-top: 4px;
-        min-width: 420px;
+        width: min(460px, calc(100vw - 2rem));
+        max-height: calc(100vh - 5rem);
+        overflow-y: auto;
         background: white;
         border: 1px solid #dee2e6;
         border-radius: 6px;
@@ -153,7 +199,7 @@
     .env-picker-row {
         display: flex;
         align-items: center;
-        padding: 6px 12px;
+        padding: 8px 12px;
         gap: 8px;
     }
 
@@ -163,23 +209,35 @@
 
     .env-picker-row-main {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 8px;
         flex: 1;
         cursor: pointer;
         min-width: 0;
     }
 
-    .env-picker-check { width: 1em; color: #0d6efd; font-weight: bold; }
-
-    .env-picker-row-text {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-        overflow: hidden;
+    .env-picker-check {
+        width: 1em;
+        flex-shrink: 0;
+        margin-top: 1px;
+        color: #0d6efd;
+        font-weight: bold;
     }
 
-    .env-picker-row-name { font-size: 14px; }
+    .env-picker-row-body {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+        flex: 1;
+    }
+
+    .env-picker-row-name {
+        font-size: 14px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 
     .env-picker-row-path {
         font-size: 11px;
@@ -189,7 +247,20 @@
         text-overflow: ellipsis;
     }
 
-    .env-picker-badge { font-size: 10px; flex-shrink: 0; }
+    .env-picker-row-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 2px;
+    }
+
+    .env-picker-badge { font-size: 10px; }
+
+    .env-picker-row-actions {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+    }
 
     .env-picker-action { white-space: nowrap; padding: 0 4px; }
 
@@ -201,12 +272,35 @@
         padding: 6px 12px 0;
     }
 
-    .env-picker-add-dialog { max-width: 440px; text-align: left; }
+    .env-picker-add-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .env-picker-add-panel {
+        background: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        width: min(520px, calc(100vw - 2rem));
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        text-align: left;
+    }
+
+    .env-picker-add-title { margin: 0 0 15px 0; }
 
     .env-picker-add-actions {
         display: flex;
         gap: 10px;
         justify-content: flex-end;
+        margin-top: 20px;
     }
 
     .env-picker-note { color: #333; }
@@ -221,6 +315,8 @@
     private bool isAuthenticated;
     private bool isSystemAdmin;
     private bool isOpen;
+    private bool shouldFocusMenu;
+    private ElementReference menuElement;
 
     private bool showSwitchConfirm;
     private string? pendingSwitchPath;
@@ -234,12 +330,34 @@
     private string? addNotInitializedNote;
 
     private string LockedTooltip => "No other environments are configured.";
+    private string ToggleTooltip => $"Environment: {current?.DisplayName} — {current?.DataPath}";
+    private string AriaExpanded => isOpen ? "true" : "false";
 
     protected override void OnInitialized()
     {
         EnvironmentDirectory.Changed += HandleChanged;
         AuthService.OnAuthenticationStateChanged += HandleChanged;
         Refresh();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (shouldFocusMenu)
+        {
+            shouldFocusMenu = false;
+            try
+            {
+                // Gives the menu keyboard focus so Escape (HandleMenuKeyDown) can close it. Uses
+                // Blazor's own built-in ElementReference.FocusAsync() helper — no hand-written JS
+                // interop file. A race with the menu closing again before render completes is
+                // harmless: FocusAsync on a detached element just no-ops/throws, caught below.
+                await menuElement.FocusAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[EnvironmentPicker] FocusAsync failed: {ex.Message}");
+            }
+        }
     }
 
     private void Refresh()
@@ -261,7 +379,19 @@
         InvokeAsync(StateHasChanged);
     }
 
-    private void ToggleOpen() => isOpen = !isOpen;
+    private void ToggleOpen()
+    {
+        isOpen = !isOpen;
+        shouldFocusMenu = isOpen;
+    }
+
+    private void CloseMenu() => isOpen = false;
+
+    private void HandleMenuKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            CloseMenu();
+    }
 
     private void RequestSwitch(EnvironmentOption option)
     {
