@@ -2,6 +2,7 @@
 @using NewsCentral.Services
 @using NewsCentral.Models
 @using NewsCentral.Configuration
+@using NewsCentral.Components.Shared
 @inject AuthenticationService AuthService
 @inject TeamContextService TeamContext
 @inject TeamService TeamService
@@ -17,6 +18,9 @@
 
     <main>
         <div class="top-row px-4">
+            @* M4a — environment picker. Visible whether or not the user is logged in. *@
+            <EnvironmentPicker />
+
             @* Display-only identity — reflects the Home team selector, updates on change *@
             @if (currentUser != null)
             {

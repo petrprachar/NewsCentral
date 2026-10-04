@@ -1,0 +1,376 @@
+@* M4a — environment picker. TODO(i18n): plain English for now, following MainLayout/ConfirmDialog. *@
+@using NewsCentral.Configuration
+@using NewsCentral.Services
+@inject EnvironmentDirectoryService EnvironmentDirectory
+@inject AuthenticationService AuthService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="env-picker">
+    @if (isLocked)
+    {
+        <span class="env-picker-locked" title="@LockedTooltip">
+            <i class="bi bi-hdd-network me-1"></i>@current?.DisplayName
+        </span>
+    }
+    else
+    {
+        <div class="env-picker-dropdown">
+            <button class="btn btn-sm btn-outline-secondary env-picker-toggle" @onclick="ToggleOpen">
+                <i class="bi bi-hdd-network me-1"></i>@current?.DisplayName
+                <i class="bi bi-chevron-down ms-1"></i>
+            </button>
+
+            @if (isOpen)
+            {
+                <div class="env-picker-menu">
+                    @foreach (var option in options)
+                    {
+                        <div class="env-picker-row @(option.IsCurrent ? "env-picker-row-current" : "")">
+                            <div class="env-picker-row-main" @onclick="() => RequestSwitch(option)">
+                                <span class="env-picker-check">@(option.IsCurrent ? "✓" : "")</span>
+                                <span class="env-picker-row-text">
+                                    <span class="env-picker-row-name">@option.DisplayName</span>
+                                    <span class="env-picker-row-path">@option.DataPath</span>
+                                </span>
+                                @if (option.Kind == EnvironmentKind.Policy)
+                                {
+                                    <span class="badge bg-secondary env-picker-badge">policy</span>
+                                }
+                                @if (!option.IsShareable)
+                                {
+                                    <span class="badge bg-light text-dark env-picker-badge">this computer only</span>
+                                }
+                            </div>
+
+                            @if (option.Kind == EnvironmentKind.Policy && isAuthenticated)
+                            {
+                                <button class="btn btn-sm btn-link env-picker-action" @onclick="() => Hide(option)">Hide</button>
+                            }
+                            @if (option.Kind == EnvironmentKind.User && isSystemAdmin)
+                            {
+                                <button class="btn btn-sm btn-link text-danger env-picker-action"
+                                         disabled="@option.IsCurrent"
+                                         title="@(option.IsCurrent ? "Cannot remove the current environment." : "Remove")"
+                                         @onclick="() => Remove(option)">
+                                    Remove
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    <div class="env-picker-footer">
+                        @if (canAdd)
+                        {
+                            <button class="btn btn-sm btn-link" @onclick="OpenAddDialog">Add environment…</button>
+                        }
+                        @if (hiddenCount > 0)
+                        {
+                            <button class="btn btn-sm btn-link" @onclick="ShowHidden">Show hidden (@hiddenCount)</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<ConfirmDialog IsVisible="showSwitchConfirm"
+               Title="Switch environment?"
+               Message="@($"Switch to {pendingSwitchName}? You will be signed out; unsaved changes will be lost.")"
+               ConfirmText="Switch"
+               CancelText="Cancel"
+               DialogType="warning"
+               OnConfirm="DoSwitch"
+               OnCancel="CancelSwitch" />
+
+@if (showAddDialog)
+{
+    <div class="modal-overlay" @onclick="CloseAddDialogIfIdle">
+        <div class="modal-content env-picker-add-dialog" @onclick:stopPropagation="true">
+            <h3>Add environment</h3>
+
+            @if (addNotInitializedNote != null)
+            {
+                <p class="env-picker-note">@addNotInitializedNote</p>
+                <div class="env-picker-add-actions">
+                    <button class="btn btn-primary" @onclick="CloseAddDialog">OK</button>
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <label class="form-label">Path</label>
+                    <input type="text" class="form-control" @bind="addPath" disabled="@isProbing"
+                           placeholder="\\server\share\newscentral or C:\NewsCentral" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Display name (optional)</label>
+                    <input type="text" class="form-control" @bind="addDisplayName" disabled="@isProbing" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(addError))
+                {
+                    <div class="alert alert-danger">@addError</div>
+                }
+
+                <div class="env-picker-add-actions">
+                    <button class="btn btn-secondary" @onclick="CloseAddDialog" disabled="@isProbing">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SubmitAdd" disabled="@isProbing">
+                        @(isProbing ? "Checking…" : "Add")
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .env-picker { position: relative; display: inline-block; }
+
+    .env-picker-locked {
+        color: #6c757d;
+        font-size: 14px;
+        margin-right: 0.5rem;
+    }
+
+    .env-picker-dropdown { position: relative; }
+
+    .env-picker-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        margin-top: 4px;
+        min-width: 420px;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        z-index: 1500;
+        padding: 6px 0;
+    }
+
+    .env-picker-row {
+        display: flex;
+        align-items: center;
+        padding: 6px 12px;
+        gap: 8px;
+    }
+
+    .env-picker-row:hover { background: #f8f9fa; }
+
+    .env-picker-row-current { background: #eef3ff; }
+
+    .env-picker-row-main {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        cursor: pointer;
+        min-width: 0;
+    }
+
+    .env-picker-check { width: 1em; color: #0d6efd; font-weight: bold; }
+
+    .env-picker-row-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .env-picker-row-name { font-size: 14px; }
+
+    .env-picker-row-path {
+        font-size: 11px;
+        color: #6c757d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .env-picker-badge { font-size: 10px; flex-shrink: 0; }
+
+    .env-picker-action { white-space: nowrap; padding: 0 4px; }
+
+    .env-picker-footer {
+        display: flex;
+        justify-content: space-between;
+        border-top: 1px solid #eee;
+        margin-top: 4px;
+        padding: 6px 12px 0;
+    }
+
+    .env-picker-add-dialog { max-width: 440px; text-align: left; }
+
+    .env-picker-add-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .env-picker-note { color: #333; }
+</style>
+
+@code {
+    private IReadOnlyList<EnvironmentOption> options = Array.Empty<EnvironmentOption>();
+    private EnvironmentOption? current;
+    private bool isLocked;
+    private bool canAdd;
+    private int hiddenCount;
+    private bool isAuthenticated;
+    private bool isSystemAdmin;
+    private bool isOpen;
+
+    private bool showSwitchConfirm;
+    private string? pendingSwitchPath;
+    private string? pendingSwitchName;
+
+    private bool showAddDialog;
+    private string addPath = string.Empty;
+    private string addDisplayName = string.Empty;
+    private bool isProbing;
+    private string? addError;
+    private string? addNotInitializedNote;
+
+    private string LockedTooltip => "No other environments are configured.";
+
+    protected override void OnInitialized()
+    {
+        EnvironmentDirectory.Changed += HandleChanged;
+        AuthService.OnAuthenticationStateChanged += HandleChanged;
+        Refresh();
+    }
+
+    private void Refresh()
+    {
+        isAuthenticated = AuthService.IsAuthenticated();
+        isSystemAdmin = AuthService.IsSystemAdmin();
+        options = EnvironmentDirectory.GetOptions(includeHidden: false);
+        current = EnvironmentDirectory.Current;
+        canAdd = EnvironmentDirectory.CanAdd;
+        isLocked = EnvironmentDirectory.IsLocked;
+
+        var fullOptions = EnvironmentDirectory.GetOptions(includeHidden: true);
+        hiddenCount = fullOptions.Count(o => o.IsHidden) - options.Count(o => o.IsHidden);
+    }
+
+    private void HandleChanged()
+    {
+        Refresh();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleOpen() => isOpen = !isOpen;
+
+    private void RequestSwitch(EnvironmentOption option)
+    {
+        isOpen = false;
+
+        if (option.IsCurrent)
+            return;
+
+        pendingSwitchPath = option.DataPath;
+        pendingSwitchName = option.DisplayName;
+
+        if (isAuthenticated)
+            showSwitchConfirm = true;
+        else
+            DoSwitch();
+    }
+
+    private void DoSwitch()
+    {
+        showSwitchConfirm = false;
+        if (pendingSwitchPath == null)
+            return;
+
+        EnvironmentDirectory.SwitchTo(pendingSwitchPath);
+        pendingSwitchPath = null;
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private void CancelSwitch()
+    {
+        showSwitchConfirm = false;
+        pendingSwitchPath = null;
+    }
+
+    private async Task Hide(EnvironmentOption option)
+    {
+        await EnvironmentDirectory.HideAsync(option.DataPath);
+        isOpen = false;
+    }
+
+    private async Task Remove(EnvironmentOption option)
+    {
+        if (option.IsCurrent)
+            return;
+
+        await EnvironmentDirectory.RemoveAsync(option.DataPath);
+    }
+
+    private async Task ShowHidden()
+    {
+        await EnvironmentDirectory.UnhideAllAsync();
+        isOpen = false;
+    }
+
+    private void OpenAddDialog()
+    {
+        addPath = string.Empty;
+        addDisplayName = string.Empty;
+        addError = null;
+        addNotInitializedNote = null;
+        showAddDialog = true;
+        isOpen = false;
+    }
+
+    private void CloseAddDialog()
+    {
+        showAddDialog = false;
+        addNotInitializedNote = null;
+    }
+
+    // The overlay's own click-to-dismiss must not fire while a probe is in flight or while the
+    // not-initialized note is waiting for its explicit OK click.
+    private void CloseAddDialogIfIdle()
+    {
+        if (!isProbing && addNotInitializedNote == null)
+            CloseAddDialog();
+    }
+
+    private async Task SubmitAdd()
+    {
+        addError = null;
+        isProbing = true;
+        try
+        {
+            var result = await EnvironmentDirectory.AddAsync(addPath, addDisplayName);
+
+            switch (result.Outcome)
+            {
+                case AddOutcome.Added:
+                    showAddDialog = false;
+                    break;
+                case AddOutcome.AddedNotInitialized:
+                    addNotInitializedNote =
+                        "This environment is not initialized. An administrator will be able to initialize it from Environment Management.";
+                    break;
+                default:
+                    addError = result.ErrorMessage ?? "Could not add that environment.";
+                    break;
+            }
+        }
+        finally
+        {
+            isProbing = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        EnvironmentDirectory.Changed -= HandleChanged;
+        AuthService.OnAuthenticationStateChanged -= HandleChanged;
+    }
+}
