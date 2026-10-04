@@ -12,7 +12,9 @@
 #    docs/production-deployment.md  ordered deployment sequence
 #
 #  NOT WRITTEN by this script (write by hand or by GPO):
-#    NewsCentral component keys (DataPath, LockExpirationMinutes, Storage\, ...)
+#    NewsCentral component keys (DataPath, LockExpirationMinutes, Storage\, ...) —
+#      EXCEPT Environments\ (-EnvironmentInstances) and AllowUserEnvironments
+#      (-AllowUserEnvironments), the policy environment catalog surface (M3b)
 #    NewsTester component keys (reserved; not yet defined)
 #
 #  WARNING — numeric values must NEVER be written as -Type DWord.
@@ -112,7 +114,10 @@
     Must be one of: NewsCentral, NewsService, NewsViewer, NewsTester.
     Only NewsService and NewsViewer accept the parameters added for the fleet registry surface
     (Signing, Entra, Delivery, Display, Ui, Telemetry, Logging, AzureBlob:UseWinHttpProxy) — binding
-    any of them against NewsCentral or NewsTester is a terminating error.
+    any of them against NewsCentral or NewsTester is a terminating error. Conversely,
+    -EnvironmentInstances and -AllowUserEnvironments (the policy environment catalog, M3b) are
+    valid ONLY for NewsCentral — binding either against NewsService, NewsViewer, or NewsTester is
+    also a terminating error.
 
 .PARAMETER Teams
     Array of team folder names to register.  Existing teams not in this list
@@ -271,6 +276,21 @@
 .PARAMETER EventLogLevel
     Logging:EventLog:LogLevel:Default — same values, EventLog provider only. NewsService only.
 
+.PARAMETER EnvironmentInstances
+    Hashtable of environment name -> @{ DataPath = "..."; DisplayName = "..."; EnableBlobDistribution = $true;
+    DistributionMode = "Local"|"AzureBlob"; LocalDistributionPath = "..."; AzureBlobContainerName = "...";
+    AzureTenantId = "..."; AzureClientId = "..."; AzureAccountName = "..." }. Only DataPath is required;
+    every other key is an optional per-field override of that environment's config/environment.json
+    (M3a) — see docs/configuration.md's "Entries with an empty DataPath are skipped" note. The entry
+    name IS its identity (never derived, unlike an Entra group-team instance label). Authoritatively
+    replaces every subkey under Environments\ — an environment omitted from this hashtable when the
+    parameter is bound is removed from the catalog. NewsCentral only.
+
+.PARAMETER AllowUserEnvironments
+    Group Policy toggle: whether operators may add their own environments in addition to the policy
+    catalog above. Default true when absent. Read and displayed only in M3b — M4 is what actually
+    enforces it. NewsCentral only.
+
 .EXAMPLE
     # NewsService on a dev box — file share, two teams
     .\Set-RegistryOverrides.ps1 `
@@ -337,6 +357,23 @@
         -ComponentName NewsService `
         -LockScreenEnabled $false `
         -WallpaperEnabled $false
+
+.EXAMPLE
+    # NewsCentral — two policy-defined environments, operator-added environments still allowed
+    .\Set-RegistryOverrides.ps1 `
+        -Company "Contoso" `
+        -ComponentName NewsCentral `
+        -EnvironmentInstances @{
+            Dev = @{
+                DataPath              = "C:\Download\NewsCentral"
+                DisplayName           = "Dev box"
+                LocalDistributionPath = "C:\Download\NewsCentralDistPolicy"
+            }
+            Other = @{
+                DataPath = "C:\Download\NewsCentralB"
+            }
+        } `
+        -AllowUserEnvironments $true
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -434,7 +471,11 @@ param(
     [string] $LogLevel,
 
     [ValidateSet("Trace","Debug","Information","Warning","Error","Critical","None")]
-    [string] $EventLogLevel
+    [string] $EventLogLevel,
+
+    # ── Policy environment catalog (NewsCentral only) ─────────────────────────────
+    [hashtable] $EnvironmentInstances,
+    [Nullable[bool]] $AllowUserEnvironments
 )
 
 Set-StrictMode -Version Latest
@@ -500,6 +541,16 @@ else {
     }
     if ($offending) {
         throw "The following parameter(s) are not valid for -ComponentName ${ComponentName}: $($offending -join '; ')"
+    }
+}
+
+# -EnvironmentInstances / -AllowUserEnvironments are valid ONLY for -ComponentName NewsCentral —
+# rejected for NewsService, NewsViewer, and (unlike the fleet parameters above) NewsTester too.
+$newsCentralOnlyParams = @("EnvironmentInstances", "AllowUserEnvironments")
+if ($ComponentName -ne "NewsCentral") {
+    $offendingNc = $newsCentralOnlyParams | Where-Object { $PSBoundParameters.ContainsKey($_) }
+    if ($offendingNc) {
+        throw "Parameter(s) $($offendingNc -join ', ') are valid only for -ComponentName NewsCentral."
     }
 }
 
@@ -590,6 +641,33 @@ if ($PSBoundParameters.ContainsKey("EntraAttributeSchemes")) {
             if ([string]::IsNullOrWhiteSpace($mapKey) -or [string]::IsNullOrWhiteSpace($def["Mappings"][$mapKey])) {
                 throw "-EntraAttributeSchemes['$scheme'].Mappings contains an empty key or value."
             }
+        }
+    }
+}
+
+if ($PSBoundParameters.ContainsKey("EnvironmentInstances")) {
+    $knownEnvironmentKeys = @(
+        "DataPath", "DisplayName", "EnableBlobDistribution", "DistributionMode",
+        "LocalDistributionPath", "AzureBlobContainerName",
+        "AzureTenantId", "AzureClientId", "AzureAccountName"
+    )
+    foreach ($name in $EnvironmentInstances.Keys) {
+        if ([string]::IsNullOrWhiteSpace($name)) {
+            throw "-EnvironmentInstances contains an empty environment name key."
+        }
+        $entry = $EnvironmentInstances[$name]
+        if ($entry -isnot [hashtable]) {
+            throw "-EnvironmentInstances['$name'] must be a hashtable containing DataPath."
+        }
+        $unknownKeys = $entry.Keys | Where-Object { $_ -notin $knownEnvironmentKeys }
+        if ($unknownKeys) {
+            throw "-EnvironmentInstances['$name'] contains unknown key(s): $($unknownKeys -join ', '). Allowed: $($knownEnvironmentKeys -join ', ')."
+        }
+        if (-not $entry.ContainsKey("DataPath") -or [string]::IsNullOrWhiteSpace($entry["DataPath"])) {
+            throw "-EnvironmentInstances['$name'] is missing a non-empty DataPath."
+        }
+        if ($entry.ContainsKey("DistributionMode") -and $entry["DistributionMode"] -notin @("Local", "AzureBlob")) {
+            throw "-EnvironmentInstances['$name'].DistributionMode must be 'Local' or 'AzureBlob' (was '$($entry["DistributionMode"])')."
         }
     }
 }
@@ -822,6 +900,49 @@ if ($PSBoundParameters.ContainsKey("LogLevel")) {
 }
 if ($PSBoundParameters.ContainsKey("EventLogLevel")) {
     Set-RegValue -Path "$base\Logging\EventLog\LogLevel" -Name "Default" -Value $EventLogLevel -Type String
+}
+
+# ── Environments\ / AllowUserEnvironments (NewsCentral only — see gating above) ──────────────
+if ($PSBoundParameters.ContainsKey("EnvironmentInstances")) {
+    $environmentsPath = "$base\Environments"
+    Set-AuthoritativeChildKeys -ParentPath $environmentsPath
+    foreach ($name in $EnvironmentInstances.Keys) {
+        $entry = $EnvironmentInstances[$name]
+        $entryPath = "$environmentsPath\$name"
+
+        Set-RegValue -Path $entryPath -Name "DataPath" -Value $entry["DataPath"] -Type String
+
+        if ($entry.ContainsKey("DisplayName") -and -not [string]::IsNullOrWhiteSpace($entry["DisplayName"])) {
+            Set-RegValue -Path $entryPath -Name "DisplayName" -Value $entry["DisplayName"] -Type String
+        }
+        if ($entry.ContainsKey("EnableBlobDistribution")) {
+            $val = if ($entry["EnableBlobDistribution"]) { "true" } else { "false" }
+            Set-RegValue -Path "$entryPath\Storage" -Name "EnableBlobDistribution" -Value $val -Type String
+        }
+        if ($entry.ContainsKey("DistributionMode") -and -not [string]::IsNullOrWhiteSpace($entry["DistributionMode"])) {
+            Set-RegValue -Path "$entryPath\Storage" -Name "DistributionMode" -Value $entry["DistributionMode"] -Type String
+        }
+        if ($entry.ContainsKey("LocalDistributionPath") -and -not [string]::IsNullOrWhiteSpace($entry["LocalDistributionPath"])) {
+            Set-RegValue -Path "$entryPath\Storage" -Name "LocalDistributionPath" -Value $entry["LocalDistributionPath"] -Type String
+        }
+        if ($entry.ContainsKey("AzureBlobContainerName") -and -not [string]::IsNullOrWhiteSpace($entry["AzureBlobContainerName"])) {
+            Set-RegValue -Path "$entryPath\Storage" -Name "AzureBlobContainerName" -Value $entry["AzureBlobContainerName"] -Type String
+        }
+        if ($entry.ContainsKey("AzureTenantId") -and -not [string]::IsNullOrWhiteSpace($entry["AzureTenantId"])) {
+            Set-RegValue -Path "$entryPath\AzureBlob" -Name "TenantId" -Value $entry["AzureTenantId"] -Type String
+        }
+        if ($entry.ContainsKey("AzureClientId") -and -not [string]::IsNullOrWhiteSpace($entry["AzureClientId"])) {
+            Set-RegValue -Path "$entryPath\AzureBlob" -Name "ClientId" -Value $entry["AzureClientId"] -Type String
+        }
+        if ($entry.ContainsKey("AzureAccountName") -and -not [string]::IsNullOrWhiteSpace($entry["AzureAccountName"])) {
+            Set-RegValue -Path "$entryPath\AzureBlob" -Name "AccountName" -Value $entry["AzureAccountName"] -Type String
+        }
+    }
+}
+
+if ($PSBoundParameters.ContainsKey("AllowUserEnvironments")) {
+    $dword = if ($AllowUserEnvironments) { 1 } else { 0 }
+    Set-RegValue -Path $base -Name "AllowUserEnvironments" -Value $dword -Type DWord
 }
 
 # ── teams\ — replace entire subkey so the list stays authoritative ────────────
