@@ -15,7 +15,16 @@ public enum EnvironmentSettingsSource
     /// fails validation. Deliberately never falls back to machine defaults, which could publish
     /// to the wrong target — distribution becomes unavailable instead.
     /// </summary>
-    Invalid
+    Invalid,
+
+    /// <summary>
+    /// Reading config/environment.json itself threw (e.g. an unreachable UNC DataPath) — distinct
+    /// from <see cref="Invalid"/>, which means the file was readable but malformed. M5a:
+    /// NewsCentral.Services.EnvironmentSettingsService is the only producer of this value; the
+    /// router treats it like Invalid for distribution purposes, and the UI shows a distinct message
+    /// ("could not be read" vs. "is invalid") since the two causes call for different fixes.
+    /// </summary>
+    Unreachable
 }
 
 /// <summary>

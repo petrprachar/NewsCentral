@@ -8,8 +8,8 @@ public sealed class SharedEnvironmentDirectoryTests
 {
     private static SharedDirectoryEntry Entry(
         string dataPath, string? displayName = null, string? addedBy = "admin@contoso.com",
-        DateTime? modifiedUtc = null, DateTime? deletedUtc = null) =>
-        new(dataPath, displayName, addedBy, modifiedUtc ?? new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), deletedUtc);
+        DateTime? modifiedUtc = null, DateTime? deletedUtc = null, string? fingerprint = null) =>
+        new(dataPath, displayName, addedBy, modifiedUtc ?? new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), deletedUtc, fingerprint);
 
     // ── SharedDirectoryFile JSON round-trip ─────────────────────────────────
 
@@ -360,5 +360,64 @@ public sealed class SharedEnvironmentDirectoryTests
 
         Assert.DoesNotContain("hiddenPolicyPaths", json);
         Assert.Contains("hiddenPaths", json);
+    }
+
+    // ── M5a: DistributionFingerprint ─────────────────────────────────────────
+
+    [Fact]
+    public void SharedDirectoryEntry_Fingerprint_SurvivesJsonRoundTrip()
+    {
+        var file = new SharedDirectoryFile
+        {
+            Entries = new List<SharedDirectoryEntry>
+            {
+                Entry("\\\\srv\\share\\EnvA", fingerprint: "local:c:\\download\\newscentraldist")
+            }
+        };
+
+        var json = JsonSerializer.Serialize(file, SharedDirectoryJson.Options);
+        var roundTripped = JsonSerializer.Deserialize<SharedDirectoryFile>(json, SharedDirectoryJson.Options);
+
+        Assert.Contains("distributionFingerprint", json);
+        Assert.Equal("local:c:\\download\\newscentraldist", Assert.Single(roundTripped!.Entries).DistributionFingerprint);
+    }
+
+    [Fact]
+    public void Filter_RejectsFingerprintTooLong()
+    {
+        var incoming = new[] { Entry("\\\\srv\\share\\EnvA", fingerprint: new string('x', 401)) };
+
+        var accepted = SharedDirectoryValidator.Filter(incoming, out var warnings);
+
+        Assert.Empty(accepted);
+        Assert.Contains(warnings, w => w.Contains("distributionFingerprint"));
+    }
+
+    [Fact]
+    public void Filter_AcceptsFingerprintAtMaxLength()
+    {
+        var incoming = new[] { Entry("\\\\srv\\share\\EnvA", fingerprint: new string('x', 400)) };
+
+        var accepted = SharedDirectoryValidator.Filter(incoming, out var warnings);
+
+        Assert.Single(accepted);
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    public void Merge_EntryDifferingOnlyInFingerprint_CountsAsChange()
+    {
+        var sameTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var local = new[] { Entry("\\\\srv\\share\\EnvA", modifiedUtc: sameTime, fingerprint: "local:c:\\old") };
+        var remote = new[] { Entry("\\\\srv\\share\\EnvA", modifiedUtc: sameTime, fingerprint: "local:c:\\new") };
+
+        var (merged, localChanged, remoteChanged) = SharedDirectoryMerger.Merge(
+            local, remote, sameTime, SharedDirectoryMerger.DefaultPurgeAfter);
+
+        Assert.Single(merged);
+        // Exact tie on effective timestamp, neither a tombstone, same AddedBy/DisplayName — the
+        // merge is deterministic either way, but either side differs from the OTHER side's
+        // fingerprint, so at least one of the two flags must report a change.
+        Assert.True(localChanged || remoteChanged);
     }
 }

@@ -7,13 +7,17 @@ namespace NewsCentral.Configuration;
 /// <see cref="DeletedUtc"/> is a live entry; a non-null value is a tombstone recording that it was
 /// removed "for everyone" — tombstones travel with the merge so a deletion propagates instead of
 /// being resurrected by a machine that hasn't seen it yet (see <see cref="SharedDirectoryMerger"/>).
+/// <see cref="DistributionFingerprint"/> (M5a) is appended last, with a default, so every existing
+/// positional construction of this record — in <c>EnvironmentDirectoryService</c> and in the M4b
+/// tests — keeps compiling unchanged.
 /// </summary>
 public sealed record SharedDirectoryEntry(
     string DataPath,
     string? DisplayName,
     string? AddedBy,
     DateTime ModifiedUtc,
-    DateTime? DeletedUtc);
+    DateTime? DeletedUtc,
+    string? DistributionFingerprint = null);
 
 /// <summary>The full contents of <c>{DataPath}\config\environments.json</c> for one environment.</summary>
 public sealed class SharedDirectoryFile
@@ -46,6 +50,13 @@ public static class SharedDirectoryValidator
     public const int MaxDisplayNameLength = 100;
 
     /// <summary>
+    /// A distributionFingerprint longer than this is rejected outright (unlike an over-long display
+    /// name) — a fingerprint is an internal identifier, not free text, so an abnormal length is
+    /// treated as malformed rather than something to salvage by truncating.
+    /// </summary>
+    public const int MaxFingerprintLength = 400;
+
+    /// <summary>
     /// Filters <paramref name="incoming"/> down to entries that are safe to merge: an absolute UNC
     /// <see cref="SharedDirectoryEntry.DataPath"/> (never a local drive path, a relative path, or a
     /// <c>\\?\</c> / <c>\\.\</c> device-namespace form). A display name over
@@ -72,6 +83,14 @@ public static class SharedDirectoryValidator
             {
                 warningList.Add(
                     $"Shared directory entry \"{entry.DataPath}\" is not an absolute UNC path and is rejected.");
+                continue;
+            }
+
+            if (entry.DistributionFingerprint != null && entry.DistributionFingerprint.Length > MaxFingerprintLength)
+            {
+                warningList.Add(
+                    $"Shared directory entry \"{entry.DataPath}\" has a distributionFingerprint longer than " +
+                    $"{MaxFingerprintLength} characters and is rejected.");
                 continue;
             }
 
