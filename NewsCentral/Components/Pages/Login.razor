@@ -264,6 +264,11 @@
                 notInitializedMessage =
                     "This environment is not initialized. An administrator will be able to initialize it from Environment Management.";
             }
+
+            // M4b — fire-and-forget: SyncSharedDirectoryAsync catches everything internally and
+            // never throws, so this never delays enabling the buttons above. The picker (in
+            // MainLayout's top row) picks up any resulting change through EnvironmentDirectory.Changed.
+            _ = EnvironmentDirectory.SyncSharedDirectoryAsync(status);
         }
         catch (Exception ex)
         {

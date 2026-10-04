@@ -34,7 +34,11 @@
                 <div class="env-picker-menu" tabindex="-1" @ref="menuElement" @onkeydown="HandleMenuKeyDown">
                     @foreach (var option in options)
                     {
-                        var showBadges = option.Kind == EnvironmentKind.Policy || !option.IsShareable;
+                        var showBadges = option.Kind == EnvironmentKind.Policy
+                            || option.Kind == EnvironmentKind.Shared
+                            || !option.IsShareable;
+                        var canHide = (option.Kind == EnvironmentKind.Policy || option.Kind == EnvironmentKind.Shared) && isAuthenticated;
+                        var canRemove = (option.Kind == EnvironmentKind.User || option.Kind == EnvironmentKind.Shared) && isSystemAdmin;
 
                         <div class="env-picker-row @(option.IsCurrent ? "env-picker-row-current" : "")">
                             <div class="env-picker-row-main" @onclick="() => RequestSwitch(option)">
@@ -49,6 +53,10 @@
                                             {
                                                 <span class="badge bg-secondary env-picker-badge">policy</span>
                                             }
+                                            @if (option.Kind == EnvironmentKind.Shared)
+                                            {
+                                                <span class="badge bg-info text-dark env-picker-badge">shared</span>
+                                            }
                                             @if (!option.IsShareable)
                                             {
                                                 <span class="badge bg-light text-dark env-picker-badge">this computer only</span>
@@ -59,17 +67,17 @@
                             </div>
 
                             <div class="env-picker-row-actions">
-                                @if (option.Kind == EnvironmentKind.Policy && isAuthenticated)
+                                @if (canHide)
                                 {
                                     <button class="btn btn-sm btn-link env-picker-action" @onclick="() => Hide(option)">Hide</button>
                                 }
-                                @if (option.Kind == EnvironmentKind.User && isSystemAdmin)
+                                @if (canRemove)
                                 {
                                     @if (option.IsCurrent)
                                     {
                                         <span class="d-inline-block" title="Cannot remove the current environment." tabindex="0">
                                             <button class="btn btn-sm btn-link text-danger env-picker-action" disabled
-                                                     style="pointer-events:none" @onclick="() => Remove(option)">
+                                                     style="pointer-events:none">
                                                 Remove
                                             </button>
                                         </span>
@@ -77,7 +85,7 @@
                                     else
                                     {
                                         <button class="btn btn-sm btn-link text-danger env-picker-action" title="Remove"
-                                                 @onclick="() => Remove(option)">
+                                                 @onclick="() => RequestRemove(option)">
                                             Remove
                                         </button>
                                     }
@@ -111,6 +119,15 @@
                OnConfirm="DoSwitch"
                OnCancel="CancelSwitch" />
 
+<ConfirmDialog IsVisible="showRemoveConfirm"
+               Title="Remove shared environment?"
+               Message="@($"Remove {pendingRemoveOption?.DisplayName} for everyone? It will disappear from every environment's directory as they synchronize.")"
+               ConfirmText="Remove"
+               CancelText="Cancel"
+               DialogType="danger"
+               OnConfirm="ConfirmRemove"
+               OnCancel="CancelRemove" />
+
 @if (showAddDialog)
 {
     <div class="env-picker-add-overlay" @onclick="CloseAddDialogIfIdle">
@@ -128,9 +145,15 @@
             {
                 <div class="mb-3">
                     <label class="form-label">Path</label>
-                    <input type="text" class="form-control" @bind="addPath" disabled="@isProbing"
+                    <input type="text" class="form-control" @bind="addPath" @bind:event="oninput" disabled="@isProbing"
                            placeholder="\\server\share\newscentral or C:\NewsCentral" />
                 </div>
+                @if (AddPathIsUnc)
+                {
+                    <div class="alert alert-info env-picker-unc-note">
+                        This environment will be added to the shared directory and become visible to other operators.
+                    </div>
+                }
                 <div class="mb-3">
                     <label class="form-label">Display name (optional)</label>
                     <input type="text" class="form-control" @bind="addDisplayName" disabled="@isProbing" />
@@ -304,6 +327,8 @@
     }
 
     .env-picker-note { color: #333; }
+
+    .env-picker-unc-note { font-size: 13px; padding: 8px 12px; margin-bottom: 1rem; }
 </style>
 
 @code {
@@ -322,12 +347,17 @@
     private string? pendingSwitchPath;
     private string? pendingSwitchName;
 
+    private bool showRemoveConfirm;
+    private EnvironmentOption? pendingRemoveOption;
+
     private bool showAddDialog;
     private string addPath = string.Empty;
     private string addDisplayName = string.Empty;
     private bool isProbing;
     private string? addError;
     private string? addNotInitializedNote;
+
+    private bool AddPathIsUnc => EnvironmentPaths.IsShareable(addPath);
 
     private string LockedTooltip => "No other environments are configured.";
     private string ToggleTooltip => $"Environment: {current?.DisplayName} — {current?.DataPath}";
@@ -430,6 +460,40 @@
     {
         await EnvironmentDirectory.HideAsync(option.DataPath);
         isOpen = false;
+    }
+
+    private void RequestRemove(EnvironmentOption option)
+    {
+        isOpen = false;
+
+        if (option.Kind == EnvironmentKind.Shared)
+        {
+            // Shared removal is a tombstone that propagates to every environment that syncs it, so
+            // it gets an explicit confirmation — unlike a plain User entry, which only ever affects
+            // this machine and is removed immediately below.
+            pendingRemoveOption = option;
+            showRemoveConfirm = true;
+        }
+        else
+        {
+            _ = Remove(option);
+        }
+    }
+
+    private async Task ConfirmRemove()
+    {
+        showRemoveConfirm = false;
+        if (pendingRemoveOption == null)
+            return;
+
+        await Remove(pendingRemoveOption);
+        pendingRemoveOption = null;
+    }
+
+    private void CancelRemove()
+    {
+        showRemoveConfirm = false;
+        pendingRemoveOption = null;
     }
 
     private async Task Remove(EnvironmentOption option)

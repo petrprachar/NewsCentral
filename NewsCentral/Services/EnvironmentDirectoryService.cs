@@ -1,3 +1,4 @@
+using System.Text.Json;
 using NewsCentral.Configuration;
 
 namespace NewsCentral.Services;
@@ -38,16 +39,21 @@ public sealed class EnvironmentDirectoryService
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(10);
 
+    private const string SharedDirectoryRelativePath = "config/environments.json";
+    private const string SharedDirectoryTempRelativePath = "config/environments.json.tmp";
+
     private readonly EnvironmentCatalog _catalog;
     private readonly AppConfiguration _config;
     private readonly UserEnvironmentStore _store;
     private readonly EnvironmentContext _environment;
     private readonly AuthenticationService _authService;
     private readonly TeamContextService _teamContext;
+    private readonly IStorageService _storage;
 
     private UserEnvironmentState? _cachedState;
 
-    /// <summary>Raised after any add/remove/hide/unhide/switch — the picker's cue to re-render.</summary>
+    /// <summary>Raised after any add/remove/hide/unhide/switch/sync that changed the local cache —
+    /// the picker's cue to re-render.</summary>
     public event Action? Changed;
 
     public EnvironmentDirectoryService(
@@ -56,7 +62,8 @@ public sealed class EnvironmentDirectoryService
         UserEnvironmentStore store,
         EnvironmentContext environment,
         AuthenticationService authService,
-        TeamContextService teamContext)
+        TeamContextService teamContext,
+        IStorageService storage)
     {
         _catalog = catalog;
         _config = config;
@@ -64,6 +71,7 @@ public sealed class EnvironmentDirectoryService
         _environment = environment;
         _authService = authService;
         _teamContext = teamContext;
+        _storage = storage;
     }
 
     private UserEnvironmentState GetState() => _cachedState ??= _store.Load();
@@ -122,8 +130,12 @@ public sealed class EnvironmentDirectoryService
     public bool IsLocked => GetOptions().Count <= 1 && !CanAdd;
 
     /// <summary>
-    /// Validates and adds <paramref name="path"/> to the per-user list. Rejections never touch disk
-    /// beyond the probe itself, and never modify stored state.
+    /// Validates and adds <paramref name="path"/>. A UNC path (<see cref="EnvironmentPaths.IsShareable"/>)
+    /// becomes a Shared entry — <see cref="SharedDirectoryEntry.AddedBy"/> is the current user's UPN,
+    /// falling back to their username — and is synced to the current environment's
+    /// <c>config/environments.json</c> immediately (M4b). Any other absolute path becomes a local-only
+    /// User entry, exactly as in M4a. Rejections never touch disk beyond the probe itself, and never
+    /// modify stored state.
     /// </summary>
     public async Task<AddResult> AddAsync(string path, string? displayName)
     {
@@ -151,24 +163,42 @@ public sealed class EnvironmentDirectoryService
         if (!probe.Exists)
             return new AddResult(AddOutcome.RejectedNotFound, "That folder does not exist or is not accessible.");
 
+        var isShared = EnvironmentPaths.IsShareable(path);
+        var cleanDisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName;
         var state = GetState();
-        state.Entries.Add(new UserEnvironmentEntry
+
+        if (isShared)
         {
-            DataPath = path,
-            DisplayName = string.IsNullOrWhiteSpace(displayName) ? null : displayName,
-            AddedUtc = DateTime.UtcNow
-        });
+            state.SharedEntries.Add(new SharedDirectoryEntry(
+                path, cleanDisplayName, CurrentUserIdentity(), DateTime.UtcNow, DeletedUtc: null));
+        }
+        else
+        {
+            state.Entries.Add(new UserEnvironmentEntry
+            {
+                DataPath = path,
+                DisplayName = cleanDisplayName,
+                AddedUtc = DateTime.UtcNow
+            });
+        }
+
         await SaveStateAsync(state);
         Changed?.Invoke();
+
+        if (isShared)
+            await SyncSharedDirectoryAsync(EnvironmentInitStatus.Ready);
 
         return new AddResult(probe.Initialized ? AddOutcome.Added : AddOutcome.AddedNotInitialized);
     }
 
     /// <summary>
-    /// Removes a USER-added entry. Policy and Configured entries are never in
-    /// <see cref="UserEnvironmentState.Entries"/>, so they cannot be removed through this method
-    /// regardless of caller. Fails (returns false, no state change) when the caller is not a System
-    /// Administrator, or when <paramref name="dataPath"/> is the current environment.
+    /// Removes an entry. A Shared entry (M4b) is tombstoned — never deleted outright, so the removal
+    /// propagates through <see cref="SyncSharedDirectoryAsync"/> instead of being resurrected by an
+    /// environment that hasn't seen it yet — and synced immediately. A User entry is removed
+    /// outright, exactly as in M4a. Policy and Configured entries are never in either list, so they
+    /// cannot be removed through this method regardless of caller. Fails (returns false, no state
+    /// change) when the caller is not a System Administrator, or when <paramref name="dataPath"/> is
+    /// the current environment.
     /// </summary>
     public async Task<bool> RemoveAsync(string dataPath)
     {
@@ -180,6 +210,25 @@ public sealed class EnvironmentDirectoryService
             return false;
 
         var state = GetState();
+
+        var sharedIndex = state.SharedEntries.FindIndex(
+            e => e.DeletedUtc == null && EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
+        if (sharedIndex >= 0)
+        {
+            var now = DateTime.UtcNow;
+            state.SharedEntries[sharedIndex] = state.SharedEntries[sharedIndex] with
+            {
+                DeletedUtc = now,
+                ModifiedUtc = now,
+                AddedBy = CurrentUserIdentity()
+            };
+
+            await SaveStateAsync(state);
+            Changed?.Invoke();
+            await SyncSharedDirectoryAsync(EnvironmentInitStatus.Ready);
+            return true;
+        }
+
         var removedCount = state.Entries.RemoveAll(e => EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
         if (removedCount == 0)
             return false;
@@ -190,9 +239,9 @@ public sealed class EnvironmentDirectoryService
     }
 
     /// <summary>
-    /// Hides a POLICY entry locally (any logged-in user may do this — it is a personal preference,
-    /// not an admin action). Returns false without any state change when not authenticated, or when
-    /// <paramref name="dataPath"/> does not match a Policy entry.
+    /// Hides a Policy or (M4b) non-tombstoned Shared entry locally (any logged-in user may do this —
+    /// it is a personal preference, not an admin action). Returns false without any state change
+    /// when not authenticated, or when <paramref name="dataPath"/> matches neither kind.
     /// </summary>
     public async Task<bool> HideAsync(string dataPath)
     {
@@ -200,11 +249,14 @@ public sealed class EnvironmentDirectoryService
             return false;
 
         var canonical = EnvironmentPaths.Canonicalize(dataPath);
+        var state = GetState();
+
         var isPolicyEntry = _catalog.Entries.Any(e => EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
-        if (!isPolicyEntry)
+        var isSharedEntry = state.SharedEntries.Any(
+            e => e.DeletedUtc == null && EnvironmentPaths.Canonicalize(e.DataPath) == canonical);
+        if (!isPolicyEntry && !isSharedEntry)
             return false;
 
-        var state = GetState();
         if (state.HiddenPaths.Any(p => string.Equals(p, canonical, StringComparison.OrdinalIgnoreCase)))
             return true; // already hidden — no-op, still a success from the caller's point of view
 
@@ -212,6 +264,113 @@ public sealed class EnvironmentDirectoryService
         await SaveStateAsync(state);
         Changed?.Invoke();
         return true;
+    }
+
+    /// <summary>The current user's UPN, falling back to their username — used as Shared-entry AddedBy.</summary>
+    private string? CurrentUserIdentity()
+    {
+        var currentUser = _authService.GetCurrentUser();
+        return !string.IsNullOrEmpty(currentUser?.UPN) ? currentUser.UPN : currentUser?.Username;
+    }
+
+    /// <summary>
+    /// Reads the current environment's <c>config/environments.json</c> (missing is treated as
+    /// empty), validates its entries, merges them with this machine's local Shared-entry cache, and
+    /// writes back whichever side(s) changed. The local cache is always eligible to be saved; the
+    /// remote file is written only when <paramref name="status"/> is <see cref="EnvironmentInitStatus.Ready"/>
+    /// — a <see cref="EnvironmentInitStatus.NotInitialized"/> environment is read-only, so
+    /// <c>config/</c> is never created there. Never throws: any I/O or parse failure is caught,
+    /// logged to Debug, and the method returns normally — this must never block login or surface an
+    /// error to the user. Raises <see cref="Changed"/> only when the local cache actually changed.
+    /// </summary>
+    public async Task SyncSharedDirectoryAsync(EnvironmentInitStatus status)
+    {
+        var environmentPath = _environment.DataPath;
+        IReadOnlyList<SharedDirectoryEntry> remoteEntries = Array.Empty<SharedDirectoryEntry>();
+        var rejectedCount = 0;
+
+        try
+        {
+            string? fileJson = null;
+            try
+            {
+                fileJson = await _storage.ReadTextAsync(SharedDirectoryRelativePath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[EnvironmentDirectoryService] Sync '{environmentPath}': failed to read {SharedDirectoryRelativePath}: {ex.Message}");
+            }
+
+            if (fileJson != null)
+            {
+                SharedDirectoryFile? file = null;
+                try
+                {
+                    file = JsonSerializer.Deserialize<SharedDirectoryFile>(fileJson, SharedDirectoryJson.Options);
+                }
+                catch (JsonException ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[EnvironmentDirectoryService] Sync '{environmentPath}': malformed {SharedDirectoryRelativePath}: {ex.Message}");
+                }
+
+                if (file?.Entries != null)
+                {
+                    var filtered = SharedDirectoryValidator.Filter(file.Entries, out var warnings);
+                    foreach (var warning in warnings)
+                        System.Diagnostics.Debug.WriteLine($"[EnvironmentDirectoryService] Sync '{environmentPath}': {warning}");
+
+                    rejectedCount = file.Entries.Count - filtered.Count;
+                    remoteEntries = filtered;
+                }
+            }
+
+            var state = GetState();
+            var (merged, localChanged, remoteChanged) = SharedDirectoryMerger.Merge(
+                state.SharedEntries, remoteEntries, DateTime.UtcNow, SharedDirectoryMerger.DefaultPurgeAfter);
+
+            if (localChanged)
+            {
+                state.SharedEntries = merged.ToList();
+                await SaveStateAsync(state);
+            }
+
+            var writeResult = "not needed";
+            if (remoteChanged)
+            {
+                if (status != EnvironmentInitStatus.Ready)
+                {
+                    writeResult = "skipped (environment not initialized)";
+                }
+                else
+                {
+                    try
+                    {
+                        var file = new SharedDirectoryFile { SchemaVersion = 1, Entries = merged.ToList() };
+                        var json = JsonSerializer.Serialize(file, SharedDirectoryJson.Options);
+                        await _storage.WriteTextAsync(SharedDirectoryTempRelativePath, json);
+                        await _storage.MoveFileAsync(SharedDirectoryTempRelativePath, SharedDirectoryRelativePath);
+                        writeResult = "succeeded";
+                    }
+                    catch (Exception ex)
+                    {
+                        writeResult = $"failed: {ex.Message}";
+                    }
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[EnvironmentDirectoryService] Sync '{environmentPath}': remote entries read={remoteEntries.Count}, " +
+                $"rejected={rejectedCount}, localChanged={localChanged}, remoteChanged={remoteChanged}, write={writeResult}");
+
+            if (localChanged)
+                Changed?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[EnvironmentDirectoryService] Sync '{environmentPath}' failed: {ex.Message}");
+        }
     }
 
     /// <summary>Clears every locally-hidden Policy entry.</summary>
