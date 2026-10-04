@@ -18,17 +18,8 @@ public class LocalStorageService : IStorageService
 
     /// <summary>Primary constructor — used by DI.</summary>
     public LocalStorageService(AppConfiguration config)
-        : this(config.DataPath) { }
-
-    /// <summary>
-    /// Internal constructor accepting a raw base path.
-    /// Used by the [Obsolete] bridge constructor on TeamAwareRepository
-    /// so legacy code keeps working while services are migrated one by one.
-    /// Remove once all callers inject IStorageService directly.
-    /// </summary>
-    internal LocalStorageService(string basePath)
     {
-        _basePath = basePath;
+        _basePath = config.DataPath;
     }
 
     // ── Path resolution ─────────────────────────────────────────────────────

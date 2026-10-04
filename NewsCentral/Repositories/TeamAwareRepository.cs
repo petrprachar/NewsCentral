@@ -27,22 +27,6 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
         _entityFolder = entityFolder;
     }
 
-    /// <summary>
-    /// Bridge constructor — keeps all existing service code compiling while
-    /// each service is migrated to inject IStorageService one at a time.
-    /// Mark the instantiation site with a TODO and migrate when convenient.
-    /// Remove this overload once all callers are migrated.
-    /// </summary>
-    [Obsolete(
-        "Pass IStorageService instead of a raw basePath string. " +
-        "Inject IStorageService into the owning service and use the primary constructor. " +
-        "Remove this bridge once all callers are migrated.")]
-    public TeamAwareRepository(
-        string basePath,
-        string teamFolderName,
-        string entityFolder)
-        : this(new LocalStorageService(basePath), teamFolderName, entityFolder) { }
-
     // ── Path helpers ─────────────────────────────────────────────────────────
 
     // e.g. "team-alpha/content/presentations"

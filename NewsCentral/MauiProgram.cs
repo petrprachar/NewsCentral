@@ -161,17 +161,9 @@ public static class MauiProgram
         // Register WindowsIdentityService (needs to be before AuthenticationService)
         builder.Services.AddSingleton<WindowsIdentityService>();
 
-        // Register AuthenticationService with dependencies
-        builder.Services.AddSingleton<AuthenticationService>(sp =>
-        {
-            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
-            var windowsIdentityService = sp.GetRequiredService<WindowsIdentityService>();
-
-            System.Diagnostics.Debug.WriteLine(
-                $"Creating AuthenticationService with DataPath: '{appConfiguration.DataPath}'");
-
-            return new AuthenticationService(appConfiguration, windowsIdentityService);
-        });
+        // AuthenticationService now takes IStorageService + WindowsIdentityService — both already
+        // registered above, so plain constructor injection is enough (no custom factory needed).
+        builder.Services.AddSingleton<AuthenticationService>();
 
         // Register other services
         builder.Services.AddSingleton<TeamService>();

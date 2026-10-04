@@ -45,27 +45,6 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
         _entityFolder = entityFolder;
     }
 
-    /// <summary>
-    /// Bridge constructor — preserves the existing (basePath, entityFolder)
-    /// call signature so UserService and TeamService keep compiling unchanged.
-    ///
-    /// basePath is treated as the storage root for a LocalStorageService,
-    /// so the resolved file path stays identical to before:
-    ///   basePath = "C:\NC\config", entityFolder = ""
-    ///   → GetFilePath("users") = "C:\NC\config\users.json"  ✓
-    ///
-    /// To migrate a caller:
-    ///   Before: new JsonFileRepository&lt;T&gt;(Path.Combine(config.DataPath, "config"), "")
-    ///   After:  new JsonFileRepository&lt;T&gt;(_storage, "config", "")
-    /// </summary>
-    [Obsolete(
-        "Pass IStorageService instead of a raw basePath string. " +
-        "Inject IStorageService into the owning service, use relativeBasePath " +
-        "relative to DataPath, and switch to the primary constructor. " +
-        "Remove this bridge once all callers are migrated.")]
-    public JsonFileRepository(string basePath, string entityFolder)
-        : this(new LocalStorageService(basePath), "", entityFolder) { }
-
     // ── Path helpers ─────────────────────────────────────────────────────────
 
     // e.g. "config" when relativeBasePath="config", entityFolder=""

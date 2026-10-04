@@ -1,29 +1,28 @@
-﻿using NewsCentral.Configuration;
-using NewsCentral.Models;
+﻿using NewsCentral.Models;
 using NewsCentral.Repositories;
 
 namespace NewsCentral.Services;
 
 public class ScheduleService
 {
-    private readonly string _basePath;
+    private readonly IStorageService _storage;
     private readonly AuthenticationService _authService;
 
-    public ScheduleService(AppConfiguration config, AuthenticationService authService)
+    public ScheduleService(IStorageService storage, AuthenticationService authService)
     {
-        _basePath = config.DataPath;
+        _storage = storage;
         _authService = authService;
     }
 
     public async Task<List<Schedule>> GetSchedulesForTeamAsync(string teamFolderName)
     {
-        var repo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var repo = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
         return await repo.GetAllAsync();
     }
 
     public async Task<Schedule?> GetScheduleAsync(string teamFolderName, string scheduleId)
     {
-        var repo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var repo = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
         return await repo.GetByIdAsync(scheduleId);
     }
 
@@ -56,7 +55,7 @@ public class ScheduleService
             LastModified = DateTime.UtcNow
         };
 
-        var repo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var repo = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
         return await repo.CreateAsync(schedule);
     }
 
@@ -74,7 +73,7 @@ public class ScheduleService
             throw new UnauthorizedAccessException("Not authenticated");
         }
 
-        var repo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var repo = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
         var schedule = await repo.GetByIdAsync(scheduleId);
 
         if (schedule == null)
@@ -99,7 +98,7 @@ public class ScheduleService
             throw new UnauthorizedAccessException("Only SystemAdmin can delete schedules");
         }
 
-        var repo = new TeamAwareRepository<Schedule>(_basePath, teamFolderName, "schedules");
+        var repo = new TeamAwareRepository<Schedule>(_storage, teamFolderName, "schedules");
         return await repo.DeleteAsync(scheduleId);
     }
 }

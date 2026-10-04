@@ -1,10 +1,8 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NewsCentral.Models;
 using NewsCentral.Repositories;
-using NewsCentral.Configuration;
 
 namespace NewsCentral.Services;
 
@@ -26,19 +24,14 @@ public sealed record UpnLoginResult(UpnLoginOutcome Outcome, User? User = null, 
 public class AuthenticationService
 {
     private readonly JsonFileRepository<UsersCollection> _userRepo;
-    private readonly AppConfiguration _config;
     private readonly WindowsIdentityService _windowsIdentityService;
     private User? _currentUser;
 
     public event Action? OnAuthenticationStateChanged;
 
-    public AuthenticationService(AppConfiguration config, WindowsIdentityService windowsIdentityService)
+    public AuthenticationService(IStorageService storage, WindowsIdentityService windowsIdentityService)
     {
-        _config = config;
-        _userRepo = new JsonFileRepository<UsersCollection>(
-            Path.Combine(config.DataPath, "config"),
-            ""
-        );
+        _userRepo = new JsonFileRepository<UsersCollection>(storage, "config", "");
         _windowsIdentityService = windowsIdentityService;
     }
 
