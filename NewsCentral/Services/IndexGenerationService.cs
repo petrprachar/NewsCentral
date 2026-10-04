@@ -297,7 +297,7 @@ public class IndexGenerationService
     /// in a single operation. This is the only place index.json is written —
     /// both tiers are always kept in sync.
     /// </summary>
-    public async Task SaveIndexFileAsync(string teamFolderName, TeamIndexFile index)
+    public async Task<IndexSaveResult> SaveIndexFileAsync(string teamFolderName, TeamIndexFile index)
     {
         var relativePath = GetIndexFilePath(teamFolderName);
         var jsonOptions  = JsonConfiguration.GetIndexJsonOptions();
@@ -308,7 +308,9 @@ public class IndexGenerationService
 
         // ── Distribution tier (Azure Blob / local dist folder / null) ────────
         // Blob push is non-critical: a failed push leaves authoring correct.
-        // The index can be manually re-pushed via RegenerateAllIndexesAsync.
+        // The index can be manually re-pushed via RegenerateAllIndexesAsync. M5a: the failure is
+        // now captured in the returned result instead of only logged, so callers can surface it.
+        var result = new IndexSaveResult { DistributionSucceeded = true };
         try
         {
             await _blobDistribution.UploadTextAsync(relativePath, jsonContent);
@@ -318,19 +320,24 @@ public class IndexGenerationService
             System.Diagnostics.Debug.WriteLine(
                 $"⚠ WARNING: index.json blob push failed for {teamFolderName}: {ex.Message}");
             // Do not rethrow — authoring tier write succeeded; blob is recoverable.
+            result.DistributionSucceeded = false;
+            result.DistributionError = ex.Message;
         }
 
         System.Diagnostics.Debug.WriteLine($"✓ Index saved: {relativePath}");
         System.Diagnostics.Debug.WriteLine($"  Size:    {jsonContent.Length} bytes");
         System.Diagnostics.Debug.WriteLine($"  Entries: {index.PublishedAssignments.Count}");
+
+        return result;
     }
 
-    public async Task GenerateAndSaveIndexAsync(string teamFolderName)
+    public async Task<IndexSaveResult> GenerateAndSaveIndexAsync(string teamFolderName)
     {
         System.Diagnostics.Debug.WriteLine($"=== GenerateAndSaveIndex: {teamFolderName} ===");
         var index = await GenerateIndexForTeamAsync(teamFolderName);
-        await SaveIndexFileAsync(teamFolderName, index);
+        var result = await SaveIndexFileAsync(teamFolderName, index);
         System.Diagnostics.Debug.WriteLine($"✓ Index generation complete for {teamFolderName}");
+        return result;
     }
 
     /// <summary>
@@ -413,20 +420,23 @@ public class IndexGenerationService
         }
     }
 
-    public async Task<int> RegenerateAllIndexesAsync()
+    public async Task<RegenerateAllResult> RegenerateAllIndexesAsync()
     {
         System.Diagnostics.Debug.WriteLine("=== RegenerateAllIndexes ===");
 
         var teamService  = _serviceProvider.GetRequiredService<TeamService>();
         var allTeams     = await teamService.GetAllTeamsAsync();
-        var successCount = 0;
+        var result       = new RegenerateAllResult();
 
         foreach (var team in allTeams)
         {
             try
             {
-                await GenerateAndSaveIndexAsync(team.FolderName);
-                successCount++;
+                var saveResult = await GenerateAndSaveIndexAsync(team.FolderName);
+                result.Regenerated++;
+
+                if (!saveResult.DistributionSucceeded)
+                    result.DistributionFailures.Add($"{team.FolderName}: {saveResult.DistributionError}");
             }
             catch (Exception ex)
             {
@@ -436,9 +446,10 @@ public class IndexGenerationService
         }
 
         System.Diagnostics.Debug.WriteLine(
-            $"✓ Regenerated {successCount} of {allTeams.Count} team indexes");
+            $"✓ Regenerated {result.Regenerated} of {allTeams.Count} team indexes " +
+            $"({result.DistributionFailures.Count} distribution failures)");
 
-        return successCount;
+        return result;
     }
 
     // ── Signing ──────────────────────────────────────────────────────────────
@@ -520,4 +531,28 @@ public class IndexGenerationService
         var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(jsonContent));
         return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
     }
+}
+
+/// <summary>Result of <see cref="IndexGenerationService.SaveIndexFileAsync"/> / GenerateAndSaveIndexAsync (M5a).</summary>
+public sealed class IndexSaveResult
+{
+    /// <summary>True when the authoring-tier write succeeded AND the blob push succeeded (or
+    /// distribution is disabled/null — see <see cref="NullBlobDistributionService"/>). The
+    /// authoring-tier write itself still throws out of these methods on failure, unchanged from
+    /// before M5a; this flag covers only the non-critical distribution push.</summary>
+    public bool DistributionSucceeded { get; set; }
+
+    /// <summary>Set only when <see cref="DistributionSucceeded"/> is false.</summary>
+    public string? DistributionError { get; set; }
+}
+
+/// <summary>Result of <see cref="IndexGenerationService.RegenerateAllIndexesAsync"/> (M5a).</summary>
+public sealed class RegenerateAllResult
+{
+    /// <summary>Number of teams whose index was successfully generated and written (authoring
+    /// tier) — independent of whether its distribution push succeeded.</summary>
+    public int Regenerated { get; set; }
+
+    /// <summary>One "{teamFolderName}: {error}" entry per team whose distribution push failed.</summary>
+    public List<string> DistributionFailures { get; set; } = new();
 }

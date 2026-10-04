@@ -8,6 +8,7 @@
 @inject TeamService TeamService
 @inject EnvironmentSettingsService EnvironmentSettingsService
 @inject EnvironmentContext EnvironmentContext
+@inject DistributionStatusTracker DistributionStatus
 @inject NavigationManager Navigation
 @implements IDisposable
 
@@ -69,6 +70,23 @@
                     Publishing to clients is unavailable until an administrator fixes config/environment.json.
                 </div>
             }
+            else if (environmentBanner == EnvironmentBannerKind.Unreachable)
+            {
+                <div class="alert alert-warning mx-4 mt-2 mb-0">
+                    Environment settings could not be read: @environmentError.
+                    Publishing to clients is unavailable until this is resolved.
+                </div>
+            }
+
+            @* M5a: admin-only distribution failure banner. TODO(i18n). *@
+            if (currentUser.IsSystemAdmin && DistributionStatus.IsFailing)
+            {
+                <div class="alert alert-warning mx-4 mt-2 mb-0">
+                    Distribution is failing since @DistributionStatus.LastFailureUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"):
+                    @DistributionStatus.LastFailureReason.
+                    <a href="/environment-management">Details</a>
+                </div>
+            }
         }
 
         <article class="content px-4">
@@ -82,7 +100,7 @@
     private string? currentTeamName;
     private Dictionary<string, string> teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
 
-    private enum EnvironmentBannerKind { None, MachineDefaults, Invalid }
+    private enum EnvironmentBannerKind { None, MachineDefaults, Invalid, Unreachable }
     private EnvironmentBannerKind environmentBanner = EnvironmentBannerKind.None;
     private string? bannerTargetText;
     private string? bannerPolicySuffix;
@@ -95,6 +113,7 @@
         AuthService.OnAuthenticationStateChanged += HandleAuthChanged;
         TeamContext.OnTeamChanged += HandleTeamChanged;
         EnvironmentSettingsService.SettingsChanged += HandleEnvironmentSettingsChanged;
+        DistributionStatus.Changed += HandleDistributionStatusChanged;
         await RefreshAsync();
     }
 
@@ -148,6 +167,11 @@
                 environmentError = effective.Error?.TrimEnd('.');
                 break;
 
+            case EnvironmentSettingsSource.Unreachable:
+                environmentBanner = EnvironmentBannerKind.Unreachable;
+                environmentError = effective.Error?.TrimEnd('.');
+                break;
+
             default: // EnvironmentFile — fully configured; nothing to show.
                 environmentBanner = EnvironmentBannerKind.None;
                 environmentError = null;
@@ -189,6 +213,8 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private void HandleDistributionStatusChanged() => InvokeAsync(StateHasChanged);
+
     // Resolve the friendly team name from the current folder; fall back to the folder name.
     private void UpdateTeamName()
     {
@@ -226,5 +252,6 @@
         AuthService.OnAuthenticationStateChanged -= HandleAuthChanged;
         TeamContext.OnTeamChanged -= HandleTeamChanged;
         EnvironmentSettingsService.SettingsChanged -= HandleEnvironmentSettingsChanged;
+        DistributionStatus.Changed -= HandleDistributionStatusChanged;
     }
 }

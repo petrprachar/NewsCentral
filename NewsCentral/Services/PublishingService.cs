@@ -97,12 +97,13 @@ public class PublishingService
                 $"Copying files to {assignment.TargetTeam}...");
 
             var publishedPaths = new List<string>();
+            var distributionWarnings = new List<string>();
 
             // ── 1. Presentation JSON → authoring tier + blob ─────────────────
             try
             {
                 System.Diagnostics.Debug.WriteLine("→ Copying presentation JSON...");
-                var path = await CopyPresentationToTargetAsync(presentation, assignment.TargetTeam);
+                var path = await CopyPresentationToTargetAsync(presentation, assignment.TargetTeam, distributionWarnings);
                 publishedPaths.Add(path);
                 System.Diagnostics.Debug.WriteLine($"  ✓ Presentation: {path}");
             }
@@ -117,7 +118,7 @@ public class PublishingService
             {
                 System.Diagnostics.Debug.WriteLine("→ Copying schedule JSON...");
                 var path = await CopyScheduleToTargetAsync(
-                    schedule, assignment.TargetTeam, assignment.PresentationID);
+                    schedule, assignment.TargetTeam, assignment.PresentationID, distributionWarnings);
                 publishedPaths.Add(path);
                 System.Diagnostics.Debug.WriteLine($"  ✓ Schedule: {path}");
             }
@@ -174,7 +175,8 @@ public class PublishingService
                         presentation.GeneratedImagePath,
                         sourceTeamFolderName,
                         assignment.TargetTeam,
-                        "generated");
+                        "generated",
+                        distributionWarnings);
                     publishedPaths.Add(path);
                     System.Diagnostics.Debug.WriteLine($"  ✓ Generated image: {path}");
                 }
@@ -202,8 +204,16 @@ public class PublishingService
                     var stream = await _storage.OpenReadAsync(sourceRelative);
                     if (stream != null)
                     {
-                        using (stream)
-                            await _blobDistribution.UploadStreamAsync(destRelative, stream);
+                        try
+                        {
+                            using (stream)
+                                await _blobDistribution.UploadStreamAsync(destRelative, stream);
+                        }
+                        catch (Exception blobEx)
+                        {
+                            distributionWarnings.Add($"{destRelative}: {blobEx.Message}");
+                            throw; // keeps this branch's own catch/log below unchanged.
+                        }
                     }
 
                     publishedPaths.Add(destRelative);
@@ -227,7 +237,8 @@ public class PublishingService
                         presentation.OriginalImagePath,
                         sourceTeamFolderName,
                         assignment.TargetTeam,
-                        "original");
+                        "original",
+                        distributionWarnings);
                     publishedPaths.Add(path);
                     System.Diagnostics.Debug.WriteLine($"  ✓ Original file: {path}");
                 }
@@ -243,7 +254,9 @@ public class PublishingService
             {
                 System.Diagnostics.Debug.WriteLine(
                     $"→ Regenerating index for target team: {assignment.TargetTeam}");
-                await _indexGenerationService.GenerateAndSaveIndexAsync(assignment.TargetTeam);
+                var indexResult = await _indexGenerationService.GenerateAndSaveIndexAsync(assignment.TargetTeam);
+                if (!indexResult.DistributionSucceeded)
+                    distributionWarnings.Add($"{assignment.TargetTeam}/index.json: {indexResult.DistributionError}");
                 System.Diagnostics.Debug.WriteLine(
                     $"  ✓ Index file regenerated for {assignment.TargetTeam}");
             }
@@ -255,6 +268,7 @@ public class PublishingService
 
             result.Success        = true;
             result.PublishedPaths = publishedPaths;
+            result.DistributionWarnings = distributionWarnings;
             result.Message        = $"Successfully published to {assignment.TargetTeam}";
 
             System.Diagnostics.Debug.WriteLine(
@@ -274,7 +288,8 @@ public class PublishingService
 
     private async Task<string> CopyPresentationToTargetAsync(
         Presentation presentation,
-        string targetTeamFolderName)
+        string targetTeamFolderName,
+        List<string> distributionWarnings)
     {
         var fileName     = $"pres_{presentation.PresentationID}.json";
         var relativePath = $"{targetTeamFolderName}/content/presentations/{fileName}";
@@ -290,6 +305,7 @@ public class PublishingService
         {
             System.Diagnostics.Debug.WriteLine(
                 $"  ⚠ WARNING: Blob upload failed for {relativePath}: {ex.Message}");
+            distributionWarnings.Add($"{relativePath}: {ex.Message}");
         }
 
         return relativePath;
@@ -298,7 +314,8 @@ public class PublishingService
     private async Task<string> CopyScheduleToTargetAsync(
         Schedule schedule,
         string targetTeamFolderName,
-        string presentationId)
+        string presentationId,
+        List<string> distributionWarnings)
     {
         var scheduleCopy = new Schedule
         {
@@ -328,6 +345,7 @@ public class PublishingService
         {
             System.Diagnostics.Debug.WriteLine(
                 $"  ⚠ WARNING: Blob upload failed for {relativePath}: {ex.Message}");
+            distributionWarnings.Add($"{relativePath}: {ex.Message}");
         }
 
         return relativePath;
@@ -342,7 +360,8 @@ public class PublishingService
         string imagePathFromJson,
         string sourceTeamFolder,
         string targetTeamFolder,
-        string imageType)
+        string imageType,
+        List<string> distributionWarnings)
     {
         var fileName       = Path.GetFileName(imagePathFromJson);
         var sourceRelative = $"{sourceTeamFolder}/images/{imageType}/{fileName}";
@@ -366,6 +385,7 @@ public class PublishingService
         {
             System.Diagnostics.Debug.WriteLine(
                 $"  ⚠ WARNING: Blob upload failed for {destRelative}: {ex.Message}");
+            distributionWarnings.Add($"{destRelative}: {ex.Message}");
         }
 
         return destRelative;
@@ -404,4 +424,12 @@ public class PublishResult
     public string       Message        { get; set; } = string.Empty;
     public string       ErrorMessage   { get; set; } = string.Empty;
     public List<string> PublishedPaths { get; set; } = new();
+
+    /// <summary>
+    /// One "{relativePath}: {message}" entry per blob-upload failure that was swallowed during this
+    /// publish (M5a) — the authoring-tier write still succeeded for each, so <see cref="Success"/>
+    /// is unaffected, but clients will not see the content until it is republished or the team's
+    /// index is regenerated.
+    /// </summary>
+    public List<string> DistributionWarnings { get; set; } = new();
 }

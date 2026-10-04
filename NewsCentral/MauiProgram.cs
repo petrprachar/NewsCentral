@@ -177,6 +177,10 @@ public static class MauiProgram
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
 
+        // M5a: records the outcome of every real distribution call for MainLayout's admin banner
+        // and the Environment Management page; resets on an environment switch.
+        builder.Services.AddSingleton<DistributionStatusTracker>();
+
         // ── Distribution tier storage (config-driven, rebuildable on environment switch or save) ──
         // DistributionServiceRouter holds the actual Distribution.Enabled/Mode selection logic
         // (moved from here in M2) and rebuilds its inner service whenever EnvironmentContext.Changed

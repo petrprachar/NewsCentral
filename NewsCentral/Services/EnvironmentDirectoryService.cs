@@ -368,6 +368,9 @@ public sealed class EnvironmentDirectoryService
                     catch (Exception ex)
                     {
                         writeResult = $"failed: {ex.Message}";
+                        // Best effort: a leftover .tmp file is harmless but untidy; this method
+                        // never throws regardless, so there is nothing to mask.
+                        try { await _storage.DeleteFileAsync(SharedDirectoryTempRelativePath); } catch { /* best effort */ }
                     }
                 }
             }

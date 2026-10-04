@@ -342,6 +342,16 @@
             <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
         </div>
     }
+
+    @* M5a: distinct from errorMessage — the publish itself succeeded, only distribution failed. TODO(i18n). *@
+    @if (!string.IsNullOrEmpty(warningMessage))
+    {
+        <div class="alert alert-warning alert-dismissible fade show mt-3">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @warningMessage
+            <button type="button" class="btn-close" @onclick="() => warningMessage = null"></button>
+        </div>
+    }
 </div>
 
 <style>
@@ -637,6 +647,7 @@
     private string? deletingAssignmentId;
     private string? errorMessage;
     private string? successMessage;
+    private string? warningMessage;
     private User? currentUser;
     private string? currentTeamFolder;
 
@@ -836,6 +847,7 @@
             publishingAssignmentId = assignment.AssignmentID;
             errorMessage = null;
             successMessage = null;
+            warningMessage = null;
 
             var result = await PublishingService.PublishAssignmentAsync(
                 assignment.SourceTeam,
@@ -843,7 +855,20 @@
 
             if (result.Success)
             {
-                successMessage = result.Message;
+                if (result.DistributionWarnings.Count > 0)
+                {
+                    var first = result.DistributionWarnings[0];
+                    var more = result.DistributionWarnings.Count > 1
+                        ? $" (+{result.DistributionWarnings.Count - 1} more)"
+                        : "";
+                    warningMessage =
+                        $"Published to the authoring store, but distribution failed: {first}{more}. " +
+                        "Clients will not receive it until it is republished or the index is regenerated.";
+                }
+                else
+                {
+                    successMessage = result.Message;
+                }
                 await LoadDataAsync();
             }
             else

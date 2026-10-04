@@ -24,6 +24,7 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
 
     private readonly EnvironmentSettingsService _settingsService;
     private readonly EnvironmentContext _environment;
+    private readonly DistributionStatusTracker _tracker;
 
     // volatile: GetInnerAsync's read-then-maybe-build races only with OnRebuildTriggered's write
     // (which just discards the reference), never with I/O, so a plain volatile swap is enough —
@@ -32,10 +33,12 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
 
     public string? ConfigurationError { get; private set; }
 
-    public DistributionServiceRouter(EnvironmentSettingsService settingsService, EnvironmentContext environment)
+    public DistributionServiceRouter(
+        EnvironmentSettingsService settingsService, EnvironmentContext environment, DistributionStatusTracker tracker)
     {
         _settingsService = settingsService;
         _environment = environment;
+        _tracker = tracker;
         _environment.Changed += OnRebuildTriggered;
         _settingsService.SettingsChanged += OnRebuildTriggered;
     }
@@ -62,6 +65,17 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
             if (effective.Source == EnvironmentSettingsSource.Invalid)
             {
                 ConfigurationError = $"environment.json is invalid: {effective.Error}";
+                System.Diagnostics.Debug.WriteLine(
+                    $"{Tag} Build failed — using UnavailableBlobDistributionService: {ConfigurationError}");
+                return new UnavailableBlobDistributionService(ConfigurationError);
+            }
+
+            // M5a: distinct from Invalid (readable-but-malformed) — the file itself could not be
+            // read at all (e.g. an unreachable UNC DataPath). Treated the same way for distribution
+            // purposes (fail closed via Unavailable), with its own reason text.
+            if (effective.Source == EnvironmentSettingsSource.Unreachable)
+            {
+                ConfigurationError = $"environment settings could not be read: {effective.Error}";
                 System.Diagnostics.Debug.WriteLine(
                     $"{Tag} Build failed — using UnavailableBlobDistributionService: {ConfigurationError}");
                 return new UnavailableBlobDistributionService(ConfigurationError);
@@ -102,29 +116,70 @@ public sealed class DistributionServiceRouter : IBlobDistributionService
             : distribution.LocalPath;
 
     // ── IBlobDistributionService — each method awaits GetInnerAsync() then delegates ─────────
+    // Every delegated call is tracked (M5a) via TrackAsync, EXCEPT when the inner service is
+    // NullBlobDistributionService — distribution being deliberately disabled is not a failure, and
+    // is never reported as a success either; the tracker simply stays untouched by those calls.
 
     public async Task UploadTextAsync(string relativePath, string content)
     {
         var inner = await GetInnerAsync();
-        await inner.UploadTextAsync(relativePath, content);
+        await TrackAsync(relativePath, inner, () => inner.UploadTextAsync(relativePath, content));
     }
 
     public async Task UploadStreamAsync(string relativePath, Stream content)
     {
         var inner = await GetInnerAsync();
-        await inner.UploadStreamAsync(relativePath, content);
+        await TrackAsync(relativePath, inner, () => inner.UploadStreamAsync(relativePath, content));
     }
 
     public async Task DeleteAsync(string relativePath)
     {
         var inner = await GetInnerAsync();
-        await inner.DeleteAsync(relativePath);
+        await TrackAsync(relativePath, inner, () => inner.DeleteAsync(relativePath));
     }
 
     public async Task<bool> ExistsAsync(string relativePath)
     {
         var inner = await GetInnerAsync();
-        return await inner.ExistsAsync(relativePath);
+        return await TrackAsync(relativePath, inner, () => inner.ExistsAsync(relativePath));
+    }
+
+    private async Task TrackAsync(string relativePath, IBlobDistributionService inner, Func<Task> action)
+    {
+        if (inner is NullBlobDistributionService)
+        {
+            await action();
+            return;
+        }
+
+        try
+        {
+            await action();
+            _tracker.RecordSuccess();
+        }
+        catch (Exception ex)
+        {
+            _tracker.RecordFailure(relativePath, ex.Message);
+            throw;
+        }
+    }
+
+    private async Task<T> TrackAsync<T>(string relativePath, IBlobDistributionService inner, Func<Task<T>> action)
+    {
+        if (inner is NullBlobDistributionService)
+            return await action();
+
+        try
+        {
+            var result = await action();
+            _tracker.RecordSuccess();
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _tracker.RecordFailure(relativePath, ex.Message);
+            throw;
+        }
     }
 
     // ── Fallback when building the real inner service failed ─────────────────────────────────

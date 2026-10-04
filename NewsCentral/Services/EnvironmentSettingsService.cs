@@ -81,8 +81,10 @@ public sealed class EnvironmentSettingsService
         }
         catch (Exception ex)
         {
+            // M5a: distinct from Invalid — the file could not be READ at all (e.g. an unreachable
+            // UNC DataPath), as opposed to being readable but malformed.
             return new EffectiveEnvironmentSettings(
-                EnvironmentSettingsSource.Invalid, Settings: null, Error: ex.Message, DistributionFingerprint: null);
+                EnvironmentSettingsSource.Unreachable, Settings: null, Error: ex.Message, DistributionFingerprint: null);
         }
 
         var machineDefaults = EnvironmentSettingsResolver.FromMachineConfiguration(_config);
@@ -140,8 +142,18 @@ public sealed class EnvironmentSettingsService
 
         var json = JsonSerializer.Serialize(settings, EnvironmentSettingsJson.Options);
 
-        await _storage.WriteTextAsync(TempRelativePath, json);
-        await _storage.MoveFileAsync(TempRelativePath, RelativePath);
+        try
+        {
+            await _storage.WriteTextAsync(TempRelativePath, json);
+            await _storage.MoveFileAsync(TempRelativePath, RelativePath);
+        }
+        catch
+        {
+            // Best effort: a leftover .tmp file is harmless but untidy; never let its own deletion
+            // failure mask the original write/move failure.
+            try { await _storage.DeleteFileAsync(TempRelativePath); } catch { /* best effort */ }
+            throw;
+        }
 
         _cache = null;
         SettingsChanged?.Invoke();

@@ -199,6 +199,16 @@
             <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
         </div>
     }
+
+    @* M5a: distinct from errorMessage — the index itself republished fine, only distribution failed. TODO(i18n). *@
+    @if (!string.IsNullOrEmpty(warningMessage))
+    {
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @warningMessage
+            <button type="button" class="btn-close" @onclick="() => warningMessage = null"></button>
+        </div>
+    }
 </div>
 
 @code {
@@ -214,6 +224,7 @@
     private string? copyFeedback;
     private string? successMessage;
     private string? errorMessage;
+    private string? warningMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -308,11 +319,21 @@
             busyAction = "republish";
             successMessage = null;
             errorMessage   = null;
+            warningMessage = null;
             StateHasChanged();
 
-            await IndexService.GenerateAndSaveIndexAsync(currentTeamFolder!);
+            var result = await IndexService.GenerateAndSaveIndexAsync(currentTeamFolder!);
 
-            successMessage = Localizer["RepublishSuccess", currentTeamName ?? currentTeamFolder!];
+            if (result.DistributionSucceeded)
+            {
+                successMessage = Localizer["RepublishSuccess", currentTeamName ?? currentTeamFolder!];
+            }
+            else
+            {
+                warningMessage =
+                    $"Republished the index for {currentTeamName ?? currentTeamFolder!}, but distribution failed: " +
+                    $"{result.DistributionError}. Clients will not receive it until this is resolved and republished again.";
+            }
         }
         catch (Exception ex)
         {

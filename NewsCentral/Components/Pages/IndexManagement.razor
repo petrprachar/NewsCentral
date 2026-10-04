@@ -170,6 +170,16 @@
             <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
         </div>
     }
+
+    @* M5a: distinct from errorMessage — the index itself regenerated fine, only distribution failed. TODO(i18n). *@
+    @if (!string.IsNullOrEmpty(warningMessage))
+    {
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            @warningMessage
+            <button type="button" class="btn-close" @onclick="() => warningMessage = null"></button>
+        </div>
+    }
 </div>
 
 @code {
@@ -182,6 +192,7 @@
     private string? regenerationType;
     private string? successMessage;
     private string? errorMessage;
+    private string? warningMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -283,13 +294,23 @@
             regenerationType = "current";
             successMessage = null;
             errorMessage = null;
+            warningMessage = null;
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine($"=== Manual Regeneration: {currentTeamFolder} ===");
 
-            await IndexService.GenerateAndSaveIndexAsync(currentTeamFolder);
+            var result = await IndexService.GenerateAndSaveIndexAsync(currentTeamFolder);
 
-            successMessage = Localizer["RegenerationSuccess", currentTeamName ?? currentTeamFolder];
+            if (result.DistributionSucceeded)
+            {
+                successMessage = Localizer["RegenerationSuccess", currentTeamName ?? currentTeamFolder];
+            }
+            else
+            {
+                warningMessage =
+                    $"Regenerated the index for {currentTeamName ?? currentTeamFolder}, but distribution failed: " +
+                    $"{result.DistributionError}. Clients will not receive it until this is resolved and the index is regenerated again.";
+            }
 
             // Reload index information
             await LoadIndexInformation();
@@ -320,13 +341,28 @@
             regenerationType = "all";
             successMessage = null;
             errorMessage = null;
+            warningMessage = null;
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine("=== Manual Regeneration: ALL TEAMS ===");
 
-            var successCount = await IndexService.RegenerateAllIndexesAsync();
+            var result = await IndexService.RegenerateAllIndexesAsync();
 
-            successMessage = Localizer["RegenerationAllSuccess", successCount, allTeamsInfo.Count];
+            if (result.DistributionFailures.Count > 0)
+            {
+                var first = result.DistributionFailures[0];
+                var more = result.DistributionFailures.Count > 1
+                    ? $" (+{result.DistributionFailures.Count - 1} more)"
+                    : "";
+                warningMessage =
+                    $"{Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count]} " +
+                    $"— distribution failed: {first}{more}. Clients will not receive the affected teams' content " +
+                    "until this is resolved and the indexes are regenerated again.";
+            }
+            else
+            {
+                successMessage = Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count];
+            }
 
             // Reload index information
             await LoadIndexInformation();
