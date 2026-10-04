@@ -43,10 +43,6 @@ public class JsonFileRepository<T> : IRepository<T> where T : class, IEntity
         _storage = storage;
         _relativeBasePath = relativeBasePath;
         _entityFolder = entityFolder;
-
-        // Directory.CreateDirectory is synchronous inside LocalStorageService,
-        // so blocking here is safe.
-        _storage.EnsureFolderExistsAsync(RelativeFolderPath).GetAwaiter().GetResult();
     }
 
     /// <summary>

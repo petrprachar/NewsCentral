@@ -25,10 +25,6 @@ public class TeamAwareRepository<T> : IRepository<T> where T : class, IEntity
         _storage = storage;
         _teamFolderName = teamFolderName;
         _entityFolder = entityFolder;
-
-        // Directory.CreateDirectory is synchronous inside LocalStorageService,
-        // so blocking here is safe. AzureBlobStorageService would be a no-op.
-        _storage.EnsureFolderExistsAsync(RelativeFolderPath).GetAwaiter().GetResult();
     }
 
     /// <summary>
