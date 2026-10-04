@@ -186,9 +186,21 @@
 
     .env-picker-dropdown { position: relative; }
 
+    .env-picker-toggle {
+        /* M4a.2: .btn-outline-secondary's border-color:#6c757d computed correctly against .btn's
+           base border, but was hard to see against the top-row's near-white background — an
+           explicit, slightly higher-contrast border here removes any doubt. Radius already comes
+           from .btn-sm, not redeclared. */
+        border: 1px solid #adb5bd;
+    }
+
+    .env-picker-toggle:hover {
+        border-color: #6c757d;
+    }
+
     .env-picker-toggle-name {
         display: inline-block;
-        max-width: 220px;
+        max-width: 180px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -208,6 +220,8 @@
         right: 0;
         left: auto;
         margin-top: 4px;
+        /* No sidebar below 641px (NavMenu collapses behind its hamburger toggle) — the full
+           viewport width (minus a margin) is available. */
         width: min(460px, calc(100vw - 2rem));
         max-height: calc(100vh - 5rem);
         overflow-y: auto;
@@ -217,6 +231,16 @@
         box-shadow: 0 6px 20px rgba(0,0,0,0.15);
         z-index: 1500;
         padding: 6px 0;
+    }
+
+    /* Matches MainLayout.razor.css's own min-width:641px breakpoint, where the sidebar becomes a
+       fixed 250px column — the menu is right-anchored inside the content area, which starts at
+       x=250px, so its available width must subtract the sidebar or it overflows past the
+       window's left edge. */
+    @@media (min-width: 641px) {
+        .env-picker-menu {
+            width: min(460px, calc(100vw - 250px - 2rem));
+        }
     }
 
     .env-picker-row {

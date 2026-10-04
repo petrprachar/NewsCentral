@@ -19,6 +19,34 @@ main {
     height: 3.5rem;
     display: flex;
     align-items: center;
+    /* white-space is inherited, so this reaches every descendant including EnvironmentPicker's
+       child-component markup, which Blazor's CSS isolation scoping (non-::deep selectors) cannot
+       otherwise target from here — the one rule that keeps the whole header on a single line. */
+    white-space: nowrap;
+}
+
+    /* M4a.2: truncate the user's display name instead of letting it wrap or overflow. */
+    .top-row ::deep .env-user-name {
+        display: inline-block;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: middle;
+    }
+
+@media (max-width: 999.98px) {
+    /* Below 1000px, drop the lowest-priority identity details first. */
+    .top-row ::deep .env-admin-badge,
+    .top-row ::deep .env-team-name {
+        display: none;
+    }
+}
+
+@media (max-width: 759.98px) {
+    /* Below 760px, Sign out shows only its icon — title/aria-label (always present) carry the label. */
+    .top-row ::deep .env-signout-text {
+        display: none;
+    }
 }
 
     .top-row ::deep a, .top-row ::deep .btn-link {
