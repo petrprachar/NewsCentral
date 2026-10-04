@@ -1,5 +1,3 @@
-using NewsCentral.Configuration;
-
 namespace NewsCentral.Services;
 
 /// <summary>
@@ -8,24 +6,25 @@ namespace NewsCentral.Services;
 /// this implementation works without any code changes — the OS handles
 /// the SMB protocol transparently.
 ///
-/// All relative paths are resolved against AppConfiguration.DataPath.
+/// All relative paths are resolved against EnvironmentContext.DataPath, read fresh on every call
+/// (no cached base path), so a runtime DataPath switch takes effect on the very next operation.
 /// Example: "team-alpha/content/presentations/pres_123.json"
 ///       → "C:\NewsCentral\team-alpha\content\presentations\pres_123.json"
 /// </summary>
 public class LocalStorageService : IStorageService
 {
-    private readonly string _basePath;
+    private readonly EnvironmentContext _environment;
 
     /// <summary>Primary constructor — used by DI.</summary>
-    public LocalStorageService(AppConfiguration config)
+    public LocalStorageService(EnvironmentContext environment)
     {
-        _basePath = config.DataPath;
+        _environment = environment;
     }
 
     // ── Path resolution ─────────────────────────────────────────────────────
 
     private string Resolve(string relativePath) =>
-        Path.Combine(_basePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        Path.Combine(_environment.DataPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
     private static void EnsureParentExists(string fullPath)
     {
@@ -110,14 +109,15 @@ public class LocalStorageService : IStorageService
         string relativeFolderPath,
         string searchPattern = "*.json")
     {
+        var basePath = _environment.DataPath;
         var fullFolder = Resolve(relativeFolderPath);
 
         if (!Directory.Exists(fullFolder))
             return Task.FromResult(Enumerable.Empty<string>());
 
-        // Return paths relative to _basePath using forward-slash convention
+        // Return paths relative to basePath using forward-slash convention
         var files = Directory.GetFiles(fullFolder, searchPattern)
-            .Select(f => Path.GetRelativePath(_basePath, f)
+            .Select(f => Path.GetRelativePath(basePath, f)
                             .Replace(Path.DirectorySeparatorChar, '/'));
 
         return Task.FromResult(files);

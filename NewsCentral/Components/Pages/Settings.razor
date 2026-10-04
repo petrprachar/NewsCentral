@@ -2,10 +2,9 @@
 @using System.IO
 @using NewsCentral.Services
 @using NewsCentral.Models
-@using NewsCentral.Configuration
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
-@inject AppConfiguration AppConfig
+@inject EnvironmentContext EnvironmentContext
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Settings> Localizer
 
@@ -164,7 +163,7 @@
         }
 
         // Informational: where the JSON data store lives (moved here from Home).
-        dataStorePath = Path.Combine(AppConfig.DataPath ?? string.Empty, "config", "users.json");
+        dataStorePath = Path.Combine(EnvironmentContext.DataPath ?? string.Empty, "config", "users.json");
     }
 
     private async Task ChangePassword()

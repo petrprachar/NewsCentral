@@ -3,7 +3,7 @@ namespace NewsCentral.Services;
 /// <summary>
 /// Abstraction over the AUTHORING tier file storage.
 /// Local disk and Azure Files (SMB) are both served by LocalStorageService.
-/// All paths are relative to the storage root (AppConfiguration.DataPath).
+/// All paths are relative to the storage root (EnvironmentContext.DataPath).
 /// Use forward-slash convention throughout:
 ///   "{team}/content/presentations/pres_{id}.json"
 ///   "{team}/images/generated/{filename}"

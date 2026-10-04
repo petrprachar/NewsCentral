@@ -136,6 +136,10 @@ public static class MauiProgram
             new HmacService(new HmacOptions { SecretKey = appConfig.HmacSecretKey }));
         builder.Services.AddSingleton<EcdsaSignatureService>();
 
+        // Single runtime source of DataPath — everything below reads it on every call instead of
+        // capturing AppConfiguration.DataPath once at construction (see EnvironmentContext.cs).
+        builder.Services.AddSingleton<EnvironmentContext>();
+
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
 
@@ -179,10 +183,10 @@ public static class MauiProgram
         // Register DataSeederService with IConfiguration dependency
         builder.Services.AddSingleton<DataSeederService>(sp =>
         {
-            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
+            var environment = sp.GetRequiredService<EnvironmentContext>();
             var configuration = sp.GetRequiredService<IConfiguration>();
             var storageService = sp.GetRequiredService<IStorageService>();
-            return new DataSeederService(storageService, appConfiguration, configuration);
+            return new DataSeederService(storageService, environment, configuration);
         });
 
         // Add localization — ResourcesPath tells the factory where to find per-type .resx files

@@ -1,4 +1,3 @@
-using NewsCentral.Configuration;
 using NewsCentral.Models;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
@@ -8,8 +7,12 @@ namespace NewsCentral.Services;
 public class DataSeederService
 {
     private readonly IStorageService _storage;
-    private readonly string _basePath;          // kept only for BasePathExists check
+    private readonly EnvironmentContext _environment;
     private readonly IConfiguration _configuration;
+
+    // TODO(M3): this memoizes one seed check for the process lifetime, regardless of which
+    // environment DataPath currently points at. Per-environment seeding (so switching
+    // environments at runtime re-evaluates seeding for the new DataPath) is designed in M3/M5.
     private readonly Lazy<Task> _initialization;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -20,11 +23,11 @@ public class DataSeederService
 
     public DataSeederService(
         IStorageService storage,
-        AppConfiguration config,
+        EnvironmentContext environment,
         IConfiguration configuration)
     {
         _storage       = storage;
-        _basePath      = config.DataPath;       // used only by GetInitializationStatus
+        _environment   = environment;
         _configuration = configuration;
         _initialization = new Lazy<Task>(InitializeIfNeededAsync);
     }
@@ -134,14 +137,14 @@ public class DataSeederService
 
     public InitializationStatus GetInitializationStatus()
     {
-        // _basePath is kept solely so BasePathExists can report whether the
-        // configured data root (drive letter, UNC path, or Azure Files mount)
-        // is reachable — useful for diagnostics when the app fails to start.
+        // Read fresh every call so a runtime DataPath switch (M4) is reflected immediately —
+        // useful for diagnostics when the app fails to start.
+        var basePath = _environment.DataPath;
         var status = new InitializationStatus
         {
             IsInitialized  = IsInitialized(),
-            BasePath       = _basePath,
-            BasePathExists = Directory.Exists(_basePath)
+            BasePath       = basePath,
+            BasePathExists = Directory.Exists(basePath)
         };
 
         if (status.BasePathExists)
