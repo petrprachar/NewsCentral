@@ -145,6 +145,95 @@ public static class EnvironmentSettingsResolver
     }
 
     /// <summary>
+    /// Applies a matching policy entry's per-field overrides (M3b) onto <paramref name="baseSettings"/>,
+    /// which is never mutated — a fresh, deep copy is built and only the fields the policy entry
+    /// actually sets (non-null on <see cref="PolicyEnvironment"/>) are replaced on it.
+    /// <paramref name="baseSettings"/> is typically the M3a result (environment file, or machine
+    /// defaults when absent); if that result was already <see cref="EnvironmentSettingsSource.Invalid"/>,
+    /// the caller must not call this at all — policy never rescues a corrupt file.
+    /// </summary>
+    /// <returns>
+    /// The overlaid settings, plus the JSON-path-like names of exactly the fields policy overrode
+    /// (environment.json's own field names, e.g. <c>"distribution.localPath"</c>), in a fixed order.
+    /// </returns>
+    public static (EnvironmentSettings Settings, IReadOnlyList<string> PolicyFields) ApplyPolicy(
+        EnvironmentSettings baseSettings, PolicyEnvironment policy)
+    {
+        var fields = new List<string>();
+
+        var result = new EnvironmentSettings
+        {
+            SchemaVersion = baseSettings.SchemaVersion,
+            DisplayName = baseSettings.DisplayName,
+            Distribution = new DistributionSettings
+            {
+                Enabled = baseSettings.Distribution.Enabled,
+                Mode = baseSettings.Distribution.Mode,
+                LocalPath = baseSettings.Distribution.LocalPath,
+                AzureBlob = new AzureBlobSettings
+                {
+                    TenantId = baseSettings.Distribution.AzureBlob.TenantId,
+                    ClientId = baseSettings.Distribution.AzureBlob.ClientId,
+                    AccountName = baseSettings.Distribution.AzureBlob.AccountName,
+                    ContainerName = baseSettings.Distribution.AzureBlob.ContainerName
+                }
+            },
+            ModifiedBy = baseSettings.ModifiedBy,
+            ModifiedUtc = baseSettings.ModifiedUtc
+        };
+
+        if (policy.DisplayName != null)
+        {
+            result.DisplayName = policy.DisplayName;
+            fields.Add("displayName");
+        }
+
+        if (policy.EnableBlobDistribution.HasValue)
+        {
+            result.Distribution.Enabled = policy.EnableBlobDistribution.Value;
+            fields.Add("distribution.enabled");
+        }
+
+        if (policy.DistributionMode != null)
+        {
+            result.Distribution.Mode = policy.DistributionMode;
+            fields.Add("distribution.mode");
+        }
+
+        if (policy.LocalDistributionPath != null)
+        {
+            result.Distribution.LocalPath = policy.LocalDistributionPath;
+            fields.Add("distribution.localPath");
+        }
+
+        if (policy.AzureBlobContainerName != null)
+        {
+            result.Distribution.AzureBlob.ContainerName = policy.AzureBlobContainerName;
+            fields.Add("distribution.azureBlob.containerName");
+        }
+
+        if (policy.AzureTenantId != null)
+        {
+            result.Distribution.AzureBlob.TenantId = policy.AzureTenantId;
+            fields.Add("distribution.azureBlob.tenantId");
+        }
+
+        if (policy.AzureClientId != null)
+        {
+            result.Distribution.AzureBlob.ClientId = policy.AzureClientId;
+            fields.Add("distribution.azureBlob.clientId");
+        }
+
+        if (policy.AzureAccountName != null)
+        {
+            result.Distribution.AzureBlob.AccountName = policy.AzureAccountName;
+            fields.Add("distribution.azureBlob.accountName");
+        }
+
+        return (result, fields);
+    }
+
+    /// <summary>
     /// Maps this machine's existing appsettings.json/registry values (Storage:*, AzureBlob:*) into
     /// an EnvironmentSettings shape — the defaults used when no environment.json exists, and what
     /// "Save to environment" writes verbatim.
