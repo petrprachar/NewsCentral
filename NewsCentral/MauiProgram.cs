@@ -143,24 +143,14 @@ public static class MauiProgram
         // ── Authoring tier storage (always local / Azure Files SMB) ─────────
         builder.Services.AddSingleton<IStorageService, LocalStorageService>();
 
-        // ── Distribution tier storage (config-driven) ────────────────────────
-        builder.Services.AddSingleton<IBlobDistributionService>(sp =>
-        {
-            var cfg = sp.GetRequiredService<AppConfiguration>();
-
-            if (!cfg.EnableBlobDistribution)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    "IBlobDistributionService: NULL (EnableBlobDistribution=false)");
-                return new NullBlobDistributionService();
-            }
-
-            return cfg.DistributionMode switch
-            {
-                "AzureBlob" => (IBlobDistributionService)new AzureBlobDistributionService(cfg),
-                _ => new LocalBlobDistributionService(cfg)
-            };
-        });
+        // ── Distribution tier storage (config-driven, rebuildable on environment switch) ─────
+        // DistributionServiceRouter holds the actual EnableBlobDistribution/DistributionMode
+        // selection logic (moved from here) and rebuilds its inner service whenever
+        // EnvironmentContext.Changed fires; a build failure (e.g. missing Azure settings) never
+        // fails DI resolution — see DistributionServiceRouter.cs.
+        builder.Services.AddSingleton<DistributionServiceRouter>();
+        builder.Services.AddSingleton<IBlobDistributionService>(
+            sp => sp.GetRequiredService<DistributionServiceRouter>());
 
         // Register WindowsIdentityService (needs to be before AuthenticationService)
         builder.Services.AddSingleton<WindowsIdentityService>();

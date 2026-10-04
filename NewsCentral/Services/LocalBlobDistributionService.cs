@@ -1,5 +1,3 @@
-using NewsCentral.Configuration;
-
 namespace NewsCentral.Services;
 
 /// <summary>
@@ -9,11 +7,10 @@ namespace NewsCentral.Services;
 /// Mirrors the Azure Blob path structure exactly so that switching to
 /// AzureBlobDistributionService requires zero path changes anywhere else.
 ///
-/// Root: AppConfiguration.LocalDistributionPath
-///   (must be DIFFERENT from DataPath — the separation is the point)
-///
-/// If LocalDistributionPath is not configured, falls back to a
-/// "_distribution" subfolder next to DataPath so the app always starts.
+/// Root: resolved by DistributionServiceRouter (AppConfiguration.LocalDistributionPath if set,
+/// else EnvironmentContext.DataPath + "_distribution") and passed in here — this class takes no
+/// dependency on either and performs no disk access of its own at construction.
+///   (the root must be DIFFERENT from DataPath — the separation is the point)
 ///
 /// Example layout after a publish:
 ///   C:\NewsCentralDist\
@@ -30,11 +27,9 @@ public class LocalBlobDistributionService : IBlobDistributionService
     private readonly string _root;
     private const string Tag = "[BlobDist LOCAL]";
 
-    public LocalBlobDistributionService(AppConfiguration config)
+    public LocalBlobDistributionService(string root)
     {
-        _root = string.IsNullOrWhiteSpace(config.LocalDistributionPath)
-            ? Path.Combine(config.DataPath, "_distribution")
-            : config.LocalDistributionPath;
+        _root = root;
 
         System.Diagnostics.Debug.WriteLine($"{Tag} Root: {_root}");
     }
