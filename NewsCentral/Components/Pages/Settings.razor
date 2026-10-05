@@ -171,8 +171,8 @@
                         <div class="col-md-9">@(environmentSettings.ModifiedBy ?? "—")</div>
                     </div>
                     <div class="row mb-2">
-                        <div class="col-md-3"><strong>Modified (UTC):</strong></div>
-                        <div class="col-md-9">@(environmentSettings.ModifiedUtc?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</div>
+                        <div class="col-md-3"><strong>Modified:</strong></div>
+                        <div class="col-md-9">@DisplayTime.Local(environmentSettings.ModifiedUtc, "yyyy-MM-dd HH:mm:ss")</div>
                     </div>
                 }
             }
