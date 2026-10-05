@@ -157,18 +157,68 @@ public sealed class EnvironmentInitializer
             var usersJson = JsonSerializer.Serialize(usersCollection, UsersJsonOptions);
             var usersPath = Path.Combine(configDir, "users.json");
 
+            // M5c: distinguish "the file already exists" (a lost race — expected, not an error)
+            // from every other I/O failure (network drop, disk full — a real failure that must
+            // surface as such, not be misreported as someone else having claimed the environment).
+            const int ErrorFileExists = unchecked((int)0x80070050);
+            const int ErrorAlreadyExists = unchecked((int)0x800700B7);
+
+            var createdByUs = false;
             try
             {
-                using var fs = new FileStream(usersPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                using var writer = new StreamWriter(fs, System.Text.Encoding.UTF8);
-                await writer.WriteAsync(usersJson);
+                using (var fs = new FileStream(usersPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    // Reaching here means CreateNew itself succeeded — this call, and no other,
+                    // owns usersPath from this point on, so the catch-all below may delete it.
+                    createdByUs = true;
+                    using var writer = new StreamWriter(fs, System.Text.Encoding.UTF8);
+                    await writer.WriteAsync(usersJson);
+                }
             }
-            catch (IOException)
+            catch (IOException ex) when (ex.HResult == ErrorFileExists || ex.HResult == ErrorAlreadyExists)
             {
-                // The file already exists — someone else claimed this environment between the
-                // caller's own checks and this call. Nothing else is written.
+                // The expected case: the file already exists — someone else claimed this
+                // environment between the caller's own checks and this call. Nothing was written.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[EnvironmentInitializer] Claim lost — '{usersPath}' already exists (HResult 0x{ex.HResult:X8}).");
                 return new InitializeResult(InitializeOutcome.ClaimedByOther,
                     "This environment was initialized by someone else in the meantime.", AdminUser: null);
+            }
+            catch (IOException ex) when (!createdByUs && File.Exists(usersPath))
+            {
+                // Safety net: some OTHER IOException (an unmapped HResult) was thrown before
+                // CreateNew itself succeeded, yet the file is now there anyway — the only plausible
+                // explanation is a competing CreateNew that won the race in between. Treated the
+                // same as the expected case above; createdByUs is false here, so nothing of ours
+                // is ever deleted.
+                System.Diagnostics.Debug.WriteLine(
+                    $"[EnvironmentInitializer] Claim lost (unmapped HResult 0x{ex.HResult:X8}) — '{usersPath}' exists.");
+                return new InitializeResult(InitializeOutcome.ClaimedByOther,
+                    "This environment was initialized by someone else in the meantime.", AdminUser: null);
+            }
+            catch (Exception ex)
+            {
+                // A genuine failure (network drop, disk full, …) — not a lost race. If THIS call
+                // created the file (createdByUs), it may now hold a truncated write; delete it so
+                // the environment is not left looking permanently (and silently) initialized with
+                // no way to log in. Never deletes a users.json this call did not create.
+                if (createdByUs)
+                {
+                    try
+                    {
+                        File.Delete(usersPath);
+                    }
+                    catch (Exception deleteEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[EnvironmentInitializer] Failed to delete the partial '{usersPath}' after a claim failure: {deleteEx.Message}");
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[EnvironmentInitializer] Claim failed for '{usersPath}': {ex.Message}");
+                return new InitializeResult(InitializeOutcome.Failed,
+                    $"Could not create config/users.json: {ex.Message}", AdminUser: null);
             }
 
             // ── Steps 3-5 — everything from here on is best-effort. The claim already succeeded,
