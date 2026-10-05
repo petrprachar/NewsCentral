@@ -10,6 +10,7 @@
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject IStringLocalizer<CreateAssignment> Localizer
+@inject IJSRuntime JS
 
 <PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
@@ -89,7 +90,7 @@
                                 <input type="checkbox"
                                        checked="@selectedTeams.Contains(currentTeam.TeamID)"
                                        @onchange="@(e => ToggleTeam(currentTeam.TeamID, (bool)e.Value!))" />
-                                <strong>@currentTeam.Name</strong> (@Localizer["CurrentTeamSuffix"])
+                                <strong>@currentTeam.Name</strong> @Localizer["CurrentTeamSuffix"]
                             </label>
                             <small>@currentTeam.Description</small>
                         </div>
@@ -102,23 +103,94 @@
                 }
                 else
                 {
-                    <label class="section-label">@Localizer["OtherTeamsLabel"]</label>
-                    <div class="teams-list">
-                        @foreach (var team in availableTeams)
-                        {
-                            var isSelected = selectedTeams.Contains(team.TeamID);
+                    var shown = ShownOtherTeams;
 
-                            <div class="team-checkbox">
-                                <label>
+                    <label class="section-label">@Localizer["OtherTeamsLabel"]</label>
+
+                    <div class="other-teams-toolbar">
+                        <input type="text" class="other-teams-search" placeholder="@Localizer["SearchTeamsPlaceholder"]"
+                               @bind="teamSearch" @bind:event="oninput" />
+                        <label class="other-teams-toggle">
+                            <input type="checkbox" @bind="showSelectedOnly" />
+                            @Localizer["ShowSelectedOnly"]
+                        </label>
+                        <span class="other-teams-counter">
+                            @string.Format(Localizer["SelectedCounter"].Value, OtherSelectedCount, availableTeams.Count)
+                        </span>
+                    </div>
+
+                    @if (OtherSelectedCount > 0)
+                    {
+                        <div class="other-teams-chips">
+                            @if (OtherSelectedCount == availableTeams.Count)
+                            {
+                                <span class="team-chip">
+                                    @string.Format(Localizer["AllTeamsChip"].Value, availableTeams.Count)
+                                    <button type="button" class="team-chip-remove" @onclick="ClearAllOtherTeams" aria-label="Clear">×</button>
+                                </span>
+                            }
+                            else
+                            {
+                                var selectedOther = availableTeams
+                                    .Where(t => selectedTeams.Contains(t.TeamID))
+                                    .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                                    .ToList();
+
+                                @foreach (var team in selectedOther.Take(12))
+                                {
+                                    <span class="team-chip">
+                                        @team.Name
+                                        <button type="button" class="team-chip-remove"
+                                                @onclick="@(() => ToggleTeam(team.TeamID, false))" aria-label="Remove">×</button>
+                                    </span>
+                                }
+                                @if (selectedOther.Count > 12)
+                                {
+                                    <button type="button" class="team-chip team-chip-more" @onclick="@(() => showSelectedOnly = true)">
+                                        @string.Format(Localizer["MoreChipsSuffix"].Value, selectedOther.Count - 12)
+                                    </button>
+                                }
+                            }
+                        </div>
+                    }
+
+                    <label class="other-teams-list-header">
+                        <input type="checkbox" @ref="masterCheckboxRef"
+                               checked="@MasterChecked(shown)"
+                               @onchange="@(e => ToggleMaster(shown))" />
+                        <span>
+                            @(IsOtherTeamsFilterActive
+                                ? string.Format(Localizer["SelectAllShownLabel"].Value, shown.Count)
+                                : string.Format(Localizer["SelectAllLabel"].Value, availableTeams.Count))
+                        </span>
+                    </label>
+
+                    @if (shown.Count == 0)
+                    {
+                        <p class="no-teams-match">
+                            @(string.IsNullOrWhiteSpace(teamSearch)
+                                ? Localizer["NoTeamsSelected"].Value
+                                : string.Format(Localizer["NoTeamsMatch"].Value, teamSearch))
+                        </p>
+                    }
+                    else
+                    {
+                        <div class="other-teams-scroll">
+                            @foreach (var team in shown)
+                            {
+                                var isSelected = selectedTeams.Contains(team.TeamID);
+
+                                <label class="other-team-row @(isSelected ? "selected" : "")">
                                     <input type="checkbox"
                                            checked="@isSelected"
                                            @onchange="@(e => ToggleTeam(team.TeamID, (bool)e.Value!))" />
-                                    <strong>@team.Name</strong>
+                                    <span class="other-team-name">@team.Name</span>
+                                    <span class="other-team-folder">@team.FolderName</span>
+                                    <span class="other-team-desc" title="@team.Description">@team.Description</span>
                                 </label>
-                                <small>@team.Description</small>
-                            </div>
-                        }
-                    </div>
+                            }
+                        </div>
+                    }
                 }
             </div>
 
@@ -154,8 +226,8 @@
             {
                 <div class="form-actions">
                     <button @onclick="Cancel" class="btn btn-secondary">@Localizer["Cancel"]</button>
-                    <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@isCreating">
-                        @(isCreating ? Localizer["Creating"].Value : Localizer["CreateAssignments"].Value)
+                    <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@(isCreating || selectedTeams.Count == 0)">
+                        @(isCreating ? Localizer["Creating"].Value : CreateButtonLabel)
                     </button>
                 </div>
             }
@@ -438,6 +510,164 @@
         cursor: not-allowed;
     }
 
+    /* UI-1 — scalable Other Teams selector (up to ~200 teams) */
+    .other-teams-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .other-teams-search {
+        flex: 1 1 220px;
+        min-width: 160px;
+        padding: 8px 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+
+    .other-teams-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: normal;
+        font-size: 13px;
+        color: #333;
+        white-space: nowrap;
+        cursor: pointer;
+        margin-bottom: 0;
+    }
+
+    .other-teams-counter {
+        font-size: 13px;
+        color: #666;
+        white-space: nowrap;
+        margin-left: auto;
+    }
+
+    .other-teams-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+    }
+
+    .team-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #e7f3ff;
+        border: 1px solid #667eea;
+        border-radius: 14px;
+        padding: 3px 6px 3px 10px;
+        font-size: 12px;
+        color: #333;
+    }
+
+    .team-chip-more {
+        background: #f0f1fd;
+        border: 1px dashed #667eea;
+        cursor: pointer;
+        color: #667eea;
+    }
+
+    .team-chip-remove {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        color: #667eea;
+        padding: 0 4px;
+    }
+
+        .team-chip-remove:hover {
+            color: #c82333;
+        }
+
+    .other-teams-list-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        background: #f0f1fd;
+        border: 1px solid #ddd;
+        border-bottom: none;
+        border-radius: 5px 5px 0 0;
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+        cursor: pointer;
+        margin-bottom: 0;
+    }
+
+    .other-teams-scroll {
+        max-height: 420px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 0 0 5px 5px;
+    }
+
+    .other-team-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        min-height: 32px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        font-weight: normal;
+        margin-bottom: 0;
+    }
+
+        .other-team-row:last-child {
+            border-bottom: none;
+        }
+
+        .other-team-row:hover {
+            background: #f8f9fa;
+        }
+
+        .other-team-row.selected {
+            background: #e7f3ff;
+        }
+
+    .other-team-name {
+        font-size: 13px;
+        color: #333;
+        flex: 0 1 auto;
+        min-width: 140px;
+    }
+
+    .other-team-folder {
+        font-size: 11px;
+        color: #999;
+        flex-shrink: 0;
+        font-family: monospace;
+    }
+
+    .other-team-desc {
+        font-size: 12px;
+        color: #777;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .no-teams-match {
+        padding: 15px;
+        text-align: center;
+        color: #999;
+        font-style: italic;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+    }
+
 </style>
 
 @code
@@ -466,6 +696,47 @@
 
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
+
+    // UI-1 — Other Teams selector: search/toggle affect only what is SHOWN, never what is
+    // selected; selectedTeams (above) remains the single source of truth.
+    private string teamSearch = string.Empty;
+    private bool showSelectedOnly;
+    private ElementReference masterCheckboxRef;
+
+    private int OtherSelectedCount => availableTeams.Count(t => selectedTeams.Contains(t.TeamID));
+
+    private bool IsOtherTeamsFilterActive => showSelectedOnly || !string.IsNullOrWhiteSpace(teamSearch);
+
+    private string CreateButtonLabel => selectedTeams.Count == 1
+        ? string.Format(Localizer["CreateAssignmentsSingular"].Value, selectedTeams.Count)
+        : string.Format(Localizer["CreateAssignmentsPlural"].Value, selectedTeams.Count);
+
+    // Recomputed on every access (markup + OnAfterRenderAsync) — up to ~200 teams, trivial cost
+    // per keystroke; no caching needed.
+    private List<Team> ShownOtherTeams
+    {
+        get
+        {
+            IEnumerable<Team> query = availableTeams;
+
+            if (showSelectedOnly)
+                query = query.Where(t => selectedTeams.Contains(t.TeamID));
+
+            if (!string.IsNullOrWhiteSpace(teamSearch))
+            {
+                var s = teamSearch.Trim();
+                query = query.Where(t =>
+                    (t.Name?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (t.FolderName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                    (t.Description?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+
+            return query.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
+
+    private bool MasterChecked(List<Team> shown) =>
+        shown.Count > 0 && shown.All(t => selectedTeams.Contains(t.TeamID));
 
     protected override async Task OnInitializedAsync()
     {
@@ -582,6 +853,48 @@
         else
         {
             selectedTeams.Remove(teamId);
+        }
+    }
+
+    // From unchecked or indeterminate (not every shown row selected): select all shown. From
+    // checked (every shown row already selected): deselect all shown. Rows hidden by the filter
+    // keep whatever selection they already had.
+    private void ToggleMaster(List<Team> shown)
+    {
+        var allSelected = MasterChecked(shown);
+        foreach (var team in shown)
+        {
+            if (allSelected)
+                selectedTeams.Remove(team.TeamID);
+            else if (!selectedTeams.Contains(team.TeamID))
+                selectedTeams.Add(team.TeamID);
+        }
+    }
+
+    private void ClearAllOtherTeams()
+    {
+        foreach (var team in availableTeams)
+            selectedTeams.Remove(team.TeamID);
+    }
+
+    // The DOM `indeterminate` property has no HTML attribute equivalent, so it cannot be set from
+    // markup — set via a tiny JS interop call (wwwroot/js/team-selection.js) after every render
+    // instead, reflecting the CURRENT shown/selected state each time.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (availableTeams.Count == 0)
+            return;
+
+        try
+        {
+            var shown = ShownOtherTeams;
+            var selectedShown = shown.Count(t => selectedTeams.Contains(t.TeamID));
+            var isIndeterminate = shown.Count > 0 && selectedShown > 0 && selectedShown < shown.Count;
+            await JS.InvokeVoidAsync("ncSetIndeterminate", masterCheckboxRef, isIndeterminate);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[CreateAssignment] Failed to set master checkbox indeterminate state: {ex.Message}");
         }
     }
 
