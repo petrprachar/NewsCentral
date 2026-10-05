@@ -1,6 +1,7 @@
 @page "/"
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Components.Shared
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
 @inject TeamService TeamService
@@ -61,7 +62,7 @@
                     <dd class="col-sm-9">@RenderRoles()</dd>
 
                     <dt class="col-sm-3">@Localizer["LastLogin"]</dt>
-                    <dd class="col-sm-9">@(currentUser.LastLogin?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</dd>
+                    <dd class="col-sm-9">@DisplayTime.Local(currentUser.LastLogin, "yyyy-MM-dd HH:mm:ss")</dd>
                 </dl>
             </div>
         </div>

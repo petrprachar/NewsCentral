@@ -3,6 +3,7 @@
 @using NewsCentral.Services
 @using NewsCentral.Models
 @using NewsCentral.Configuration
+@using NewsCentral.Components.Shared
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
 @inject EnvironmentContext EnvironmentContext
@@ -62,7 +63,7 @@
             {
                 <div class="row mb-3">
                     <div class="col-md-3"><strong>@Localizer["LastLogin"]:</strong></div>
-                    <div class="col-md-9">@currentUser.LastLogin.Value.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                    <div class="col-md-9">@DisplayTime.Local(currentUser.LastLogin, "yyyy-MM-dd HH:mm:ss")</div>
                 </div>
             }
         </div>

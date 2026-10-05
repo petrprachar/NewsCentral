@@ -332,7 +332,7 @@
             {
                 warningMessage =
                     $"Republished the index for {currentTeamName ?? currentTeamFolder!}, but distribution failed: " +
-                    $"{result.DistributionError}. Clients will not receive it until this is resolved and republished again.";
+                    $"{result.DistributionError?.TrimEnd('.')}. Clients will not receive it until this is resolved and republished again.";
             }
         }
         catch (Exception ex)

@@ -62,7 +62,7 @@
                         <p><strong>@Localizer["Created"]</strong> @user.DateCreated.ToString("yyyy-MM-dd")</p>
                         @if (user.LastLogin.HasValue)
                         {
-                            <p><strong>@Localizer["LastLogin"]</strong> @user.LastLogin.Value.ToString("yyyy-MM-dd HH:mm")</p>
+                            <p><strong>@Localizer["LastLogin"]</strong> @DisplayTime.Local(user.LastLogin, "yyyy-MM-dd HH:mm")</p>
                         }
                     </div>
 

@@ -1,6 +1,7 @@
 ﻿@page "/index-management"
 @using NewsCentral.Services
 @using NewsCentral.Models
+@using NewsCentral.Components.Shared
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<IndexManagement> Localizer
 @inject IndexGenerationService IndexService
@@ -55,7 +56,7 @@
                                 </p>
                                 @if (currentIndexInfo.Exists)
                                 {
-                                    <p><strong>@Localizer["LastGenerated"]:</strong> @currentIndexInfo.GeneratedAt?.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                                    <p><strong>@Localizer["LastGenerated"]:</strong> @DisplayTime.Local(currentIndexInfo.GeneratedAt, "yyyy-MM-dd HH:mm:ss")</p>
                                     <p><strong>@Localizer["TotalAssignments"]:</strong> @currentIndexInfo.TotalAssignments</p>
                                 }
                             </div>
@@ -83,6 +84,33 @@
                         @Localizer["RegenerateCurrentTeam"]
                     }
                 </button>
+
+                @* UI-1: result of THIS button only, directly below it — was previously rendered
+                   far below, after the All Teams table, where it was easily missed. *@
+                @if (!string.IsNullOrEmpty(currentSuccessMessage))
+                {
+                    <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+                        <i class="bi bi-check-circle me-2"></i>
+                        @currentSuccessMessage
+                        <button type="button" class="btn-close" @onclick="() => currentSuccessMessage = null"></button>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(currentWarningMessage))
+                {
+                    <div class="alert alert-warning alert-dismissible fade show mt-3" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        @currentWarningMessage
+                        <button type="button" class="btn-close" @onclick="() => currentWarningMessage = null"></button>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(currentErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        @currentErrorMessage
+                        <button type="button" class="btn-close" @onclick="() => currentErrorMessage = null"></button>
+                    </div>
+                }
             }
             else
             {
@@ -128,7 +156,7 @@
                                             <span class="badge bg-warning">@Localizer["No"]</span>
                                         }
                                     </td>
-                                    <td>@info.GeneratedAt?.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td>@DisplayTime.Local(info.GeneratedAt, "yyyy-MM-dd HH:mm:ss")</td>
                                     <td>@info.TotalAssignments</td>
                                     <td>@info.ActiveAssignments</td>
                                 </tr>
@@ -150,46 +178,54 @@
                     @Localizer["RegenerateAllTeams"]
                 }
             </button>
+
+            @* UI-1: result of THIS button only, directly below it. *@
+            @if (!string.IsNullOrEmpty(allSuccessMessage))
+            {
+                <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    @allSuccessMessage
+                    <button type="button" class="btn-close" @onclick="() => allSuccessMessage = null"></button>
+                </div>
+            }
+            @* M5a: distinct from an error — the index itself regenerated fine, only distribution
+               failed. M5b: per-team failures are listed one per line instead of joined into the
+               message text. TODO(i18n). *@
+            @if (!string.IsNullOrEmpty(allWarningMessage))
+            {
+                <div class="alert alert-warning alert-dismissible fade show mt-3" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    @allWarningMessage
+                    @if (allDistributionFailures.Count > 0)
+                    {
+                        <ul class="mb-0 mt-1">
+                            @foreach (var failure in allDistributionFailures)
+                            {
+                                <li>@failure.TrimEnd('.')</li>
+                            }
+                        </ul>
+                    }
+                    <button type="button" class="btn-close" @onclick="DismissAllWarning"></button>
+                </div>
+            }
+            @if (!string.IsNullOrEmpty(allErrorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    @allErrorMessage
+                    <button type="button" class="btn-close" @onclick="() => allErrorMessage = null"></button>
+                </div>
+            }
         </div>
     </div>
 
-    @if (!string.IsNullOrEmpty(successMessage))
-    {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <i class="bi bi-check-circle me-2"></i>
-            @successMessage
-            <button type="button" class="btn-close" @onclick="() => successMessage = null"></button>
-        </div>
-    }
-
+    @* Page-level — failures loading index information itself, unrelated to either button. *@
     @if (!string.IsNullOrEmpty(errorMessage))
     {
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
             <i class="bi bi-exclamation-triangle me-2"></i>
             @errorMessage
             <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
-        </div>
-    }
-
-    @* M5a: distinct from errorMessage — the index itself regenerated fine, only distribution failed.
-       M5b: "Regenerate all"'s per-team failures are listed one per line instead of joined into the
-       message text — distributionFailures is empty (no list rendered) for the single-team path.
-       TODO(i18n). *@
-    @if (!string.IsNullOrEmpty(warningMessage))
-    {
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            @warningMessage
-            @if (distributionFailures.Count > 0)
-            {
-                <ul class="mb-0 mt-1">
-                    @foreach (var failure in distributionFailures)
-                    {
-                        <li>@failure.TrimEnd('.')</li>
-                    }
-                </ul>
-            }
-            <button type="button" class="btn-close" @onclick="DismissWarning"></button>
         </div>
     }
 </div>
@@ -202,15 +238,23 @@
     private List<IndexInfo> allTeamsInfo = new();
     private bool isRegenerating = false;
     private string? regenerationType;
-    private string? successMessage;
-    private string? errorMessage;
-    private string? warningMessage;
-    private List<string> distributionFailures = new();
+    private string? errorMessage;   // page-level — LoadIndexInformation failures only
 
-    private void DismissWarning()
+    // UI-1: split per button so each result alert renders directly below the button that
+    // produced it, instead of one shared set of messages rendered far below both cards.
+    private string? currentSuccessMessage;
+    private string? currentWarningMessage;
+    private string? currentErrorMessage;
+
+    private string? allSuccessMessage;
+    private string? allWarningMessage;
+    private string? allErrorMessage;
+    private List<string> allDistributionFailures = new();
+
+    private void DismissAllWarning()
     {
-        warningMessage = null;
-        distributionFailures.Clear();
+        allWarningMessage = null;
+        allDistributionFailures.Clear();
     }
 
     protected override async Task OnInitializedAsync()
@@ -311,10 +355,9 @@
         {
             isRegenerating = true;
             regenerationType = "current";
-            successMessage = null;
-            errorMessage = null;
-            warningMessage = null;
-            distributionFailures.Clear();
+            currentSuccessMessage = null;
+            currentWarningMessage = null;
+            currentErrorMessage = null;
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine($"=== Manual Regeneration: {currentTeamFolder} ===");
@@ -323,11 +366,11 @@
 
             if (result.DistributionSucceeded)
             {
-                successMessage = Localizer["RegenerationSuccess", currentTeamName ?? currentTeamFolder];
+                currentSuccessMessage = Localizer["RegenerationSuccess", currentTeamName ?? currentTeamFolder];
             }
             else
             {
-                warningMessage =
+                currentWarningMessage =
                     $"Regenerated the index for {currentTeamName ?? currentTeamFolder}, but distribution failed: " +
                     $"{result.DistributionError?.TrimEnd('.')}. Clients will not receive it until this is resolved and the index is regenerated again.";
             }
@@ -337,7 +380,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = Localizer["RegenerationError", ex.Message];
+            currentErrorMessage = Localizer["RegenerationError", ex.Message];
             System.Diagnostics.Debug.WriteLine($"Error regenerating index: {ex.Message}");
         }
         finally
@@ -359,10 +402,10 @@
         {
             isRegenerating = true;
             regenerationType = "all";
-            successMessage = null;
-            errorMessage = null;
-            warningMessage = null;
-            distributionFailures.Clear();
+            allSuccessMessage = null;
+            allWarningMessage = null;
+            allErrorMessage = null;
+            allDistributionFailures.Clear();
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine("=== Manual Regeneration: ALL TEAMS ===");
@@ -371,15 +414,15 @@
 
             if (result.DistributionFailures.Count > 0)
             {
-                distributionFailures = result.DistributionFailures;
-                warningMessage =
+                allDistributionFailures = result.DistributionFailures;
+                allWarningMessage =
                     $"{Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count]} " +
                     $"— {result.DistributionFailures.Count} distribution failure(s). Clients will not receive the " +
                     "affected teams' content until this is resolved and the indexes are regenerated again.";
             }
             else
             {
-                successMessage = Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count];
+                allSuccessMessage = Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count];
             }
 
             // Reload index information
@@ -387,7 +430,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = Localizer["RegenerationError", ex.Message];
+            allErrorMessage = Localizer["RegenerationError", ex.Message];
             System.Diagnostics.Debug.WriteLine($"Error regenerating all indexes: {ex.Message}");
         }
         finally
