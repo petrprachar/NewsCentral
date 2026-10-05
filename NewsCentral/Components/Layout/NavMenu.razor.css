@@ -80,6 +80,19 @@
             color: white;
         }
 
+    /* M5b: "Environment Management" is long enough to wrap onto a second line at the sidebar's
+       fixed 250px width otherwise, clipped by the anchor's fixed 3rem height. The anchor is
+       already a flex row (above), so min-width:0 lets this child shrink below its own text's
+       intrinsic width instead of forcing the row wider — the standard flex-ellipsis pairing. The
+       anchor's own `title` attribute (NavMenu.razor) carries the full text on hover. */
+    .nav-item ::deep .nav-link-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+        flex: 1;
+    }
+
 .nav-scrollable {
     display: none;
 }

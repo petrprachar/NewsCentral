@@ -264,7 +264,7 @@
 
                 @if (showRegenerateOffer)
                 {
-                    <div class="alert alert-success mt-3">
+                    <div class="alert @(regenerateFailures.Count > 0 ? "alert-warning" : "alert-success") mt-3">
                         Settings saved.
                         <button class="btn btn-sm btn-outline-success ms-2" @onclick="RegenerateAllAsync" disabled="@isRegenerating">
                             @(isRegenerating ? "Regenerating…" : "Regenerate all team indexes now")
@@ -272,6 +272,15 @@
                         @if (regenerateSummary != null)
                         {
                             <div class="mt-2">@regenerateSummary</div>
+                        }
+                        @if (regenerateFailures.Count > 0)
+                        {
+                            <ul class="mb-0 mt-1">
+                                @foreach (var failure in regenerateFailures)
+                                {
+                                    <li>@failure.TrimEnd('.')</li>
+                                }
+                            </ul>
                         }
                     </div>
                 }
@@ -401,6 +410,7 @@
     private bool showRegenerateOffer;
     private bool isRegenerating;
     private string? regenerateSummary;
+    private List<string> regenerateFailures = new();
 
     private bool isTesting;
     private string? testResult;
@@ -575,6 +585,7 @@
         validationErrors.Clear();
         showRegenerateOffer = false;
         regenerateSummary = null;
+        regenerateFailures.Clear();
 
         // M5a.1: never write the form's own value for a policy-controlled field — MergeForSave
         // takes those fields from the pre-policy-overlay StoredSettings instead (or this machine's
@@ -681,13 +692,14 @@
         try
         {
             var result = await IndexService.RegenerateAllIndexesAsync();
+            regenerateFailures = result.DistributionFailures;
             regenerateSummary = result.DistributionFailures.Count == 0
                 ? $"Regenerated {result.Regenerated} team index(es), 0 distribution failures."
-                : $"Regenerated {result.Regenerated} team index(es), {result.DistributionFailures.Count} distribution failure(s): " +
-                  string.Join("; ", result.DistributionFailures);
+                : $"Regenerated {result.Regenerated} team index(es), {result.DistributionFailures.Count} distribution failure(s):";
         }
         catch (Exception ex)
         {
+            regenerateFailures.Clear();
             regenerateSummary = $"Regeneration failed: {ex.Message}";
         }
         finally

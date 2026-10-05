@@ -171,13 +171,25 @@
         </div>
     }
 
-    @* M5a: distinct from errorMessage — the index itself regenerated fine, only distribution failed. TODO(i18n). *@
+    @* M5a: distinct from errorMessage — the index itself regenerated fine, only distribution failed.
+       M5b: "Regenerate all"'s per-team failures are listed one per line instead of joined into the
+       message text — distributionFailures is empty (no list rendered) for the single-team path.
+       TODO(i18n). *@
     @if (!string.IsNullOrEmpty(warningMessage))
     {
         <div class="alert alert-warning alert-dismissible fade show" role="alert">
             <i class="bi bi-exclamation-triangle me-2"></i>
             @warningMessage
-            <button type="button" class="btn-close" @onclick="() => warningMessage = null"></button>
+            @if (distributionFailures.Count > 0)
+            {
+                <ul class="mb-0 mt-1">
+                    @foreach (var failure in distributionFailures)
+                    {
+                        <li>@failure.TrimEnd('.')</li>
+                    }
+                </ul>
+            }
+            <button type="button" class="btn-close" @onclick="DismissWarning"></button>
         </div>
     }
 </div>
@@ -193,6 +205,13 @@
     private string? successMessage;
     private string? errorMessage;
     private string? warningMessage;
+    private List<string> distributionFailures = new();
+
+    private void DismissWarning()
+    {
+        warningMessage = null;
+        distributionFailures.Clear();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -295,6 +314,7 @@
             successMessage = null;
             errorMessage = null;
             warningMessage = null;
+            distributionFailures.Clear();
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine($"=== Manual Regeneration: {currentTeamFolder} ===");
@@ -342,6 +362,7 @@
             successMessage = null;
             errorMessage = null;
             warningMessage = null;
+            distributionFailures.Clear();
             StateHasChanged();
 
             System.Diagnostics.Debug.WriteLine("=== Manual Regeneration: ALL TEAMS ===");
@@ -350,14 +371,11 @@
 
             if (result.DistributionFailures.Count > 0)
             {
-                var first = result.DistributionFailures[0];
-                var more = result.DistributionFailures.Count > 1
-                    ? $" (+{result.DistributionFailures.Count - 1} more)"
-                    : "";
+                distributionFailures = result.DistributionFailures;
                 warningMessage =
                     $"{Localizer["RegenerationAllSuccess", result.Regenerated, allTeamsInfo.Count]} " +
-                    $"— distribution failed: {first}{more}. Clients will not receive the affected teams' content " +
-                    "until this is resolved and the indexes are regenerated again.";
+                    $"— {result.DistributionFailures.Count} distribution failure(s). Clients will not receive the " +
+                    "affected teams' content until this is resolved and the indexes are regenerated again.";
             }
             else
             {
