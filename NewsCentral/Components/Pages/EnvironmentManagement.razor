@@ -12,6 +12,7 @@
 @inject DistributionStatusTracker DistributionStatus
 @inject AppConfiguration AppConfig
 @inject IndexGenerationService IndexService
+@implements IDisposable
 
 @* M5a — Environment Management page. TODO(i18n): plain English for now, following M3a/M4a. *@
 
@@ -141,7 +142,7 @@
                     }
                     else
                     {
-                        <input class="form-control" @bind="formDisplayName" />
+                        <input class="form-control" @bind="formDisplayName" @bind:after="MarkDirty" />
                     }
                 </div>
 
@@ -155,7 +156,7 @@
                     }
                     else
                     {
-                        <input type="checkbox" class="form-check-input" id="distEnabled" @bind="formDistributionEnabled" />
+                        <input type="checkbox" class="form-check-input" id="distEnabled" @bind="formDistributionEnabled" @bind:after="MarkDirty" />
                         <label class="form-check-label" for="distEnabled">Distribution enabled</label>
                     }
                 </div>
@@ -171,7 +172,7 @@
                         }
                         else
                         {
-                            <select class="form-select" @bind="formMode">
+                            <select class="form-select" @bind="formMode" @bind:after="MarkDirty">
                                 <option value="Local">Local</option>
                                 <option value="AzureBlob">AzureBlob</option>
                             </select>
@@ -189,7 +190,7 @@
                             }
                             else
                             {
-                                <input class="form-control" @bind="formAzureTenantId" />
+                                <input class="form-control" @bind="formAzureTenantId" @bind:after="MarkDirty" />
                             }
                         </div>
                         <div class="mb-3">
@@ -201,7 +202,7 @@
                             }
                             else
                             {
-                                <input class="form-control" @bind="formAzureClientId" />
+                                <input class="form-control" @bind="formAzureClientId" @bind:after="MarkDirty" />
                             }
                         </div>
                         <div class="mb-3">
@@ -213,7 +214,7 @@
                             }
                             else
                             {
-                                <input class="form-control" @bind="formAzureAccountName" />
+                                <input class="form-control" @bind="formAzureAccountName" @bind:after="MarkDirty" />
                             }
                         </div>
                         <div class="mb-3">
@@ -225,7 +226,7 @@
                             }
                             else
                             {
-                                <input class="form-control" @bind="formAzureContainerName" />
+                                <input class="form-control" @bind="formAzureContainerName" @bind:after="MarkDirty" />
                             }
                         </div>
                     }
@@ -240,7 +241,7 @@
                             }
                             else
                             {
-                                <input class="form-control" @bind="formLocalPath"
+                                <input class="form-control" @bind="formLocalPath" @bind:after="MarkDirty"
                                        placeholder="(defaults to DataPath\_distribution if left blank)" />
                             }
                         </div>
@@ -352,6 +353,10 @@
     private bool isCurrentShared;
     private IReadOnlyList<SharedDirectoryEntry> collisions = Array.Empty<SharedDirectoryEntry>();
 
+    // M5a.1: true once the user has touched any editable field — an external reload (another save
+    // elsewhere, a distribution status change) must never clobber in-progress edits.
+    private bool isDirty;
+
     protected override async Task OnInitializedAsync()
     {
         var user = AuthService.GetCurrentUser();
@@ -362,10 +367,45 @@
         }
 
         isAuthorized = true;
-        await LoadAsync();
+        EnvironmentSettingsService.SettingsChanged += HandleExternalChange;
+        DistributionStatus.Changed += HandleExternalChange;
+
+        await LoadReadOnlySectionsAsync();
+        FillFormFromEffective();
     }
 
-    private async Task LoadAsync()
+    public void Dispose()
+    {
+        EnvironmentSettingsService.SettingsChanged -= HandleExternalChange;
+        DistributionStatus.Changed -= HandleExternalChange;
+    }
+
+    private void MarkDirty() => isDirty = true;
+
+    /// <summary>
+    /// Fired by EnvironmentSettingsService.SettingsChanged (a save made anywhere — this page's own,
+    /// or elsewhere, e.g. MainLayout's "Save to environment") and DistributionStatusTracker.Changed
+    /// (a distribution success/failure). Reloads only the read-only sections — never the success
+    /// panel, the regenerate offer/summary, or the Test result — and refills the form only when
+    /// there are no unsaved edits.
+    /// </summary>
+    private async void HandleExternalChange()
+    {
+        try
+        {
+            await LoadReadOnlySectionsAsync();
+            if (!isDirty)
+                FillFormFromEffective();
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[EnvironmentManagement] Failed to refresh after an external change: {ex.Message}");
+        }
+    }
+
+    private async Task LoadReadOnlySectionsAsync()
     {
         current = EnvironmentDirectory.Current;
         effective = await EnvironmentSettingsService.GetAsync();
@@ -385,22 +425,41 @@
             _ => "Invalid"
         };
 
-        EnvironmentSettings baseSettings;
         if (effective.Source == EnvironmentSettingsSource.EnvironmentFile ||
             effective.Source == EnvironmentSettingsSource.MachineDefaults)
         {
-            baseSettings = effective.Settings!;
             startNote = effective.Source == EnvironmentSettingsSource.MachineDefaults
                 ? "Not yet stored in this environment — Save stores them."
                 : null;
             sourceErrorText = null;
         }
-        else // Invalid / Unreachable — Settings is null; start from this machine's own defaults.
+        else // Invalid / Unreachable
         {
-            baseSettings = EnvironmentSettingsResolver.FromMachineConfiguration(AppConfig);
             startNote = "Saving replaces the stored settings.";
             sourceErrorText = effective.Error;
         }
+
+        targetText = effective.Settings != null
+            ? EnvironmentSettingsService.DescribeDistributionTarget(effective.Settings.Distribution, EnvironmentContext.DataPath)
+            : "—";
+
+        RefreshCollisions();
+    }
+
+    /// <summary>
+    /// Fills the editable form from the CURRENT effective (policy-applied) settings — the file/
+    /// machine-default values for EnvironmentFile/MachineDefaults, or this machine's own defaults
+    /// for Invalid/Unreachable (effective.Settings is null there). Only ever called when there are
+    /// no unsaved edits (on initial load, right after this page's own successful Save, or from
+    /// HandleExternalChange when !isDirty) — never during a reload that must preserve in-progress
+    /// edits.
+    /// </summary>
+    private void FillFormFromEffective()
+    {
+        var baseSettings = effective!.Source == EnvironmentSettingsSource.EnvironmentFile ||
+                            effective.Source == EnvironmentSettingsSource.MachineDefaults
+            ? effective.Settings!
+            : EnvironmentSettingsResolver.FromMachineConfiguration(AppConfig);
 
         formDisplayName = baseSettings.DisplayName;
         formDistributionEnabled = baseSettings.Distribution.Enabled;
@@ -411,11 +470,7 @@
         formAzureAccountName = baseSettings.Distribution.AzureBlob.AccountName;
         formAzureContainerName = baseSettings.Distribution.AzureBlob.ContainerName;
 
-        targetText = effective.Settings != null
-            ? EnvironmentSettingsService.DescribeDistributionTarget(effective.Settings.Distribution, EnvironmentContext.DataPath)
-            : "—";
-
-        RefreshCollisions();
+        isDirty = false;
     }
 
     private void RefreshCollisions()
@@ -532,10 +587,15 @@
         var oldFingerprint = effective?.DistributionFingerprint;
         try
         {
+            // M5a.1: no longer calls EnvironmentDirectory.UpdateCurrentFingerprintAsync directly —
+            // EnvironmentSettingsService.SaveAsync raises SettingsChanged, which
+            // EnvironmentDirectoryService now handles itself (updating the fingerprint for every
+            // save, not just ones made through this page), so this covers the same ground without
+            // this page needing to know about the shared directory at all.
             await EnvironmentSettingsService.SaveAsync(settings);
-            await EnvironmentDirectory.UpdateCurrentFingerprintAsync(newFingerprint);
 
-            await LoadAsync();
+            await LoadReadOnlySectionsAsync();
+            FillFormFromEffective(); // the save just succeeded — nothing is "unsaved" any more.
 
             if (newFingerprint != null && !string.Equals(oldFingerprint, newFingerprint, StringComparison.Ordinal))
                 showRegenerateOffer = true;

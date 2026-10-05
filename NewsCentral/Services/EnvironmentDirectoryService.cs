@@ -49,6 +49,7 @@ public sealed class EnvironmentDirectoryService
     private readonly AuthenticationService _authService;
     private readonly TeamContextService _teamContext;
     private readonly IStorageService _storage;
+    private readonly EnvironmentSettingsService _settingsService;
 
     private UserEnvironmentState? _cachedState;
 
@@ -63,7 +64,8 @@ public sealed class EnvironmentDirectoryService
         EnvironmentContext environment,
         AuthenticationService authService,
         TeamContextService teamContext,
-        IStorageService storage)
+        IStorageService storage,
+        EnvironmentSettingsService settingsService)
     {
         _catalog = catalog;
         _config = config;
@@ -72,6 +74,31 @@ public sealed class EnvironmentDirectoryService
         _authService = authService;
         _teamContext = teamContext;
         _storage = storage;
+        _settingsService = settingsService;
+
+        // M5a.1: the fingerprint in the shared directory now follows EVERY settings save, not just
+        // ones made through this page's own direct call (removed) — covers the MainLayout banner's
+        // "Save to environment" and any other future caller of EnvironmentSettingsService.SaveAsync.
+        // No circular dependency: EnvironmentSettingsService's own constructor does not take an
+        // EnvironmentDirectoryService (verified by reading it — its dependencies are IStorageService,
+        // EnvironmentContext, AppConfiguration, AuthenticationService, EnvironmentCatalog only).
+        _settingsService.SettingsChanged += OnSettingsChanged;
+    }
+
+    private async void OnSettingsChanged()
+    {
+        try
+        {
+            var effective = await _settingsService.GetAsync();
+            await UpdateCurrentFingerprintAsync(effective.DistributionFingerprint);
+        }
+        catch (Exception ex)
+        {
+            // Must never throw out of an event handler — logged only, exactly like
+            // SyncSharedDirectoryAsync's own failure handling.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EnvironmentDirectoryService] Failed to update the shared-directory fingerprint after a settings change: {ex.Message}");
+        }
     }
 
     private UserEnvironmentState GetState() => _cachedState ??= _store.Load();
