@@ -87,14 +87,28 @@
                                 <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                                     <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                                 </button>
+                                <PosterThumbnail ImageDataUrl="@vm.PresentationImageDataUrl" Title="@vm.PresentationTitle" Width="120" />
                                 <div class="batch-header-main">
                                     <div class="batch-title">@vm.PresentationTitle</div>
-                                    <div class="batch-meta">
+                                    @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
+                                    {
+                                        <DisplayTypeBadges ShowNewsOfWeek="@vm.IsNewsOfWeek" ShowWallpaper="@vm.IsWallpaper" ShowLogonScreen="@vm.IsLogonScreen" />
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(vm.PresentationDescription))
+                                    {
+                                        <div class="batch-comment" title="@vm.PresentationDescription">
+                                            <strong>@Localizer["CommentLabel"]</strong> @vm.PresentationDescription
+                                        </div>
+                                    }
+                                    <div class="batch-schedule">
                                         @Localizer["ScheduleLabel"]
                                         @(vm.ScheduleStart.HasValue && vm.ScheduleEnd.HasValue
                                             ? $"{vm.ScheduleStart.Value:MMM dd, yyyy} - {vm.ScheduleEnd.Value:MMM dd, yyyy}"
                                             : "—")
-                                        &nbsp;·&nbsp; @Localizer["From"] <strong>@vm.SourceTeamName</strong>
+                                        &nbsp;·&nbsp; @Localizer["DaysLabel"] @FormatDaysOfWeek(vm.DaysOfWeek)
+                                    </div>
+                                    <div class="batch-meta">
+                                        @Localizer["From"] <strong>@vm.SourceTeamName</strong>
                                         &nbsp;·&nbsp; @string.Format(Localizer["TeamsCountLabel"].Value, vm.Batch.Count)
                                         &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
                                     </div>
@@ -150,6 +164,27 @@
     <div class="modal-overlay" @onclick="CloseRejectDialog">
         <div class="modal-content" @onclick:stopPropagation="true">
             <h2>@string.Format(Localizer["RejectAssignmentTitle"].Value, rejectingItems?.Count ?? 0)</h2>
+
+            @if (rejectingItems?.Count == 1)
+            {
+                var single = rejectingItems[0];
+                var singleBatch = BatchFor(single);
+                <div class="reject-dialog-presentation">
+                    <PosterThumbnail ImageDataUrl="@singleBatch?.PresentationImageDataUrl" Title="@singleBatch?.PresentationTitle" Width="90" />
+                    <strong>@singleBatch?.PresentationTitle</strong>
+                </div>
+            }
+            else if (rejectingItems != null && rejectingItems.Count > 1)
+            {
+                var titles = DistinctPresentationTitlesForRejecting();
+                <p class="reject-dialog-presentations">
+                    @string.Join(", ", titles.Take(3))
+                    @if (titles.Count > 3)
+                    {
+                        <text> +@(titles.Count - 3) more</text>
+                    }
+                </p>
+            }
 
             <div class="form-group">
                 <label>@Localizer["RejectionReasonLabel"]</label>
@@ -380,9 +415,39 @@
 
     .batch-header {
         display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+    }
+
+    .batch-comment {
+        font-size: 12px;
+        color: #555;
+        margin-top: 4px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .batch-schedule {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+    }
+
+    .reject-dialog-presentation {
+        display: flex;
         align-items: center;
         gap: 10px;
-        padding: 14px 16px;
+        margin-bottom: 16px;
+    }
+
+    .reject-dialog-presentations {
+        color: #666;
+        font-size: 13px;
+        margin-bottom: 16px;
     }
 
     .batch-expand-toggle {
@@ -536,8 +601,14 @@
                 {
                     Batch = batch,
                     PresentationTitle = presentation?.Name ?? batch.Key.PresentationID,
+                    PresentationDescription = presentation?.Description,
+                    PresentationImageDataUrl = PosterImage.ToDataUrl(presentation),
+                    IsNewsOfWeek = presentation?.IsNewsOfWeek ?? false,
+                    IsWallpaper = presentation?.IsWallpaper ?? false,
+                    IsLogonScreen = presentation?.IsLogonScreen ?? false,
                     ScheduleStart = schedule?.ScheduleStart,
                     ScheduleEnd = schedule?.ScheduleEnd,
+                    DaysOfWeek = schedule?.DaysOfWeek ?? string.Empty,
                     SourceTeamName = sourceTeam?.Name ?? batch.Key.SourceTeam,
                     // Batches with more than 5 items start collapsed; 5 or fewer start expanded —
                     // unless the batch already existed before this reload, in which case its
@@ -669,12 +740,60 @@
 
     private void StopRun() => runCts?.Cancel();
 
+    // Restored from the pre-UI-2 ApprovalViewModel logic — unchanged.
+    private string FormatDaysOfWeek(string daysOfWeek)
+    {
+        if (string.IsNullOrEmpty(daysOfWeek)) return Localizer["None"];
+
+        var days = daysOfWeek.Split(',').Select(int.Parse).ToList();
+        var dayNames = new List<string>();
+
+        foreach (var day in days)
+        {
+            dayNames.Add(day switch
+            {
+                1 => Localizer["Mon"],
+                2 => Localizer["Tue"],
+                3 => Localizer["Wed"],
+                4 => Localizer["Thu"],
+                5 => Localizer["Fri"],
+                6 => Localizer["Sat"],
+                7 => Localizer["Sun"],
+                _ => ""
+            });
+        }
+
+        return string.Join(", ", dayNames);
+    }
+
+    // A rejecting item's presentation title/thumbnail — looked up from the already-cached batch
+    // view model that produced it (same (Source, Presentation, Schedule) key), never a fresh fetch.
+    private BatchViewModel? BatchFor(Assignment a) =>
+        batchViewModels.FirstOrDefault(b =>
+            b.Batch.Key.SourceTeam == a.SourceTeam &&
+            b.Batch.Key.PresentationID == a.PresentationID &&
+            b.Batch.Key.ScheduleID == a.ScheduleID);
+
+    private List<string> DistinctPresentationTitlesForRejecting() =>
+        (rejectingItems ?? new List<Assignment>())
+            .Select(a => BatchFor(a)?.PresentationTitle)
+            .Where(t => t != null)
+            .Select(t => t!)
+            .Distinct()
+            .ToList();
+
     private sealed class BatchViewModel
     {
         public AssignmentBatch Batch { get; set; } = null!;
         public string PresentationTitle { get; set; } = string.Empty;
+        public string? PresentationDescription { get; set; }
+        public string? PresentationImageDataUrl { get; set; }
+        public bool IsNewsOfWeek { get; set; }
+        public bool IsWallpaper { get; set; }
+        public bool IsLogonScreen { get; set; }
         public DateTime? ScheduleStart { get; set; }
         public DateTime? ScheduleEnd { get; set; }
+        public string DaysOfWeek { get; set; } = string.Empty;
         public string SourceTeamName { get; set; } = string.Empty;
         public bool IsExpanded { get; set; }
     }
