@@ -192,15 +192,6 @@ public sealed class EnvironmentSettingsService
     }
 
     /// <summary>
-    /// For the "Save to environment" banner shown when no environment.json exists yet: persists
-    /// this machine's current configuration (Storage:*, AzureBlob:*) as the environment's own
-    /// file, so the banner — which only appears under <see cref="EnvironmentSettingsSource.MachineDefaults"/> —
-    /// does not reappear.
-    /// </summary>
-    public Task SaveCurrentDefaultsAsync() =>
-        SaveAsync(EnvironmentSettingsResolver.FromMachineConfiguration(_config));
-
-    /// <summary>
     /// Human-readable description of where distribution currently points — the resolved local
     /// root, or "account/container" for AzureBlob, or "distribution disabled". Pure presentation
     /// helper (not used by any validation or build logic); shared by MainLayout's banner and the

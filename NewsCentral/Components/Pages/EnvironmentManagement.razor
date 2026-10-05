@@ -98,7 +98,7 @@
                         @(DistributionStatus.LastFailureUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "—")
                         @if (DistributionStatus.LastFailureReason != null)
                         {
-                            <text> — @DistributionStatus.LastFailureReason</text>
+                            <text> — @(DistributionStatus.LastFailureReason.TrimEnd('.'))</text>
                         }
                     </div>
                 </div>

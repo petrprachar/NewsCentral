@@ -45,45 +45,46 @@
             }
         </div>
 
-        @* M3a — environment settings visibility banners. TODO(i18n): plain English for now. *@
+        @* M3a — environment settings visibility banners. TODO(i18n): plain English for now.
+           M5a.1: hidden on /environment-management itself, which shows this same information in
+           its own "Current environment"/"Settings" sections — showing it twice (plus, previously,
+           a second Save control) there was confusing rather than helpful. *@
         @if (currentUser != null)
         {
-            @if (environmentBanner == EnvironmentBannerKind.MachineDefaults && currentUser.IsSystemAdmin)
+            @if (!IsOnEnvironmentManagementPage)
             {
-                <div class="alert alert-info d-flex justify-content-between align-items-center mx-4 mt-2 mb-0">
-                    <span>
+                @if (environmentBanner == EnvironmentBannerKind.MachineDefaults && currentUser.IsSystemAdmin)
+                {
+                    <div class="alert alert-info mx-4 mt-2 mb-0">
                         This environment has no stored settings — using this machine's defaults (@bannerTargetText).@bannerPolicySuffix
-                        @if (!string.IsNullOrEmpty(saveBannerError))
-                        {
-                            <strong class="text-danger ms-2">@saveBannerError.</strong>
-                        }
-                    </span>
-                    <button class="btn btn-sm btn-outline-primary ms-3" @onclick="SaveCurrentDefaults" disabled="@isSavingEnvironmentDefaults">
-                        @(isSavingEnvironmentDefaults ? "Saving..." : "Save to environment")
-                    </button>
-                </div>
-            }
-            else if (environmentBanner == EnvironmentBannerKind.Invalid)
-            {
-                <div class="alert alert-warning mx-4 mt-2 mb-0">
-                    Distribution settings for this environment are invalid: @environmentError.
-                    Publishing to clients is unavailable until an administrator fixes config/environment.json.
-                </div>
-            }
-            else if (environmentBanner == EnvironmentBannerKind.Unreachable)
-            {
-                <div class="alert alert-warning mx-4 mt-2 mb-0">
-                    Environment settings could not be read: @environmentError.
-                    Publishing to clients is unavailable until this is resolved.
-                </div>
+                        <a href="/environment-management" class="ms-2">Review settings…</a>
+                    </div>
+                }
+                else if (environmentBanner == EnvironmentBannerKind.Invalid)
+                {
+                    <div class="alert alert-warning mx-4 mt-2 mb-0">
+                        Distribution settings for this environment are invalid: @environmentError.
+                        Publishing to clients is unavailable until an administrator fixes config/environment.json.
+                    </div>
+                }
+                else if (environmentBanner == EnvironmentBannerKind.Unreachable)
+                {
+                    <div class="alert alert-warning mx-4 mt-2 mb-0">
+                        Environment settings could not be read: @environmentError.
+                        Publishing to clients is unavailable until this is resolved.
+                    </div>
+                }
             }
 
-            @* M5a: admin-only distribution failure banner. TODO(i18n). *@
+            @* M5a: admin-only distribution failure banner. Shown on every page, including
+               /environment-management — that page's own "Distribution status" section shows the
+               same facts in more detail, but this one is the "something is wrong" flag that
+               carries across the whole app, not settings-page content. TODO(i18n). *@
             if (currentUser.IsSystemAdmin && DistributionStatus.IsFailing)
             {
                 <div class="alert alert-warning mx-4 mt-2 mb-0">
                     Distribution is failing since @DistributionStatus.LastFailureUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"):
-                    @DistributionStatus.LastFailureReason.
+                    @(DistributionStatus.LastFailureReason?.TrimEnd('.')).
                     <a href="/environment-management">Details</a>
                 </div>
             }
@@ -105,8 +106,11 @@
     private string? bannerTargetText;
     private string? bannerPolicySuffix;
     private string? environmentError;
-    private string? saveBannerError;
-    private bool isSavingEnvironmentDefaults;
+
+    private bool IsOnEnvironmentManagementPage =>
+        Navigation.ToBaseRelativePath(Navigation.Uri)
+            .TrimStart('/')
+            .StartsWith("environment-management", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -114,8 +118,15 @@
         TeamContext.OnTeamChanged += HandleTeamChanged;
         EnvironmentSettingsService.SettingsChanged += HandleEnvironmentSettingsChanged;
         DistributionStatus.Changed += HandleDistributionStatusChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
         await RefreshAsync();
     }
+
+    // M5a.1: re-evaluates IsOnEnvironmentManagementPage on every navigation, so the environment-
+    // settings banners reappear the moment the user navigates away from /environment-management
+    // (and disappear the moment they navigate to it), without a full page reload.
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        InvokeAsync(StateHasChanged);
 
     private async Task RefreshAsync()
     {
@@ -186,27 +197,6 @@
         return distribution.Enabled ? $"{distribution.Mode}: {target}" : target;
     }
 
-    private async Task SaveCurrentDefaults()
-    {
-        saveBannerError = null;
-        isSavingEnvironmentDefaults = true;
-        try
-        {
-            // On success this raises SettingsChanged, which HandleEnvironmentSettingsChanged
-            // picks up to refresh the banner (it will disappear, since Source becomes
-            // EnvironmentFile) and re-render.
-            await EnvironmentSettingsService.SaveCurrentDefaultsAsync();
-        }
-        catch (Exception ex)
-        {
-            saveBannerError = ex.Message.TrimEnd('.');
-        }
-        finally
-        {
-            isSavingEnvironmentDefaults = false;
-        }
-    }
-
     private async void HandleEnvironmentSettingsChanged()
     {
         await RefreshEnvironmentBannerAsync();
@@ -253,5 +243,6 @@
         TeamContext.OnTeamChanged -= HandleTeamChanged;
         EnvironmentSettingsService.SettingsChanged -= HandleEnvironmentSettingsChanged;
         DistributionStatus.Changed -= HandleDistributionStatusChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }
