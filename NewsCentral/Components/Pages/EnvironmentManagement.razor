@@ -302,8 +302,63 @@
                 }
             </div>
         </div>
+
+        @* ── 5. Initialize an environment (M5b) ─────────────────────────── *@
+        <div class="card mb-4">
+            <div class="card-header"><h5><i class="bi bi-plus-square me-2"></i>Initialize an environment</h5></div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Probes a path and, if it exists and is not already initialized, opens the setup
+                    wizard to create its first System Administrator.
+                </p>
+                <div class="mb-3">
+                    <label class="form-label">Path</label>
+                    <input class="form-control" @bind="initPath" @bind:event="oninput" disabled="@isInitializingTarget"
+                           placeholder="\\server\share\newscentral or C:\NewsCentral" />
+                </div>
+                @if (OtherEnvironmentOptions.Count > 0)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Or pick a listed environment</label>
+                        <select class="form-select" @onchange="PickOtherEnvironment" disabled="@isInitializingTarget">
+                            <option value="">— select —</option>
+                            @foreach (var option in OtherEnvironmentOptions)
+                            {
+                                <option value="@option.DataPath">@option.DisplayName (@option.DataPath)</option>
+                            }
+                        </select>
+                    </div>
+                }
+                @if (initError != null)
+                {
+                    <div class="alert alert-danger">@initError</div>
+                }
+
+                <button class="btn btn-outline-secondary" @onclick="InitializeTargetAsync" disabled="@isInitializingTarget">
+                    @(isInitializingTarget ? "Checking…" : "Initialize…")
+                </button>
+
+                @if (initCreated)
+                {
+                    <div class="alert alert-success mt-3">
+                        Environment @initCreatedName initialized.
+                        <button class="btn btn-sm btn-outline-success ms-2" @onclick="SwitchToInitialized">
+                            Switch to it now
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
     }
 </div>
+
+<EnvironmentSetupWizard IsVisible="showInitWizard"
+                        TargetPath="@initWizardTargetPath"
+                        CreateRootIfMissing="false"
+                        AddToDirectory="true"
+                        PrefillDistribution="@(effective?.StoredSettings ?? EnvironmentSettingsService.GetMachineDefaults())"
+                        OnCreated="HandleInitWizardCreated"
+                        OnCancelled="HandleInitWizardCancelled" />
 
 <ConfirmDialog IsVisible="showRetargetConfirm"
                Title="Change distribution target?"
@@ -356,6 +411,16 @@
     // M5a.1: true once the user has touched any editable field — an external reload (another save
     // elsewhere, a distribution status change) must never clobber in-progress edits.
     private bool isDirty;
+
+    // M5b — "Initialize an environment".
+    private string initPath = string.Empty;
+    private bool isInitializingTarget;
+    private string? initError;
+    private bool showInitWizard;
+    private string initWizardTargetPath = string.Empty;
+    private bool initCreated;
+    private string? initCreatedName;
+    private string? initCreatedPath;
 
     protected override async Task OnInitializedAsync()
     {
@@ -689,5 +754,92 @@
         {
             return ex.Message;
         }
+    }
+
+    // ── M5b — Initialize an environment ───────────────────────────────────────
+
+    private IReadOnlyList<EnvironmentOption> OtherEnvironmentOptions =>
+        EnvironmentDirectory.GetOptions(includeHidden: true).Where(o => !o.IsCurrent).ToList();
+
+    // Picking an option only fills the Path input — nothing is probed until Initialize… is clicked.
+    private void PickOtherEnvironment(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(value))
+            initPath = value;
+    }
+
+    private async Task InitializeTargetAsync()
+    {
+        initError = null;
+        initCreated = false;
+        isInitializingTarget = true;
+        try
+        {
+            var pathErrors = EnvironmentInitializationValidator.ValidateTargetPath(initPath);
+            if (pathErrors.Count > 0)
+            {
+                initError = pathErrors[0];
+                return;
+            }
+
+            var probe = await EnvironmentProbe.ProbeAsync(initPath, TimeSpan.FromSeconds(10));
+
+            if (probe.TimedOut)
+            {
+                initError = "Timed out while checking that path. Check that it is reachable.";
+                return;
+            }
+            if (probe.Error != null)
+            {
+                initError = probe.Error;
+                return;
+            }
+            if (!probe.Exists)
+            {
+                initError = "Folder does not exist or is not accessible.";
+                return;
+            }
+            if (probe.Initialized)
+            {
+                initError = "This environment is already initialized.";
+                return;
+            }
+
+            // The probe above already confirmed reachability and non-initialization — the wizard
+            // itself, and EnvironmentInitializer, never probe the path again.
+            initWizardTargetPath = initPath;
+            showInitWizard = true;
+        }
+        finally
+        {
+            isInitializingTarget = false;
+        }
+    }
+
+    private async Task HandleInitWizardCreated(InitializeResult result)
+    {
+        showInitWizard = false;
+        initCreated = true;
+        initCreatedPath = initWizardTargetPath;
+
+        // Picks up the directory entry EnvironmentInitializer just added (via AddAsync) so the
+        // success panel's name matches what the picker now shows.
+        await LoadReadOnlySectionsAsync();
+
+        var added = EnvironmentDirectory.GetOptions(includeHidden: true)
+            .FirstOrDefault(o => EnvironmentPaths.Canonicalize(o.DataPath) == EnvironmentPaths.Canonicalize(initCreatedPath));
+        initCreatedName = added?.DisplayName ?? initCreatedPath;
+    }
+
+    private void HandleInitWizardCancelled() => showInitWizard = false;
+
+    private void SwitchToInitialized()
+    {
+        if (initCreatedPath == null)
+            return;
+
+        EnvironmentDirectory.SwitchTo(initCreatedPath);
+        Navigation.NavigateTo("/login", forceLoad: true);
     }
 }

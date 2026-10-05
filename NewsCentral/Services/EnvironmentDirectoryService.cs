@@ -210,7 +210,15 @@ public sealed class EnvironmentDirectoryService
     /// User entry, exactly as in M4a. Rejections never touch disk beyond the probe itself, and never
     /// modify stored state.
     /// </summary>
-    public async Task<AddResult> AddAsync(string path, string? displayName)
+    /// <param name="distributionFingerprint">
+    /// M5b: the newly-added environment's own distribution fingerprint, when already known (the
+    /// setup wizard passes this right after writing a brand-new <c>environment.json</c> — there is
+    /// no reason to wait for that environment's own next save to populate it). Null for every other
+    /// caller (e.g. the picker's "Add environment…" dialog), exactly as before this parameter
+    /// existed — a Shared entry is still created, just without a fingerprint until its first save.
+    /// Ignored for a User entry, which never carries a fingerprint at all.
+    /// </param>
+    public async Task<AddResult> AddAsync(string path, string? displayName, string? distributionFingerprint = null)
     {
         if (!CanAdd)
             return new AddResult(AddOutcome.RejectedNotAllowed, "Adding environments is not available.");
@@ -243,7 +251,8 @@ public sealed class EnvironmentDirectoryService
         if (isShared)
         {
             state.SharedEntries.Add(new SharedDirectoryEntry(
-                path, cleanDisplayName, CurrentUserIdentity(), DateTime.UtcNow, DeletedUtc: null));
+                path, cleanDisplayName, CurrentUserIdentity(), DateTime.UtcNow, DeletedUtc: null,
+                DistributionFingerprint: distributionFingerprint));
         }
         else
         {

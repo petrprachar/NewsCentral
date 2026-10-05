@@ -1,0 +1,440 @@
+@* M5b — the environment setup wizard. Shared by two entry points: the login page (a Policy or
+   Configured environment with no config/users.json yet; CreateRootIfMissing="true",
+   AddToDirectory="false") and Environment Management's "Initialize an environment" section (any
+   environment, while signed in to another one; CreateRootIfMissing="false", AddToDirectory="true").
+   Styled like EnvironmentPicker's own Add dialog. TODO(i18n): plain English for now. *@
+@using NewsCentral.Configuration
+@using NewsCentral.Services
+@inject EnvironmentInitializer Initializer
+@inject EnvironmentDirectoryService EnvironmentDirectory
+@inject AuthenticationService AuthService
+@inject WindowsIdentityService WindowsIdentityService
+
+@if (IsVisible)
+{
+    <div class="setup-wizard-overlay" @onclick="CloseIfIdle">
+        <div class="setup-wizard-panel" @onclick:stopPropagation="true">
+            <h4 class="setup-wizard-title">Set up this environment</h4>
+            <p class="setup-wizard-target"><code>@TargetPath</code></p>
+
+            <div class="setup-wizard-section">
+                <h6>Environment</h6>
+                <div class="mb-3">
+                    <label class="form-label">Display name</label>
+                    <input class="form-control" @bind="formDisplayName" disabled="@isCreating" />
+                </div>
+            </div>
+
+            <div class="setup-wizard-section">
+                <h6>Distribution</h6>
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="setupDistEnabled"
+                           @bind="formDistributionEnabled" disabled="@isCreating" />
+                    <label class="form-check-label" for="setupDistEnabled">Distribution enabled</label>
+                </div>
+
+                @if (formDistributionEnabled)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Mode</label>
+                        <select class="form-select" @bind="formMode" disabled="@isCreating">
+                            <option value="Local">Local</option>
+                            <option value="AzureBlob">AzureBlob</option>
+                        </select>
+                    </div>
+
+                    @if (string.Equals(formMode, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Tenant ID</label>
+                            <input class="form-control" @bind="formAzureTenantId" disabled="@isCreating" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Client ID</label>
+                            <input class="form-control" @bind="formAzureClientId" disabled="@isCreating" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Account name</label>
+                            <input class="form-control" @bind="formAzureAccountName" disabled="@isCreating" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Container name</label>
+                            <input class="form-control" @bind="formAzureContainerName" disabled="@isCreating" />
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Local path</label>
+                            <input class="form-control" @bind="formLocalPath" disabled="@isCreating"
+                                   placeholder="(defaults to DataPath\_distribution if left blank)" />
+                        </div>
+                    }
+
+                    @if (Collisions.Count > 0)
+                    {
+                        <div class="alert alert-info setup-wizard-collisions">
+                            <ul class="mb-0">
+                                @foreach (var collision in Collisions)
+                                {
+                                    var name = string.IsNullOrWhiteSpace(collision.DisplayName) ? collision.DataPath : collision.DisplayName;
+                                    <li>@name (@collision.DataPath) publishes to the same target.</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                }
+
+                @if (testResult != null)
+                {
+                    <div class="alert @(IsTestSuccess(testResult) ? "alert-success" : "alert-warning")">@testResult</div>
+                }
+
+                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="RunTestAsync" disabled="@(isTesting || isCreating)">
+                    @(isTesting ? "Testing…" : "Test")
+                </button>
+            </div>
+
+            <div class="setup-wizard-section">
+                <h6>First administrator</h6>
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input class="form-control" @bind="adminUsername" disabled="@isCreating" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Display name</label>
+                    <input class="form-control" @bind="adminDisplayName" disabled="@isCreating" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">UPN (optional)</label>
+                    <input class="form-control" @bind="adminUpn" disabled="@isCreating" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" @bind="adminPassword" disabled="@isCreating" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Confirm password</label>
+                    <input type="password" class="form-control" @bind="adminConfirmPassword" disabled="@isCreating" />
+                </div>
+            </div>
+
+            @if (validationErrors.Count > 0)
+            {
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        @foreach (var error in validationErrors)
+                        {
+                            <li>@error</li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (createError != null)
+            {
+                <div class="alert alert-danger">@createError</div>
+            }
+
+            <p class="setup-wizard-review text-muted">
+                This will create a new environment at <code>@TargetPath</code> with
+                "@adminUsername" as its first System Administrator.
+            </p>
+
+            <div class="setup-wizard-actions">
+                <button class="btn btn-secondary" type="button" @onclick="Cancel" disabled="@isCreating">Cancel</button>
+                <button class="btn btn-primary" type="button" @onclick="CreateAsync" disabled="@isCreating">
+                    @(isCreating ? "Creating…" : "Create environment")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .setup-wizard-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+        white-space: normal;
+    }
+
+    .setup-wizard-panel {
+        background: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        width: min(640px, calc(100vw - 2rem));
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        text-align: left;
+        overflow-wrap: anywhere;
+    }
+
+    .setup-wizard-title { margin: 0 0 4px 0; }
+
+    .setup-wizard-target {
+        color: #6c757d;
+        font-size: 13px;
+        margin-bottom: 20px;
+    }
+
+    .setup-wizard-section {
+        border-top: 1px solid #eee;
+        padding-top: 16px;
+        margin-top: 16px;
+    }
+
+        .setup-wizard-section:first-of-type {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .setup-wizard-section h6 {
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            color: #6c757d;
+            margin-bottom: 12px;
+        }
+
+    .setup-wizard-collisions { font-size: 13px; }
+
+    .setup-wizard-review { font-size: 13px; margin-top: 20px; }
+
+    .setup-wizard-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 10px;
+    }
+</style>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public string TargetPath { get; set; } = string.Empty;
+    [Parameter] public bool CreateRootIfMissing { get; set; }
+    [Parameter] public bool AddToDirectory { get; set; }
+    [Parameter] public EnvironmentSettings? PrefillDistribution { get; set; }
+    [Parameter] public EventCallback<InitializeResult> OnCreated { get; set; }
+    [Parameter] public EventCallback OnCancelled { get; set; }
+
+    private bool wasVisible;
+
+    private string? formDisplayName;
+    private bool formDistributionEnabled;
+    private string formMode = "Local";
+    private string? formLocalPath;
+    private string? formAzureTenantId;
+    private string? formAzureClientId;
+    private string? formAzureAccountName;
+    private string? formAzureContainerName;
+
+    private string adminUsername = string.Empty;
+    private string adminDisplayName = string.Empty;
+    private string? adminUpn;
+    private string adminPassword = string.Empty;
+    private string adminConfirmPassword = string.Empty;
+
+    private bool isTesting;
+    private string? testResult;
+
+    private List<string> validationErrors = new();
+    private string? createError;
+    private bool isCreating;
+
+    private string? CurrentFingerprint =>
+        EnvironmentSettingsResolver.Fingerprint(BuildDistributionSettings(), TargetPath);
+
+    private IReadOnlyList<SharedDirectoryEntry> Collisions =>
+        EnvironmentChangeRules.FindCollisions(TargetPath, CurrentFingerprint, EnvironmentDirectory.SharedEntries);
+
+    protected override void OnParametersSet()
+    {
+        // Resets the form exactly once per open — on every OTHER render while visible (every
+        // keystroke, every Test click) this must NOT re-run, or it would wipe out whatever the
+        // operator just typed.
+        if (IsVisible && !wasVisible)
+            ResetForm();
+
+        wasVisible = IsVisible;
+    }
+
+    private void ResetForm()
+    {
+        var prefill = PrefillDistribution ?? new EnvironmentSettings();
+        formDisplayName = prefill.DisplayName;
+        formDistributionEnabled = prefill.Distribution.Enabled;
+        formMode = prefill.Distribution.Mode;
+        formLocalPath = prefill.Distribution.LocalPath;
+        formAzureTenantId = prefill.Distribution.AzureBlob.TenantId;
+        formAzureClientId = prefill.Distribution.AzureBlob.ClientId;
+        formAzureAccountName = prefill.Distribution.AzureBlob.AccountName;
+        formAzureContainerName = prefill.Distribution.AzureBlob.ContainerName;
+
+        adminUsername = string.Empty;
+        adminDisplayName = string.Empty;
+        adminUpn = WindowsIdentityService.GetCurrentUserUPN();
+        adminPassword = string.Empty;
+        adminConfirmPassword = string.Empty;
+
+        testResult = null;
+        validationErrors.Clear();
+        createError = null;
+    }
+
+    private EnvironmentSettings BuildDistributionSettings() => new()
+    {
+        SchemaVersion = EnvironmentSettingsResolver.CurrentSchemaVersion,
+        DisplayName = string.IsNullOrWhiteSpace(formDisplayName) ? null : formDisplayName,
+        Distribution = new DistributionSettings
+        {
+            Enabled = formDistributionEnabled,
+            Mode = formMode,
+            LocalPath = string.IsNullOrWhiteSpace(formLocalPath) ? null : formLocalPath,
+            AzureBlob = new AzureBlobSettings
+            {
+                TenantId = formAzureTenantId ?? string.Empty,
+                ClientId = formAzureClientId ?? string.Empty,
+                AccountName = formAzureAccountName ?? string.Empty,
+                ContainerName = formAzureContainerName ?? string.Empty
+            }
+        }
+    };
+
+    private static bool IsTestSuccess(string result) =>
+        result == "OK" || result.StartsWith("Container exists", StringComparison.Ordinal);
+
+    private async Task RunTestAsync()
+    {
+        testResult = null;
+        isTesting = true;
+        try
+        {
+            if (string.Equals(formMode, "AzureBlob", StringComparison.OrdinalIgnoreCase))
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+                var azureSettings = new AzureBlobSettings
+                {
+                    TenantId = formAzureTenantId ?? string.Empty,
+                    ClientId = formAzureClientId ?? string.Empty,
+                    AccountName = formAzureAccountName ?? string.Empty,
+                    ContainerName = formAzureContainerName ?? string.Empty
+                };
+                testResult = await AzureBlobDistributionService.TestContainerAsync(azureSettings, cts.Token);
+            }
+            else
+            {
+                testResult = await TestLocalRootAsync(formLocalPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            testResult = ex.Message;
+        }
+        finally
+        {
+            isTesting = false;
+        }
+    }
+
+    // Mirrors EnvironmentManagement.razor's own TestLocalRootAsync, except the fallback root is
+    // the environment being INITIALIZED (TargetPath), never the current EnvironmentContext.DataPath.
+    private async Task<string> TestLocalRootAsync(string? localPath)
+    {
+        var root = string.IsNullOrWhiteSpace(localPath)
+            ? Path.Combine(TargetPath, "_distribution")
+            : localPath;
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            if (!Directory.Exists(root))
+                return $"Folder does not exist: {root}";
+
+            var testFile = Path.Combine(root, $".newscentral-write-test-{Guid.NewGuid()}.tmp");
+            await File.WriteAllTextAsync(testFile, "test", cts.Token);
+            File.Delete(testFile);
+            return "OK";
+        }
+        catch (OperationCanceledException)
+        {
+            return "Timed out after 10 seconds.";
+        }
+        catch (Exception ex)
+        {
+            return ex.Message;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        createError = null;
+        validationErrors.Clear();
+
+        var pathErrors = EnvironmentInitializationValidator.ValidateTargetPath(TargetPath);
+        var adminErrors = EnvironmentInitializationValidator.ValidateAdmin(
+            adminUsername, adminDisplayName, adminUpn, adminPassword, adminConfirmPassword);
+
+        var errors = pathErrors.Concat(adminErrors).ToList();
+        if (errors.Count > 0)
+        {
+            validationErrors = errors;
+            return;
+        }
+
+        isCreating = true;
+        try
+        {
+            var distributionSettings = BuildDistributionSettings();
+            var trimmedUpn = string.IsNullOrWhiteSpace(adminUpn) ? null : adminUpn.Trim();
+            var trimmedUsername = adminUsername.Trim();
+
+            // AddToDirectory is true ONLY for the Environment Management entry point, where an
+            // already-signed-in administrator is doing the initializing on someone else's behalf —
+            // so ModifiedBy should name THEM, not the brand-new admin account this creates.
+            var modifiedBy = AddToDirectory
+                ? (AuthService.GetCurrentUser()?.UPN ?? AuthService.GetCurrentUser()?.Username ?? "system")
+                : (trimmedUpn ?? trimmedUsername);
+
+            var result = await Initializer.InitializeAsync(
+                TargetPath, CreateRootIfMissing, distributionSettings,
+                trimmedUsername, adminDisplayName.Trim(), trimmedUpn, adminPassword,
+                modifiedBy, AddToDirectory,
+                string.IsNullOrWhiteSpace(formDisplayName) ? null : formDisplayName);
+
+            switch (result.Outcome)
+            {
+                case InitializeOutcome.Success:
+                    await OnCreated.InvokeAsync(result);
+                    break;
+                case InitializeOutcome.ClaimedByOther:
+                    createError = result.ErrorMessage;
+                    break;
+                default:
+                    createError = result.ErrorMessage ?? "Could not initialize that environment.";
+                    break;
+            }
+        }
+        finally
+        {
+            isCreating = false;
+        }
+    }
+
+    private async Task Cancel() => await OnCancelled.InvokeAsync();
+
+    // The overlay's own click-to-dismiss must not fire while a create is in flight.
+    private async Task CloseIfIdle()
+    {
+        if (!isCreating)
+            await OnCancelled.InvokeAsync();
+    }
+}

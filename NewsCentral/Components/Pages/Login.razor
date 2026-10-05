@@ -2,6 +2,7 @@
 @using NewsCentral.Services
 @using NewsCentral.Models
 @using NewsCentral.Configuration
+@using NewsCentral.Components.Shared
 @using Microsoft.Extensions.Localization
 
 @inject AuthenticationService AuthService
@@ -12,6 +13,7 @@
 @inject WindowsIdentityService WindowsIdentityService
 @inject DataSeederService DataSeeder
 @inject EnvironmentDirectoryService EnvironmentDirectory
+@inject EnvironmentSettingsService EnvironmentSettingsService
 
 <PageTitle>@Localizer["Login"] - @Localizer["AppTitle"]</PageTitle>
 
@@ -29,6 +31,12 @@
         @if (notInitializedMessage != null)
         {
             <div class="alert alert-info">@notInitializedMessage</div>
+            @if (showSetupButton)
+            {
+                <button @onclick="OpenSetupWizard" class="btn btn-secondary setup-button">
+                    Set up this environment
+                </button>
+            }
         }
 
         <div class="form-group">
@@ -67,6 +75,14 @@
     @* The picker remains usable in every state (Ready, NotInitialized, init failure) — it lives in
        MainLayout's top row, outside this card, so it is unaffected by anything below. *@
 </div>
+
+<EnvironmentSetupWizard IsVisible="showSetupWizard"
+                        TargetPath="@(currentEnvironment?.DataPath ?? string.Empty)"
+                        CreateRootIfMissing="true"
+                        AddToDirectory="false"
+                        PrefillDistribution="@EnvironmentSettingsService.GetMachineDefaults()"
+                        OnCreated="HandleSetupCreated"
+                        OnCancelled="HandleSetupCancelled" />
 
 <style>
     .login-container {
@@ -167,6 +183,10 @@
         cursor: not-allowed;
     }
 
+    .setup-button {
+        margin-bottom: 20px;
+    }
+
     .upn-hint {
         text-align: center;
         color: #999;
@@ -224,6 +244,13 @@
     private EnvironmentOption? currentEnvironment;
     private string? notInitializedMessage;
 
+    // M5b — the setup wizard replaces the removed admin/admin seed. Offered only for a Policy or
+    // Configured environment: a User/Shared entry was ADDED by someone, so an administrator
+    // signed in elsewhere is expected to initialize it from Environment Management instead — see
+    // the else-branch message below.
+    private bool showSetupButton;
+    private bool showSetupWizard;
+
     private bool IsLoginDisabled => isLoggingIn || isInitializing || notInitializedMessage != null;
 
     private string UpnButtonText
@@ -261,8 +288,18 @@
 
             if (status == EnvironmentInitStatus.NotInitialized)
             {
-                notInitializedMessage =
-                    "This environment is not initialized. An administrator will be able to initialize it from Environment Management.";
+                if (currentEnvironment?.Kind == EnvironmentKind.Policy ||
+                    currentEnvironment?.Kind == EnvironmentKind.Configured)
+                {
+                    notInitializedMessage = "This environment is not initialized.";
+                    showSetupButton = true;
+                }
+                else
+                {
+                    notInitializedMessage =
+                        "This environment is not initialized. An administrator can initialize it from Environment Management while signed in to another environment.";
+                    showSetupButton = false;
+                }
             }
 
             // M4b — fire-and-forget: SyncSharedDirectoryAsync catches everything internally and
@@ -342,6 +379,31 @@
             isLoggingIn = false;
         }
     }
+
+    private void OpenSetupWizard() => showSetupWizard = true;
+
+    private async Task HandleSetupCreated(InitializeResult result)
+    {
+        showSetupWizard = false;
+
+        // The memoized NotInitialized result for THIS environment is now stale — the wizard just
+        // wrote config/users.json for it — so it must be cleared before the very next
+        // EnsureInitializedAsync call, or the login form would stay disabled for the rest of this
+        // process's lifetime despite the environment now genuinely being Ready.
+        DataSeeder.Invalidate(currentEnvironment?.DataPath ?? string.Empty);
+
+        var status = await DataSeeder.EnsureInitializedAsync();
+        if (status == EnvironmentInitStatus.Ready)
+        {
+            notInitializedMessage = null;
+            showSetupButton = false;
+            username = result.AdminUser?.Username ?? string.Empty;
+        }
+
+        _ = EnvironmentDirectory.SyncSharedDirectoryAsync(status);
+    }
+
+    private void HandleSetupCancelled() => showSetupWizard = false;
 
     // Shared by both login paths: auto-select the first available team (moved from the old
     // HandleLogin, not rewritten), then navigate home without forceLoad — MainLayout refreshes via

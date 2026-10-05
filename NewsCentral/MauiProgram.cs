@@ -220,6 +220,10 @@ public static class MauiProgram
         // plain constructor injection is enough, same as AuthenticationService above.
         builder.Services.AddSingleton<DataSeederService>();
 
+        // M5b: creates a brand-new environment's first administrator and claims it — the setup
+        // wizard's I/O layer. Depends only on EnvironmentDirectoryService (registered above).
+        builder.Services.AddSingleton<EnvironmentInitializer>();
+
         // Add localization — ResourcesPath tells the factory where to find per-type .resx files
         builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
