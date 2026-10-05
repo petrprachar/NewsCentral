@@ -10,11 +10,17 @@
 @inject AuthenticationService AuthService
 @inject WindowsIdentityService WindowsIdentityService
 
+@* M5c: clicking the dimmed backdrop no longer closes the wizard — a native control (e.g. the
+   Mode <select>) can produce a click that bubbles to the overlay in WebView2, and silently losing
+   a dozen typed fields that way is worse than requiring an explicit Cancel/×. *@
 @if (IsVisible)
 {
-    <div class="setup-wizard-overlay" @onclick="CloseIfIdle">
+    <div class="setup-wizard-overlay">
         <div class="setup-wizard-panel" @onclick:stopPropagation="true">
-            <h4 class="setup-wizard-title">Set up this environment</h4>
+            <div class="setup-wizard-header">
+                <h4 class="setup-wizard-title">Set up this environment</h4>
+                <button type="button" class="btn-close" aria-label="Close" @onclick="RequestClose" disabled="@isCreating"></button>
+            </div>
             <p class="setup-wizard-target"><code>@TargetPath</code></p>
 
             <div class="setup-wizard-section">
@@ -141,7 +147,7 @@
             </p>
 
             <div class="setup-wizard-actions">
-                <button class="btn btn-secondary" type="button" @onclick="Cancel" disabled="@isCreating">Cancel</button>
+                <button class="btn btn-secondary" type="button" @onclick="RequestClose" disabled="@isCreating">Cancel</button>
                 <button class="btn btn-primary" type="button" @onclick="CreateAsync" disabled="@isCreating">
                     @(isCreating ? "Creating…" : "Create environment")
                 </button>
@@ -149,6 +155,15 @@
         </div>
     </div>
 }
+
+<ConfirmDialog IsVisible="showDiscardConfirm"
+               Title="Discard the entered values?"
+               Message="Closing now will discard everything you've typed in this wizard."
+               ConfirmText="Discard"
+               CancelText="Keep editing"
+               DialogType="danger"
+               OnConfirm="CloseImmediately"
+               OnCancel="KeepEditing" />
 
 <style>
     .setup-wizard-overlay {
@@ -175,6 +190,13 @@
         box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         text-align: left;
         overflow-wrap: anywhere;
+    }
+
+    .setup-wizard-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
     }
 
     .setup-wizard-title { margin: 0 0 4px 0; }
@@ -249,6 +271,38 @@
     private List<string> validationErrors = new();
     private string? createError;
     private bool isCreating;
+    private bool showDiscardConfirm;
+
+    // M5c: snapshot of every field's value right after ResetForm populates it — the baseline
+    // Cancel/× compare against to decide whether to ask before discarding.
+    private string? initialDisplayName;
+    private bool initialDistributionEnabled;
+    private string initialMode = "Local";
+    private string? initialLocalPath;
+    private string? initialAzureTenantId;
+    private string? initialAzureClientId;
+    private string? initialAzureAccountName;
+    private string? initialAzureContainerName;
+    private string initialAdminUsername = string.Empty;
+    private string initialAdminDisplayName = string.Empty;
+    private string? initialAdminUpn;
+    private string initialAdminPassword = string.Empty;
+    private string initialAdminConfirmPassword = string.Empty;
+
+    private bool IsDirty =>
+        formDisplayName != initialDisplayName ||
+        formDistributionEnabled != initialDistributionEnabled ||
+        formMode != initialMode ||
+        formLocalPath != initialLocalPath ||
+        formAzureTenantId != initialAzureTenantId ||
+        formAzureClientId != initialAzureClientId ||
+        formAzureAccountName != initialAzureAccountName ||
+        formAzureContainerName != initialAzureContainerName ||
+        adminUsername != initialAdminUsername ||
+        adminDisplayName != initialAdminDisplayName ||
+        adminUpn != initialAdminUpn ||
+        adminPassword != initialAdminPassword ||
+        adminConfirmPassword != initialAdminConfirmPassword;
 
     private string? CurrentFingerprint =>
         EnvironmentSettingsResolver.Fingerprint(BuildDistributionSettings(), TargetPath);
@@ -288,6 +342,23 @@
         testResult = null;
         validationErrors.Clear();
         createError = null;
+        showDiscardConfirm = false;
+
+        // Captured AFTER every field above is set — "dirty" means "differs from what the wizard
+        // opened with," not "differs from empty."
+        initialDisplayName = formDisplayName;
+        initialDistributionEnabled = formDistributionEnabled;
+        initialMode = formMode;
+        initialLocalPath = formLocalPath;
+        initialAzureTenantId = formAzureTenantId;
+        initialAzureClientId = formAzureClientId;
+        initialAzureAccountName = formAzureAccountName;
+        initialAzureContainerName = formAzureContainerName;
+        initialAdminUsername = adminUsername;
+        initialAdminDisplayName = adminDisplayName;
+        initialAdminUpn = adminUpn;
+        initialAdminPassword = adminPassword;
+        initialAdminConfirmPassword = adminConfirmPassword;
     }
 
     private EnvironmentSettings BuildDistributionSettings() => new()
@@ -429,12 +500,25 @@
         }
     }
 
-    private async Task Cancel() => await OnCancelled.InvokeAsync();
-
-    // The overlay's own click-to-dismiss must not fire while a create is in flight.
-    private async Task CloseIfIdle()
+    // M5c: Cancel and × both route here. Never fires while a create is in flight (both buttons are
+    // disabled then, but this guard is defense in depth — e.g. against a stray Enter-triggered
+    // click event queued just before the buttons were disabled).
+    private void RequestClose()
     {
-        if (!isCreating)
-            await OnCancelled.InvokeAsync();
+        if (isCreating)
+            return;
+
+        if (IsDirty)
+            showDiscardConfirm = true;
+        else
+            CloseImmediately();
     }
+
+    private void CloseImmediately()
+    {
+        showDiscardConfirm = false;
+        _ = OnCancelled.InvokeAsync();
+    }
+
+    private void KeepEditing() => showDiscardConfirm = false;
 }
