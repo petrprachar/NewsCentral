@@ -58,6 +58,19 @@ public sealed record EffectiveEnvironmentSettings(
     /// when <see cref="PolicyEnvironmentName"/> is null.
     /// </summary>
     public IReadOnlyList<string> PolicyFields { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The settings BEFORE the policy overlay (M5a.1) — the file values for
+    /// <see cref="EnvironmentSettingsSource.EnvironmentFile"/>, this machine's defaults for
+    /// <see cref="EnvironmentSettingsSource.MachineDefaults"/>, null for
+    /// <see cref="EnvironmentSettingsSource.Invalid"/> / <see cref="EnvironmentSettingsSource.Unreachable"/>.
+    /// Populated only by NewsCentral.Services.EnvironmentSettingsService, which is the only place
+    /// that has both a parsed file AND a policy catalog to overlay. Save flows must build the file
+    /// they write from THIS, via <see cref="EnvironmentSettingsResolver.MergeForSave"/> — never from
+    /// <see cref="Settings"/>, which already carries the policy overlay and would otherwise leak
+    /// policy-controlled values into the stored file.
+    /// </summary>
+    public EnvironmentSettings? StoredSettings { get; init; }
 }
 
 /// <summary>
@@ -260,6 +273,75 @@ public static class EnvironmentSettingsResolver
         }
 
         return (result, fields);
+    }
+
+    /// <summary>
+    /// Builds the settings to actually WRITE on Save (M5a.1): starts from <paramref name="form"/>
+    /// (the editor's current values) but replaces every field named in <paramref name="policyFields"/>
+    /// with that field's value from <paramref name="stored"/> (the pre-policy-overlay settings this
+    /// environment already had — see <see cref="EffectiveEnvironmentSettings.StoredSettings"/>), or
+    /// from <paramref name="machineDefaults"/> when <paramref name="stored"/> is null (there was no
+    /// stored environment.json to preserve yet). This is what prevents a policy-locked field — shown
+    /// read-only in the editor at its EFFECTIVE (policy) value — from being written into
+    /// environment.json: policy keeps overriding it on every read regardless, so persisting it would
+    /// only cause drift the moment the policy entry is ever removed. Never mutates
+    /// <paramref name="form"/>, <paramref name="stored"/>, or <paramref name="machineDefaults"/>.
+    /// Uses the exact same field names as <see cref="ApplyPolicy"/> produces in its PolicyFields list.
+    /// </summary>
+    public static EnvironmentSettings MergeForSave(
+        EnvironmentSettings form,
+        EnvironmentSettings? stored,
+        EnvironmentSettings machineDefaults,
+        IReadOnlyList<string> policyFields)
+    {
+        var baseline = stored ?? machineDefaults;
+
+        var result = new EnvironmentSettings
+        {
+            SchemaVersion = form.SchemaVersion,
+            DisplayName = form.DisplayName,
+            Distribution = new DistributionSettings
+            {
+                Enabled = form.Distribution.Enabled,
+                Mode = form.Distribution.Mode,
+                LocalPath = form.Distribution.LocalPath,
+                AzureBlob = new AzureBlobSettings
+                {
+                    TenantId = form.Distribution.AzureBlob.TenantId,
+                    ClientId = form.Distribution.AzureBlob.ClientId,
+                    AccountName = form.Distribution.AzureBlob.AccountName,
+                    ContainerName = form.Distribution.AzureBlob.ContainerName
+                }
+            },
+            ModifiedBy = form.ModifiedBy,
+            ModifiedUtc = form.ModifiedUtc
+        };
+
+        if (policyFields.Contains("displayName"))
+            result.DisplayName = baseline.DisplayName;
+
+        if (policyFields.Contains("distribution.enabled"))
+            result.Distribution.Enabled = baseline.Distribution.Enabled;
+
+        if (policyFields.Contains("distribution.mode"))
+            result.Distribution.Mode = baseline.Distribution.Mode;
+
+        if (policyFields.Contains("distribution.localPath"))
+            result.Distribution.LocalPath = baseline.Distribution.LocalPath;
+
+        if (policyFields.Contains("distribution.azureBlob.containerName"))
+            result.Distribution.AzureBlob.ContainerName = baseline.Distribution.AzureBlob.ContainerName;
+
+        if (policyFields.Contains("distribution.azureBlob.tenantId"))
+            result.Distribution.AzureBlob.TenantId = baseline.Distribution.AzureBlob.TenantId;
+
+        if (policyFields.Contains("distribution.azureBlob.clientId"))
+            result.Distribution.AzureBlob.ClientId = baseline.Distribution.AzureBlob.ClientId;
+
+        if (policyFields.Contains("distribution.azureBlob.accountName"))
+            result.Distribution.AzureBlob.AccountName = baseline.Distribution.AzureBlob.AccountName;
+
+        return result;
     }
 
     /// <summary>

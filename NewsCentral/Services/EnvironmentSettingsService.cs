@@ -94,6 +94,12 @@ public sealed class EnvironmentSettingsService
         if (resolved.Source == EnvironmentSettingsSource.Invalid)
             return resolved;
 
+        // M5a.1: captured BEFORE the policy overlay below reassigns effectiveSettings — the file
+        // values for EnvironmentFile, or the machine defaults themselves for MachineDefaults (where
+        // resolved.Settings already IS machineDefaults). This is what a Save must merge onto, via
+        // EnvironmentSettingsResolver.MergeForSave, so policy-controlled values never get written.
+        var storedSettings = resolved.Settings;
+
         var effectiveSettings = resolved.Settings!;
         string? policyEnvironmentName = null;
         IReadOnlyList<string> policyFields = Array.Empty<string>();
@@ -114,8 +120,34 @@ public sealed class EnvironmentSettingsService
             Settings = effectiveSettings,
             DistributionFingerprint = fingerprint,
             PolicyEnvironmentName = policyEnvironmentName,
-            PolicyFields = policyFields
+            PolicyFields = policyFields,
+            StoredSettings = storedSettings
         };
+    }
+
+    /// <summary>This machine's own appsettings/registry distribution defaults (M5a.1) — the baseline
+    /// <see cref="EnvironmentSettingsResolver.MergeForSave"/> falls back to for a policy-controlled
+    /// field when there is no stored environment.json yet to preserve instead.</summary>
+    public EnvironmentSettings GetMachineDefaults() =>
+        EnvironmentSettingsResolver.FromMachineConfiguration(_config);
+
+    /// <summary>
+    /// Applies the matching policy entry (exactly as <see cref="GetAsync"/> does for a read) onto
+    /// <paramref name="fileSettings"/> and computes the fingerprint against the current DataPath.
+    /// Used by the Environment Management page (M5a.1) to get the TRUE effective fingerprint of a
+    /// just-merged save result — <paramref name="fileSettings"/> is the merged write, whose
+    /// policy-controlled fields already hold their pre-policy (stored/machine-default) values, so
+    /// this re-overlay reproduces exactly what the very next <see cref="GetAsync"/> read will see.
+    /// </summary>
+    public string? ComputeEffectiveFingerprint(EnvironmentSettings fileSettings)
+    {
+        var effectiveSettings = fileSettings;
+
+        var policy = _catalog.FindByDataPath(_environment.DataPath);
+        if (policy != null)
+            (effectiveSettings, _) = EnvironmentSettingsResolver.ApplyPolicy(fileSettings, policy);
+
+        return EnvironmentSettingsResolver.Fingerprint(effectiveSettings, _environment.DataPath);
     }
 
     /// <summary>

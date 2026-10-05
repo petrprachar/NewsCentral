@@ -272,4 +272,137 @@ public sealed class EnvironmentSettingsTests
         Assert.Null(settings.ModifiedBy);
         Assert.Null(settings.ModifiedUtc);
     }
+
+    // ── MergeForSave (M5a.1) ──────────────────────────────────────────────────
+
+    private static EnvironmentSettings FormSettings() => new()
+    {
+        SchemaVersion = 1,
+        DisplayName = "Form name",
+        Distribution = new DistributionSettings
+        {
+            Enabled = true,
+            Mode = "Local",
+            LocalPath = "C:\\FormPath",
+            AzureBlob = new AzureBlobSettings
+            {
+                TenantId = "form-tenant",
+                ClientId = "form-client",
+                AccountName = "form-account",
+                ContainerName = "form-container"
+            }
+        }
+    };
+
+    private static EnvironmentSettings StoredSettings() => new()
+    {
+        SchemaVersion = 1,
+        DisplayName = "Stored name",
+        Distribution = new DistributionSettings
+        {
+            Enabled = false,
+            Mode = "AzureBlob",
+            LocalPath = "C:\\StoredPath",
+            AzureBlob = new AzureBlobSettings
+            {
+                TenantId = "stored-tenant",
+                ClientId = "stored-client",
+                AccountName = "stored-account",
+                ContainerName = "stored-container"
+            }
+        }
+    };
+
+    private static EnvironmentSettings MachineDefaultsForMerge() => new()
+    {
+        SchemaVersion = 1,
+        DisplayName = "Machine name",
+        Distribution = new DistributionSettings
+        {
+            Enabled = false,
+            Mode = "Local",
+            LocalPath = "C:\\MachinePath",
+            AzureBlob = new AzureBlobSettings
+            {
+                TenantId = "machine-tenant",
+                ClientId = "machine-client",
+                AccountName = "machine-account",
+                ContainerName = "machine-container"
+            }
+        }
+    };
+
+    [Fact]
+    public void MergeForSave_NonPolicyFields_ComeFromForm()
+    {
+        var merged = EnvironmentSettingsResolver.MergeForSave(
+            FormSettings(), StoredSettings(), MachineDefaultsForMerge(), new[] { "distribution.localPath" });
+
+        Assert.Equal("Form name", merged.DisplayName);
+        Assert.True(merged.Distribution.Enabled);
+        Assert.Equal("Local", merged.Distribution.Mode);
+        Assert.Equal("form-tenant", merged.Distribution.AzureBlob.TenantId);
+        Assert.Equal("form-client", merged.Distribution.AzureBlob.ClientId);
+        Assert.Equal("form-account", merged.Distribution.AzureBlob.AccountName);
+        Assert.Equal("form-container", merged.Distribution.AzureBlob.ContainerName);
+    }
+
+    [Fact]
+    public void MergeForSave_PolicyFields_ComeFromStored()
+    {
+        var merged = EnvironmentSettingsResolver.MergeForSave(
+            FormSettings(), StoredSettings(), MachineDefaultsForMerge(),
+            new[] { "displayName", "distribution.enabled", "distribution.mode", "distribution.localPath",
+                     "distribution.azureBlob.tenantId", "distribution.azureBlob.clientId",
+                     "distribution.azureBlob.accountName", "distribution.azureBlob.containerName" });
+
+        Assert.Equal("Stored name", merged.DisplayName);
+        Assert.False(merged.Distribution.Enabled);
+        Assert.Equal("AzureBlob", merged.Distribution.Mode);
+        Assert.Equal("C:\\StoredPath", merged.Distribution.LocalPath);
+        Assert.Equal("stored-tenant", merged.Distribution.AzureBlob.TenantId);
+        Assert.Equal("stored-client", merged.Distribution.AzureBlob.ClientId);
+        Assert.Equal("stored-account", merged.Distribution.AzureBlob.AccountName);
+        Assert.Equal("stored-container", merged.Distribution.AzureBlob.ContainerName);
+    }
+
+    [Fact]
+    public void MergeForSave_StoredNull_PolicyFieldsComeFromMachineDefaults()
+    {
+        var merged = EnvironmentSettingsResolver.MergeForSave(
+            FormSettings(), stored: null, MachineDefaultsForMerge(), new[] { "distribution.localPath", "displayName" });
+
+        Assert.Equal("Machine name", merged.DisplayName);
+        Assert.Equal("C:\\MachinePath", merged.Distribution.LocalPath);
+    }
+
+    [Fact]
+    public void MergeForSave_EmptyPolicyList_ReturnsFormValues()
+    {
+        var merged = EnvironmentSettingsResolver.MergeForSave(
+            FormSettings(), StoredSettings(), MachineDefaultsForMerge(), Array.Empty<string>());
+
+        Assert.Equal("Form name", merged.DisplayName);
+        Assert.True(merged.Distribution.Enabled);
+        Assert.Equal("Local", merged.Distribution.Mode);
+        Assert.Equal("C:\\FormPath", merged.Distribution.LocalPath);
+        Assert.Equal("form-tenant", merged.Distribution.AzureBlob.TenantId);
+    }
+
+    [Fact]
+    public void MergeForSave_NeverMutatesInputs()
+    {
+        var form = FormSettings();
+        var stored = StoredSettings();
+        var machineDefaults = MachineDefaultsForMerge();
+
+        EnvironmentSettingsResolver.MergeForSave(
+            form, stored, machineDefaults, new[] { "displayName", "distribution.localPath" });
+
+        Assert.Equal("Form name", form.DisplayName);
+        Assert.Equal("C:\\FormPath", form.Distribution.LocalPath);
+        Assert.Equal("Stored name", stored.DisplayName);
+        Assert.Equal("C:\\StoredPath", stored.Distribution.LocalPath);
+        Assert.Equal("Machine name", machineDefaults.DisplayName);
+    }
 }

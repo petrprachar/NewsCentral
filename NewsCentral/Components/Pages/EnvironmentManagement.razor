@@ -456,37 +456,53 @@
         showRegenerateOffer = false;
         regenerateSummary = null;
 
-        var newSettings = BuildFormSettings();
-        var errors = EnvironmentSettingsResolver.Validate(newSettings);
+        // M5a.1: never write the form's own value for a policy-controlled field — MergeForSave
+        // takes those fields from the pre-policy-overlay StoredSettings instead (or this machine's
+        // defaults, if there is no stored environment.json yet), so a policy-locked field round-trips
+        // through Save unchanged rather than freezing in the policy's current value.
+        var formSettings = BuildFormSettings();
+        var merged = EnvironmentSettingsResolver.MergeForSave(
+            formSettings, effective?.StoredSettings, EnvironmentSettingsService.GetMachineDefaults(), policyFields);
+
+        var errors = EnvironmentSettingsResolver.Validate(merged);
         if (errors.Count > 0)
         {
             validationErrors = errors.ToList();
             return;
         }
 
-        var newFingerprint = EnvironmentSettingsResolver.Fingerprint(newSettings, EnvironmentContext.DataPath);
+        // The TRUE effective fingerprint of the merged write — re-overlays policy on top of it, so
+        // a policy-controlled field (whose merged value is the pre-policy one) is correctly folded
+        // back to what the very next read will actually resolve to.
+        var newFingerprint = EnvironmentSettingsService.ComputeEffectiveFingerprint(merged);
         var oldFingerprint = effective?.DistributionFingerprint;
         var oldEnabled = effective?.Settings?.Distribution.Enabled ?? false;
 
         if (EnvironmentChangeRules.RequiresRetargetConfirmation(oldFingerprint, oldEnabled, newFingerprint))
         {
+            // Display-only: the merged settings with policy fields folded back to their CURRENT
+            // effective values (not the pre-policy ones MergeForSave used for the write) — the same
+            // reuse of MergeForSave with different "stored" values, purely for an accurate message.
+            var displaySettings = EnvironmentSettingsResolver.MergeForSave(
+                merged, effective?.Settings, EnvironmentSettingsService.GetMachineDefaults(), policyFields);
+
             var oldTarget = effective?.Settings != null
                 ? EnvironmentSettingsService.DescribeDistributionTarget(effective.Settings.Distribution, EnvironmentContext.DataPath)
                 : "nothing";
             var newTarget = newFingerprint != null
-                ? EnvironmentSettingsService.DescribeDistributionTarget(newSettings.Distribution, EnvironmentContext.DataPath)
+                ? EnvironmentSettingsService.DescribeDistributionTarget(displaySettings.Distribution, EnvironmentContext.DataPath)
                 : "nothing (distribution disabled)";
 
             retargetMessage =
                 $"Clients currently receive content from {oldTarget}. After this change they will stop receiving " +
                 $"updates until they are reconfigured to {newTarget}. Continue?";
-            pendingSettings = newSettings;
+            pendingSettings = merged;
             pendingNewFingerprint = newFingerprint;
             showRetargetConfirm = true;
             return;
         }
 
-        await DoSaveAsync(newSettings, newFingerprint);
+        await DoSaveAsync(merged, newFingerprint);
     }
 
     private async Task ConfirmSaveAsync()
