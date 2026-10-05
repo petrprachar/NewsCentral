@@ -2,7 +2,7 @@
 
 **Component:** NewsCentral (MAUI Blazor Hybrid authoring app)
 **Status:** Specified — not started.
-**Depends on:** `SolutionConstants.SolutionName` and the `Initialization:*` admin-cred fix (both committed as `0fe00a2`). The manifest below reflects current config: `Company` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`, not an appsettings key).
+**Depends on:** `SolutionConstants.SolutionName` (committed as `0fe00a2`). The manifest below reflects current config: `Company` is the build-time constant `SolutionConstants.Company` (authored in `Directory.Build.props`, not an appsettings key). The `Initialization:*` admin-cred keys this line used to also depend on were removed in M5b along with the admin/admin first-run seed — see `docs/newscentral-spec.md`.
 
 ## 1. Purpose & Scope
 
@@ -195,8 +195,6 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 |---|---|---|---|---|---|---|---|
 | `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company` (single `Directory.Build.props` value, same for all components); defines hive path; not in appsettings |
 | `DataPath` | `""` | `DataPath` | S | OV | path | | authoring data root |
-| `Initialization:DefaultAdminUsername` | `admin` | `Initialization\DefaultAdminUsername` | S | OV | text | | seed admin username |
-| `Initialization:DefaultAdminPassword` | `admin` | `Initialization\DefaultAdminPassword` | S | OV | redacted | ✔ | seed admin password |
 | `LockExpirationMinutes` | `15` | `LockExpirationMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (a 1-minute lock is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Authentication:EnableAutoLogin` | `false` | `Authentication\EnableAutoLogin` | S | OV | toggle | | `true \| false` (registry: REG_SZ) |
 | `Authentication:UseMockUPN` | `false` | `Authentication\UseMockUPN` | S | OV | toggle | | `true \| false` (registry: REG_SZ); Debug builds only — ignored in Release |

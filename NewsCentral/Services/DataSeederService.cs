@@ -1,16 +1,17 @@
-using NewsCentral.Models;
 using NewsCentral.Configuration;
-using Microsoft.Extensions.Configuration;
 using System.Collections.Concurrent;
-using System.Text.Json;
 
 namespace NewsCentral.Services;
 
 /// <summary>
 /// Result of <see cref="DataSeederService.EnsureInitializedAsync"/> for the environment that was
-/// current at the time of the call. <see cref="NotInitialized"/> is not an error — it means this is
-/// a non-Configured environment with no <c>config/users.json</c> yet, which M4a deliberately never
-/// seeds (see the type's own remarks). An unreachable/unwritable DataPath instead faults the Task.
+/// current at the time of the call. <see cref="NotInitialized"/> is not an error — it means this
+/// environment has no <c>config/users.json</c> yet. M5b: there is no longer a seeded exception for
+/// the Configured environment — EVERY environment with no users file reports
+/// <see cref="NotInitialized"/>, and the only way out of it is the setup wizard
+/// (<see cref="EnvironmentInitializer"/>), from the login page (for a Policy/Configured
+/// environment) or from Environment Management (for any environment, while signed in elsewhere).
+/// An unreachable/unwritable DataPath instead faults the Task.
 /// </summary>
 public enum EnvironmentInitStatus
 {
@@ -19,163 +20,69 @@ public enum EnvironmentInitStatus
 }
 
 /// <summary>
-/// Seeds the default admin user into a fresh data store. M4a: seeding is now per-environment and
-/// gated to the Configured environment only — switching to any OTHER environment (a Policy or
-/// User-added one) that has no <c>config/users.json</c> yet reports
-/// <see cref="EnvironmentInitStatus.NotInitialized"/> and seeds nothing; an administrator will
-/// initialize it from Environment Management (M5). Seeding only ever happens for the one
-/// environment this machine's own appsettings/registry DataPath names — never for an environment
-/// reached by switching, even as a SystemAdmin — because seeding silently creates a brand-new admin
-/// account, which is the wrong thing to do to someone else's existing (if momentarily unreachable)
-/// environment.
+/// Reports whether the current environment is ready to log into. M5b: this class no longer seeds
+/// anything — the admin/admin first-run seed was removed along with every
+/// <c>Initialization:*</c> setting it read. Creating a brand-new environment's first administrator
+/// is now exclusively the job of <see cref="EnvironmentInitializer"/>, driven by the setup wizard
+/// (<c>EnvironmentSetupWizard.razor</c>) from either the login page or Environment Management. This
+/// class is reduced to a memoized read-only status check, plus <see cref="Invalidate"/> so the
+/// wizard can force a fresh check immediately after it writes <c>config/users.json</c> for the
+/// environment this process is currently pointed at.
 /// </summary>
 public class DataSeederService
 {
     private readonly IStorageService _storage;
     private readonly EnvironmentContext _environment;
-    private readonly IConfiguration _configuration;
-    private readonly AppConfiguration _appConfig;
 
     // Memoized per canonical DataPath — not per process — so switching between environments
-    // re-evaluates seeding/readiness independently for each one, while still never re-checking an
-    // environment this process has already resolved once. Every caller for the same canonical path
-    // receives the same Task and observes the same completion or fault.
+    // re-evaluates readiness independently for each one, while still never re-checking an
+    // environment this process has already resolved once (until Invalidate clears that one entry).
+    // Every caller for the same canonical path receives the same Task and observes the same
+    // completion or fault.
     private readonly ConcurrentDictionary<string, Task<EnvironmentInitStatus>> _initialization =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    public DataSeederService(IStorageService storage, EnvironmentContext environment)
     {
-        WriteIndented = true,
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-    };
-
-    public DataSeederService(
-        IStorageService storage,
-        EnvironmentContext environment,
-        IConfiguration configuration,
-        AppConfiguration appConfig)
-    {
-        _storage       = storage;
-        _environment   = environment;
-        _configuration = configuration;
-        _appConfig     = appConfig;
+        _storage     = storage;
+        _environment = environment;
     }
 
-    // ── Bootstrap ─────────────────────────────────────────────────────────────
+    // ── Status ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Ensures the CURRENT environment (<see cref="EnvironmentContext.DataPath"/> at the moment of
-    /// the call) is seeded, if it is allowed to be, and reports whether it is ready to log into.
-    /// Every caller — the fire-and-forget call from App.CreateWindow and the awaited call from
-    /// Login.razor — for the same canonical DataPath receives the same Task and observes the same
-    /// result or fault; I/O exceptions propagate to every caller through that Task, none are
-    /// swallowed here.
+    /// Reports whether the CURRENT environment (<see cref="EnvironmentContext.DataPath"/> at the
+    /// moment of the call) is ready to log into. Every caller — the fire-and-forget call from
+    /// App.CreateWindow and the awaited call from Login.razor — for the same canonical DataPath
+    /// receives the same Task and observes the same result or fault; I/O exceptions propagate to
+    /// every caller through that Task, none are swallowed here.
     /// </summary>
     public Task<EnvironmentInitStatus> EnsureInitializedAsync()
     {
         var dataPath = _environment.DataPath;
         var canonical = EnvironmentPaths.Canonicalize(dataPath);
-        return _initialization.GetOrAdd(canonical, _ => InitializeIfNeededAsync(dataPath));
+        return _initialization.GetOrAdd(canonical, _ => CheckInitializedAsync());
     }
+
+    private async Task<EnvironmentInitStatus> CheckInitializedAsync() =>
+        await _storage.FileExistsAsync("config/users.json")
+            ? EnvironmentInitStatus.Ready
+            : EnvironmentInitStatus.NotInitialized;
 
     /// <summary>
-    /// If <c>config/users.json</c> already exists, the environment is <see cref="EnvironmentInitStatus.Ready"/>
-    /// regardless of which environment it is. Otherwise: the Configured environment (this machine's
-    /// own appsettings/registry DataPath) is seeded from scratch and becomes Ready; any other
-    /// environment is reported <see cref="EnvironmentInitStatus.NotInitialized"/> and is never seeded.
+    /// Clears the memoized status for <paramref name="dataPath"/> so the next
+    /// <see cref="EnsureInitializedAsync"/> call for it re-checks disk instead of returning a
+    /// stale, memoized <see cref="EnvironmentInitStatus.NotInitialized"/>. Called by the login-page
+    /// setup wizard immediately after <see cref="EnvironmentInitializer"/> successfully writes
+    /// <c>config/users.json</c> for the environment this process is currently pointed at — without
+    /// this, the login form would stay disabled for the rest of the process's lifetime even though
+    /// the environment is now genuinely ready.
     /// </summary>
-    private async Task<EnvironmentInitStatus> InitializeIfNeededAsync(string dataPath)
+    public void Invalidate(string dataPath)
     {
-        System.Diagnostics.Debug.WriteLine(
-            $"=== DataSeeder: Checking if initialization needed for '{dataPath}' ===");
-
-        if (await _storage.FileExistsAsync("config/users.json"))
-        {
-            System.Diagnostics.Debug.WriteLine("✓ Users file exists — initialization not needed");
-            return EnvironmentInitStatus.Ready;
-        }
-
-        var isConfiguredEnvironment =
-            EnvironmentPaths.Canonicalize(dataPath) == EnvironmentPaths.Canonicalize(_appConfig.DataPath);
-
-        if (!isConfiguredEnvironment)
-        {
-            System.Diagnostics.Debug.WriteLine(
-                "✗ Users file not found and this is not the Configured environment — reporting NotInitialized, seeding nothing");
-            return EnvironmentInitStatus.NotInitialized;
-        }
-
-        System.Diagnostics.Debug.WriteLine("✗ Users file not found - starting initialization");
-        await InitializeAsync();
-        return EnvironmentInitStatus.Ready;
+        var canonical = EnvironmentPaths.Canonicalize(dataPath);
+        _initialization.TryRemove(canonical, out _);
     }
-
-    public async Task InitializeAsync()
-    {
-        System.Diagnostics.Debug.WriteLine("=== STARTING DATA INITIALIZATION ===");
-
-        await _storage.EnsureFolderExistsAsync("config");
-        System.Diagnostics.Debug.WriteLine("✓ Config folder ready");
-
-        var adminUser = await CreateDefaultAdminUserAsync();
-        System.Diagnostics.Debug.WriteLine($"✓ Created admin user: {adminUser.Username}");
-
-        System.Diagnostics.Debug.WriteLine("=== DATA INITIALIZATION COMPLETE ===");
-        System.Diagnostics.Debug.WriteLine("");
-        System.Diagnostics.Debug.WriteLine("DEFAULT CREDENTIALS:");
-        System.Diagnostics.Debug.WriteLine($"  Username: {adminUser.Username}");
-        System.Diagnostics.Debug.WriteLine(
-            $"  Password: {_configuration["Initialization:DefaultAdminPassword"] ?? "admin"}");
-        System.Diagnostics.Debug.WriteLine("");
-    }
-
-    // ── Private initialisation helpers ────────────────────────────────────────
-
-    private async Task<User> CreateDefaultAdminUserAsync()
-    {
-        var username = _configuration["Initialization:DefaultAdminUsername"] ?? "admin";
-        var password = _configuration["Initialization:DefaultAdminPassword"] ?? "admin";
-
-        System.Diagnostics.Debug.WriteLine($"Creating admin user: {username}");
-        System.Diagnostics.Debug.WriteLine("Hashing password...");
-
-        var passwordHash = await Task.Run(() => BCrypt.Net.BCrypt.HashPassword(password));
-
-        System.Diagnostics.Debug.WriteLine("Password hashed successfully");
-
-        var adminUser = new User
-        {
-            UserID        = Guid.NewGuid().ToString(),
-            Username      = username,
-            DisplayName   = "System Administrator",
-            Email         = $"{username}@newscentral.local",
-            UPN           = $"{username}@newscentral.local",
-            PasswordHash  = passwordHash,
-            IsSystemAdmin = true,
-            IsActive      = true,
-            DateCreated   = DateTime.UtcNow,
-            TeamRoles     = new List<TeamRole>()
-        };
-
-        var usersCollection = new UsersCollection
-        {
-            Users        = new List<User> { adminUser },
-            Version      = "1",
-            LastModified = DateTime.UtcNow,
-            ModifiedBy   = "system"
-        };
-
-        // Relative path matches JsonFileRepository<UsersCollection>(_storage, "config", "")
-        // → GetById("users") → "config/users.json"
-        await _storage.WriteTextAsync(
-            "config/users.json",
-            JsonSerializer.Serialize(usersCollection, JsonOptions));
-
-        System.Diagnostics.Debug.WriteLine("✓ Users collection file created: config/users.json");
-        return adminUser;
-    }
-
-    // ── Status queries ────────────────────────────────────────────────────────
 
     /// <summary>
     /// Synchronous check used during app startup before the async host is ready.
@@ -198,8 +105,6 @@ public class DataSeederService
 
         if (status.BasePathExists)
         {
-            // Fixed: original code checked root users.json / teams.json;
-            // correct paths are config/users.json and config/teams.json
             status.UsersFileExists =
                 _storage.FileExistsAsync("config/users.json").GetAwaiter().GetResult();
             status.TeamsFileExists =

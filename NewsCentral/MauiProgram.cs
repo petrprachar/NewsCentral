@@ -80,8 +80,6 @@ public static class MauiProgram
             var inMemorySettings = new Dictionary<string, string>
             {
                 {"DataPath",                          "C:\\Download\\NewsCentral"},
-                {"DefaultAdminUsername",              "admin"},
-                {"DefaultAdminPassword",              "admin"},
                 {"LockExpirationMinutes",             "15"},
                 {"Authentication:EnableAutoLogin",    "true"},
                 {"Authentication:UseMockUPN",         "true"},
@@ -218,15 +216,9 @@ public static class MauiProgram
         builder.Services.AddSingleton<AssignmentService>();
         builder.Services.AddSingleton<PublishingService>();
 
-        // Register DataSeederService with IConfiguration dependency
-        builder.Services.AddSingleton<DataSeederService>(sp =>
-        {
-            var environment = sp.GetRequiredService<EnvironmentContext>();
-            var configuration = sp.GetRequiredService<IConfiguration>();
-            var storageService = sp.GetRequiredService<IStorageService>();
-            var appConfiguration = sp.GetRequiredService<AppConfiguration>();
-            return new DataSeederService(storageService, environment, configuration, appConfiguration);
-        });
+        // M5b: DataSeederService no longer seeds anything (no Initialization:* dependency left) —
+        // plain constructor injection is enough, same as AuthenticationService above.
+        builder.Services.AddSingleton<DataSeederService>();
 
         // Add localization — ResourcesPath tells the factory where to find per-type .resx files
         builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");

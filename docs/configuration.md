@@ -181,10 +181,6 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 ```json
 {
   "DataPath": "C:\\Download\\NewsCentral",
-  "Initialization": {
-    "DefaultAdminUsername": "admin",
-    "DefaultAdminPassword": "admin"
-  },
   "LockExpirationMinutes": 15,
   "Authentication": {
     "EnableAutoLogin": false,
@@ -209,6 +205,8 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 ```
 
 NewsCentral authenticates to Azure using an **interactive MSAL user session** (`InteractiveBrowserCredential`) — no service credentials are stored in config. Token is persisted in a named cache (`"NewsCentral"`) so subsequent calls are non-interactive.
+
+**No seeded first admin (M5b).** There is no `Initialization:*` configuration any more, and no admin/admin account is ever created automatically. A brand-new environment (no `config/users.json` yet) is initialized exclusively through the **setup wizard** — from the login page for a Policy or Configured environment, or from Environment Management's "Initialize an environment" section for any environment while signed in to another one — where the operator running the wizard chooses the first System Administrator's own username and password. See `docs/newscentral-spec.md`.
 
 ## appsettings.json — NewsService
 

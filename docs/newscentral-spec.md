@@ -25,7 +25,7 @@
 | `LocalBlobDistributionService` / `AzureBlobDistributionService` | Distribution backends |
 | `TeamContextService` | Current team scope for the session |
 | `AuthenticationService` | Login, UPN detection, role resolution |
-| `DataSeederService` | Seeds default admin/team on first run |
+| `DataSeederService` | M5b: no longer seeds anything — memoized `config/users.json` existence check (`Ready` / `NotInitialized`) plus `Invalidate(dataPath)` for the setup wizard to force a re-check |
 
 ## Key UI Pages
 

@@ -71,7 +71,7 @@ NewsCentral.Shared\
     ├── TeamFolderNameCanonicalizer.cs     shared canonicalization used by attribute schemes, group teams, and group-instance id derivation
     ├── ResolvedTeamsReader.cs             ReadDynamicTeamFolders(cacheRootPath) — reads resolved-teams.json
     ├── EffectiveTeams.cs                  Union(staticTeams, dynamicTeams) — de-duplicated, ordinal-ignore-case
-    └── AppConfiguration.cs                typed accessor over IConfiguration for the NewsCentral authoring app (admin creds via Initialization:*, DataPath, distribution, Azure/HMAC)
+    └── AppConfiguration.cs                typed accessor over IConfiguration for the NewsCentral authoring app (DataPath, distribution, Azure/HMAC; no admin creds — M5b removed the Initialization:* seed keys)
 ```
 
 ## NewsService — Service Layout
