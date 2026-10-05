@@ -1,0 +1,144 @@
+@* UI-2.1 — reusable poster thumbnail with a click-to-enlarge lightbox. With no image, renders a
+   neutral, non-clickable "No preview" placeholder of the same footprint instead of nothing, so a
+   row of thumbnails stays visually aligned. *@
+
+@if (!string.IsNullOrEmpty(ImageDataUrl))
+{
+    <img class="poster-thumbnail" src="@ImageDataUrl" alt="@Title" title="Click to enlarge"
+         style="width: @(Width)px;" @onclick="Open" />
+}
+else
+{
+    <div class="poster-thumbnail poster-thumbnail-placeholder" style="width: @(Width)px;">
+        No preview
+    </div>
+}
+
+@if (isOpen)
+{
+    <div class="poster-lightbox-overlay" tabindex="-1" @ref="overlayRef" @onclick="Close" @onkeydown="HandleKeyDown">
+        <div class="poster-lightbox-content" @onclick:stopPropagation="true">
+            <button type="button" class="poster-lightbox-close" @onclick="Close" aria-label="Close">×</button>
+            <img src="@ImageDataUrl" alt="@Title" class="poster-lightbox-image" />
+            @if (!string.IsNullOrEmpty(Title))
+            {
+                <div class="poster-lightbox-title">@Title</div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .poster-thumbnail {
+        height: auto;
+        max-height: 90px;
+        object-fit: contain;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        cursor: zoom-in;
+        background: #f5f5f5;
+        display: block;
+        flex-shrink: 0;
+    }
+
+    .poster-thumbnail-placeholder {
+        height: 90px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #999;
+        font-size: 11px;
+        font-style: italic;
+        text-align: center;
+        cursor: default;
+    }
+
+    .poster-lightbox-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 3000;
+    }
+
+    .poster-lightbox-content {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        max-width: 90vw;
+        max-height: 85vh;
+    }
+
+    .poster-lightbox-image {
+        max-width: 90vw;
+        max-height: 75vh;
+        object-fit: contain;
+        border-radius: 6px;
+    }
+
+    .poster-lightbox-title {
+        color: white;
+        margin-top: 12px;
+        font-size: 15px;
+        text-align: center;
+    }
+
+    .poster-lightbox-close {
+        position: absolute;
+        top: -36px;
+        right: -8px;
+        background: none;
+        border: none;
+        color: white;
+        font-size: 28px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 4px 8px;
+    }
+</style>
+
+@code {
+    [Parameter] public string? ImageDataUrl { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public int Width { get; set; } = 120;
+
+    private bool isOpen;
+    private bool wasOpen;
+    private ElementReference overlayRef;
+
+    private void Open()
+    {
+        if (!string.IsNullOrEmpty(ImageDataUrl))
+            isOpen = true;
+    }
+
+    private void Close() => isOpen = false;
+
+    // No form inside the lightbox, so closing on an outside click (via the overlay's own @onclick,
+    // above) or Escape is always safe here.
+    private void HandleKeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            Close();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (isOpen && !wasOpen)
+        {
+            try
+            {
+                await overlayRef.FocusAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PosterThumbnail] Failed to focus the lightbox: {ex.Message}");
+            }
+        }
+
+        wasOpen = isOpen;
+    }
+}
