@@ -329,7 +329,7 @@
             {
                 warningMessage =
                     $"Regenerated the index for {currentTeamName ?? currentTeamFolder}, but distribution failed: " +
-                    $"{result.DistributionError}. Clients will not receive it until this is resolved and the index is regenerated again.";
+                    $"{result.DistributionError?.TrimEnd('.')}. Clients will not receive it until this is resolved and the index is regenerated again.";
             }
 
             // Reload index information
