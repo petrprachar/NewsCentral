@@ -2,6 +2,7 @@
 @using Microsoft.Extensions.Localization
 @using NewsCentral.Models
 @using NewsCentral.Components.Shared
+@using NewsCentral.Ui
 @inject Services.PresentationService PresentationService
 @inject Services.ScheduleService ScheduleService
 @inject Services.AssignmentService AssignmentService
@@ -10,7 +11,6 @@
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject IStringLocalizer<CreateAssignment> Localizer
-@inject IJSRuntime JS
 
 <PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
@@ -88,7 +88,7 @@
                         <div class="team-checkbox current">
                             <label>
                                 <input type="checkbox"
-                                       checked="@selectedTeams.Contains(currentTeam.TeamID)"
+                                       checked="@selection.IsSelected(currentTeam.TeamID)"
                                        @onchange="@(e => ToggleTeam(currentTeam.TeamID, (bool)e.Value!))" />
                                 <strong>@currentTeam.Name</strong> @Localizer["CurrentTeamSuffix"]
                             </label>
@@ -132,7 +132,7 @@
                             else
                             {
                                 var selectedOther = availableTeams
-                                    .Where(t => selectedTeams.Contains(t.TeamID))
+                                    .Where(t => selection.IsSelected(t.TeamID))
                                     .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
                                     .ToList();
 
@@ -154,16 +154,13 @@
                         </div>
                     }
 
-                    <label class="other-teams-list-header">
-                        <input type="checkbox" @ref="masterCheckboxRef"
-                               checked="@MasterChecked(shown)"
-                               @onchange="@(e => ToggleMaster(shown))" />
-                        <span>
-                            @(IsOtherTeamsFilterActive
-                                ? string.Format(Localizer["SelectAllShownLabel"].Value, shown.Count)
-                                : string.Format(Localizer["SelectAllLabel"].Value, availableTeams.Count))
-                        </span>
-                    </label>
+                    <div class="other-teams-list-header">
+                        <TriStateCheckbox State="@selection.StateOf(shown.Select(t => t.TeamID))"
+                                          OnToggle="@(() => selection.ToggleAll(shown.Select(t => t.TeamID)))"
+                                          Label="@(IsOtherTeamsFilterActive
+                                              ? string.Format(Localizer["SelectAllShownLabel"].Value, shown.Count)
+                                              : string.Format(Localizer["SelectAllLabel"].Value, availableTeams.Count))" />
+                    </div>
 
                     @if (shown.Count == 0)
                     {
@@ -178,7 +175,7 @@
                         <div class="other-teams-scroll">
                             @foreach (var team in shown)
                             {
-                                var isSelected = selectedTeams.Contains(team.TeamID);
+                                var isSelected = selection.IsSelected(team.TeamID);
 
                                 <label class="other-team-row @(isSelected ? "selected" : "")">
                                     <input type="checkbox"
@@ -226,7 +223,7 @@
             {
                 <div class="form-actions">
                     <button @onclick="Cancel" class="btn btn-secondary">@Localizer["Cancel"]</button>
-                    <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@(isCreating || selectedTeams.Count == 0)">
+                    <button @onclick="CreateAssignments" class="btn btn-primary" disabled="@(isCreating || selection.Count == 0)">
                         @(isCreating ? Localizer["Creating"].Value : CreateButtonLabel)
                     </button>
                 </div>
@@ -691,28 +688,28 @@
 
     private Team? currentTeam;
 
-    private List<string> selectedTeams = new();
+    // UI-2: replaces the former plain List<string> — search/toggle affect only what is SHOWN,
+    // never what is selected; this remains the single source of truth either way.
+    private SelectionModel<string> selection = new();
     private bool requiresApproval = true;
 
     private string errorMessage = string.Empty;
     private string successMessage = string.Empty;
 
-    // UI-1 — Other Teams selector: search/toggle affect only what is SHOWN, never what is
-    // selected; selectedTeams (above) remains the single source of truth.
+    // UI-1 — Other Teams selector: search/toggle affect only what is SHOWN, never what is selected.
     private string teamSearch = string.Empty;
     private bool showSelectedOnly;
-    private ElementReference masterCheckboxRef;
 
-    private int OtherSelectedCount => availableTeams.Count(t => selectedTeams.Contains(t.TeamID));
+    private int OtherSelectedCount => availableTeams.Count(t => selection.IsSelected(t.TeamID));
 
     private bool IsOtherTeamsFilterActive => showSelectedOnly || !string.IsNullOrWhiteSpace(teamSearch);
 
-    private string CreateButtonLabel => selectedTeams.Count == 1
-        ? string.Format(Localizer["CreateAssignmentsSingular"].Value, selectedTeams.Count)
-        : string.Format(Localizer["CreateAssignmentsPlural"].Value, selectedTeams.Count);
+    private string CreateButtonLabel => selection.Count == 1
+        ? string.Format(Localizer["CreateAssignmentsSingular"].Value, selection.Count)
+        : string.Format(Localizer["CreateAssignmentsPlural"].Value, selection.Count);
 
-    // Recomputed on every access (markup + OnAfterRenderAsync) — up to ~200 teams, trivial cost
-    // per keystroke; no caching needed.
+    // Recomputed on every access (markup) — up to ~200 teams, trivial cost per keystroke; no
+    // caching needed.
     private List<Team> ShownOtherTeams
     {
         get
@@ -720,7 +717,7 @@
             IEnumerable<Team> query = availableTeams;
 
             if (showSelectedOnly)
-                query = query.Where(t => selectedTeams.Contains(t.TeamID));
+                query = query.Where(t => selection.IsSelected(t.TeamID));
 
             if (!string.IsNullOrWhiteSpace(teamSearch))
             {
@@ -734,9 +731,6 @@
             return query.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList();
         }
     }
-
-    private bool MasterChecked(List<Team> shown) =>
-        shown.Count > 0 && shown.All(t => selectedTeams.Contains(t.TeamID));
 
     protected override async Task OnInitializedAsync()
     {
@@ -824,10 +818,10 @@
             }
 
             // Auto-select current team by default
-            selectedTeams.Clear();
+            selection.Clear();
             if (currentTeam != null)
             {
-                selectedTeams.Add(currentTeam.TeamID);
+                selection.Set(currentTeam.TeamID, true);
             }
         }
         catch (Exception ex)
@@ -841,61 +835,15 @@
         }
     }
 
-    private void ToggleTeam(string teamId, bool isSelected)
-    {
-        if (isSelected)
-        {
-            if (!selectedTeams.Contains(teamId))
-            {
-                selectedTeams.Add(teamId);
-            }
-        }
-        else
-        {
-            selectedTeams.Remove(teamId);
-        }
-    }
+    private void ToggleTeam(string teamId, bool isSelected) => selection.Set(teamId, isSelected);
 
-    // From unchecked or indeterminate (not every shown row selected): select all shown. From
-    // checked (every shown row already selected): deselect all shown. Rows hidden by the filter
-    // keep whatever selection they already had.
-    private void ToggleMaster(List<Team> shown)
-    {
-        var allSelected = MasterChecked(shown);
-        foreach (var team in shown)
-        {
-            if (allSelected)
-                selectedTeams.Remove(team.TeamID);
-            else if (!selectedTeams.Contains(team.TeamID))
-                selectedTeams.Add(team.TeamID);
-        }
-    }
-
+    // The master checkbox's tri-state logic (select/deselect all SHOWN; hidden rows untouched)
+    // and indeterminate rendering now live in SelectionModel<string> / TriStateCheckbox (UI-2) —
+    // this page no longer needs its own JS interop call or ElementReference for it.
     private void ClearAllOtherTeams()
     {
         foreach (var team in availableTeams)
-            selectedTeams.Remove(team.TeamID);
-    }
-
-    // The DOM `indeterminate` property has no HTML attribute equivalent, so it cannot be set from
-    // markup — set via a tiny JS interop call (wwwroot/js/team-selection.js) after every render
-    // instead, reflecting the CURRENT shown/selected state each time.
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (availableTeams.Count == 0)
-            return;
-
-        try
-        {
-            var shown = ShownOtherTeams;
-            var selectedShown = shown.Count(t => selectedTeams.Contains(t.TeamID));
-            var isIndeterminate = shown.Count > 0 && selectedShown > 0 && selectedShown < shown.Count;
-            await JS.InvokeVoidAsync("ncSetIndeterminate", masterCheckboxRef, isIndeterminate);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[CreateAssignment] Failed to set master checkbox indeterminate state: {ex.Message}");
-        }
+            selection.Set(team.TeamID, false);
     }
 
     private async Task CreateAssignments()
@@ -917,7 +865,7 @@
             return;
         }
 
-        if (selectedTeams.Count == 0)
+        if (selection.Count == 0)
         {
             errorMessage = Localizer["SelectTargetTeam"];
             return;
@@ -954,7 +902,7 @@
             var allTeams = await TeamService.GetAllTeamsAsync();
             var createdCount = 0;
 
-            foreach (var teamId in selectedTeams)
+            foreach (var teamId in selection.Selected)
             {
                 var targetTeam = allTeams.FirstOrDefault(t => t.TeamID == teamId);
                 if (targetTeam is null) continue;
