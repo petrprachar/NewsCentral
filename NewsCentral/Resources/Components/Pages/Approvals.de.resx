@@ -29,8 +29,18 @@
   <data name="DaysLabel" xml:space="preserve"><value>Tage:</value></data>
   <data name="Reject" xml:space="preserve"><value>✗ Ablehnen</value></data>
   <data name="Approve" xml:space="preserve"><value>✓ Genehmigen</value></data>
-  <data name="RejectAssignmentTitle" xml:space="preserve"><value>Zuweisung ablehnen</value></data>
+  <data name="RejectAssignmentTitle" xml:space="preserve"><value>{0} Zuweisung(en) ablehnen</value></data>
   <data name="RejectConfirmQuestion" xml:space="preserve"><value>Sind Sie sicher, dass Sie diese Zuweisung ablehnen möchten?</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>Nach Team oder Präsentation suchen…</value></data>
+  <data name="SelectedCounter" xml:space="preserve"><value>{0} von {1} ausgewählt</value></data>
+  <data name="SelectAllLabel" xml:space="preserve"><value>Alle auswählen ({0})</value></data>
+  <data name="SelectAllShownLabel" xml:space="preserve"><value>Alle angezeigten auswählen ({0})</value></data>
+  <data name="ApproveCount" xml:space="preserve"><value>{0} genehmigen</value></data>
+  <data name="RejectCount" xml:space="preserve"><value>{0} ablehnen</value></data>
+  <data name="TeamsCountLabel" xml:space="preserve"><value>{0} Teams</value></data>
+  <data name="NoAssignmentsMatchSearch" xml:space="preserve"><value>Keine Zuweisungen entsprechen „{0}“.</value></data>
+  <data name="BulkApproveConfirmTitle" xml:space="preserve"><value>Zuweisungen genehmigen?</value></data>
+  <data name="BulkApproveConfirmMessage" xml:space="preserve"><value>{0} Zuweisung(en) genehmigen?</value></data>
   <data name="RejectionReasonLabel" xml:space="preserve"><value>Ablehnungsgrund: *</value></data>
   <data name="RejectionReasonPlaceholder" xml:space="preserve"><value>Bitte geben Sie einen Ablehnungsgrund an...</value></data>
   <data name="Cancel" xml:space="preserve"><value>Abbrechen</value></data>

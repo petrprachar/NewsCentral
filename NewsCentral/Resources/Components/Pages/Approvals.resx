@@ -29,8 +29,18 @@
   <data name="DaysLabel" xml:space="preserve"><value>Days:</value></data>
   <data name="Reject" xml:space="preserve"><value>✗ Reject</value></data>
   <data name="Approve" xml:space="preserve"><value>✓ Approve</value></data>
-  <data name="RejectAssignmentTitle" xml:space="preserve"><value>Reject Assignment</value></data>
+  <data name="RejectAssignmentTitle" xml:space="preserve"><value>Reject {0} assignment(s)</value></data>
   <data name="RejectConfirmQuestion" xml:space="preserve"><value>Are you sure you want to reject this assignment?</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>Search by team or presentation…</value></data>
+  <data name="SelectedCounter" xml:space="preserve"><value>{0} of {1} selected</value></data>
+  <data name="SelectAllLabel" xml:space="preserve"><value>Select all ({0})</value></data>
+  <data name="SelectAllShownLabel" xml:space="preserve"><value>Select all shown ({0})</value></data>
+  <data name="ApproveCount" xml:space="preserve"><value>Approve {0}</value></data>
+  <data name="RejectCount" xml:space="preserve"><value>Reject {0}</value></data>
+  <data name="TeamsCountLabel" xml:space="preserve"><value>{0} teams</value></data>
+  <data name="NoAssignmentsMatchSearch" xml:space="preserve"><value>No assignments match '{0}'.</value></data>
+  <data name="BulkApproveConfirmTitle" xml:space="preserve"><value>Approve assignments?</value></data>
+  <data name="BulkApproveConfirmMessage" xml:space="preserve"><value>Approve {0} assignment(s)?</value></data>
   <data name="RejectionReasonLabel" xml:space="preserve"><value>Rejection Reason: *</value></data>
   <data name="RejectionReasonPlaceholder" xml:space="preserve"><value>Please provide a reason for rejection...</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>

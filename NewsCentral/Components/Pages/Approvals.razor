@@ -9,6 +9,7 @@
 @inject IStringLocalizer<Approvals> Localizer
 @using NewsCentral.Components.Shared
 @using NewsCentral.Models
+@using NewsCentral.Ui
 
 <PageTitle>@Localizer["PageTitle"] - NewsCentral</PageTitle>
 
@@ -22,82 +23,133 @@
     {
         <div class="loading">@Localizer["Loading"]</div>
     }
-    else if (pendingApprovals.Count == 0)
-    {
-        <div class="empty-state">
-            <h3>@Localizer["NoPendingApprovals"]</h3>
-            <p>@Localizer["NoAssignmentsMessage"]</p>
-        </div>
-    }
     else
     {
-        <div class="approvals-list">
-            @foreach (var approval in pendingApprovals)
-            {
-                <div class="approval-card">
-                    <div class="approval-header">
-                        <div>
-                            <h3>@approval.PresentationName</h3>
+        @* UI-2 — bulk run progress/summary, shown above the list so it stays visible even once a
+           successful run has emptied the list below (e.g. rejecting every pending item). *@
+        <BulkRunPanel Running="isRunning" Done="runDone" Total="runTotal" Verb="@runVerb"
+                      Result="runResult" OnStop="StopRun" />
 
-                            <!-- NEW: Display type badges -->
-                            @if (approval.Presentation != null && (approval.Presentation.IsNewsOfWeek || approval.Presentation.IsWallpaper || approval.Presentation.IsLogonScreen))
+        @if (!string.IsNullOrEmpty(errorMessage) && !showRejectDialog)
+        {
+            <div class="alert alert-danger">@errorMessage</div>
+        }
+
+        @if (batchViewModels.Count == 0)
+        {
+            <div class="empty-state">
+                <h3>@Localizer["NoPendingApprovals"]</h3>
+                <p>@Localizer["NoAssignmentsMessage"]</p>
+            </div>
+        }
+        else
+        {
+            <div class="approvals-toolbar">
+                <input type="text" class="approvals-search" placeholder="@Localizer["SearchPlaceholder"]"
+                       @bind="approvalSearch" @bind:event="oninput" disabled="@isRunning" />
+                <TriStateCheckbox State="@selection.StateOf(AllShownAssignments.Select(a => a.AssignmentID))"
+                                  OnToggle="@(() => selection.ToggleAll(AllShownAssignments.Select(a => a.AssignmentID)))"
+                                  Disabled="@isRunning"
+                                  Label="@(IsSearchActive
+                                      ? string.Format(Localizer["SelectAllShownLabel"].Value, AllShownAssignments.Count)
+                                      : string.Format(Localizer["SelectAllLabel"].Value, AllPendingAssignments.Count))" />
+                <span class="approvals-counter">
+                    @string.Format(Localizer["SelectedCounter"].Value, selection.Count, AllPendingAssignments.Count)
+                </span>
+                <div class="approvals-bulk-actions">
+                    <button class="btn btn-danger" @onclick="ShowRejectDialogForSelection" disabled="@(selection.Count == 0 || isRunning)">
+                        @string.Format(Localizer["RejectCount"].Value, selection.Count)
+                    </button>
+                    <button class="btn btn-success" @onclick="@(() => showApproveConfirm = true)" disabled="@(selection.Count == 0 || isRunning)">
+                        @string.Format(Localizer["ApproveCount"].Value, selection.Count)
+                    </button>
+                </div>
+            </div>
+
+            var shownBatches = batchViewModels.Where(b => ShownInBatch(b).Count > 0).ToList();
+
+            @if (shownBatches.Count == 0)
+            {
+                <p class="no-batches-match">@string.Format(Localizer["NoAssignmentsMatchSearch"].Value, approvalSearch)</p>
+            }
+            else
+            {
+                <div class="batches-list">
+                    @foreach (var vm in shownBatches)
+                    {
+                        var shownInBatch = ShownInBatch(vm);
+
+                        <div class="batch-card">
+                            <div class="batch-header">
+                                <TriStateCheckbox State="@selection.StateOf(shownInBatch.Select(a => a.AssignmentID))"
+                                                  OnToggle="@(() => selection.ToggleAll(shownInBatch.Select(a => a.AssignmentID)))"
+                                                  Disabled="@isRunning" />
+                                <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
+                                    <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                                </button>
+                                <div class="batch-header-main">
+                                    <div class="batch-title">@vm.PresentationTitle</div>
+                                    <div class="batch-meta">
+                                        @Localizer["ScheduleLabel"]
+                                        @(vm.ScheduleStart.HasValue && vm.ScheduleEnd.HasValue
+                                            ? $"{vm.ScheduleStart.Value:MMM dd, yyyy} - {vm.ScheduleEnd.Value:MMM dd, yyyy}"
+                                            : "—")
+                                        &nbsp;·&nbsp; @Localizer["From"] <strong>@vm.SourceTeamName</strong>
+                                        &nbsp;·&nbsp; @string.Format(Localizer["TeamsCountLabel"].Value, vm.Batch.Count)
+                                        &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                                    </div>
+                                </div>
+                            </div>
+
+                            @if (vm.IsExpanded)
                             {
-                                <div class="display-badges-inline">
-                                    <DisplayTypeBadges ShowNewsOfWeek="@approval.Presentation.IsNewsOfWeek"
-                                                       ShowWallpaper="@approval.Presentation.IsWallpaper"
-                                                       ShowLogonScreen="@approval.Presentation.IsLogonScreen" />
+                                <div class="batch-rows">
+                                    @foreach (var assignment in shownInBatch)
+                                    {
+                                        var isSelected = selection.IsSelected(assignment.AssignmentID);
+
+                                        <div class="batch-row @(isSelected ? "selected" : "")">
+                                            <label class="batch-row-main">
+                                                <input type="checkbox" checked="@isSelected" disabled="@isRunning"
+                                                       @onchange="@(e => selection.Set(assignment.AssignmentID, (bool)e.Value!))" />
+                                                <span>@TeamDisplayName(assignment.TargetTeam)</span>
+                                            </label>
+                                            <div class="batch-row-actions">
+                                                <button class="btn btn-sm btn-danger" disabled="@isRunning"
+                                                        @onclick="@(() => ShowRejectDialogForItem(assignment))">
+                                                    @Localizer["Reject"]
+                                                </button>
+                                                <button class="btn btn-sm btn-success" disabled="@isRunning"
+                                                        @onclick="@(() => ApproveSingleAsync(assignment))">
+                                                    @Localizer["Approve"]
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
                                 </div>
                             }
-
-                            <p class="meta">
-                                @Localizer["From"]: <strong>@approval.SourceTeamName</strong>
-                                → @Localizer["To"]: <strong>@approval.TargetTeamName</strong>
-                            </p>
                         </div>
-                        <div class="status-badge pending">
-                            @Localizer["PendingApprovalBadge"]
-                        </div>
-                    </div>
-
-                    <div class="approval-body">
-                        <p class="description"><strong>@Localizer["CommentLabel"]</strong> @approval.PresentationDescription</p>
-
-                        <div class="schedule-info">
-                            <strong>@Localizer["ScheduleLabel"]</strong><br/>
-                            @approval.ScheduleStart.ToString("MMM dd, yyyy") - @approval.ScheduleEnd.ToString("MMM dd, yyyy")<br/>
-                            @Localizer["DaysLabel"]: @FormatDaysOfWeek(approval.DaysOfWeek)
-                        </div>
-
-                        @if (!string.IsNullOrEmpty(approval.PosterPreview))
-                        {
-                            <div class="poster-preview">
-                                <img src="@approval.PosterPreview" alt="Poster preview" />
-                            </div>
-                        }
-                    </div>
-
-                    <div class="approval-actions">
-                        <button @onclick="() => ShowRejectDialog(approval)" class="btn btn-danger">
-                            @Localizer["Reject"]
-                        </button>
-                        <button @onclick="() => ApproveAssignment(approval)" class="btn btn-success">
-                            @Localizer["Approve"]
-                        </button>
-                    </div>
+                    }
                 </div>
             }
-        </div>
+        }
     }
 </div>
+
+<ConfirmDialog IsVisible="showApproveConfirm"
+               Title="@Localizer["BulkApproveConfirmTitle"]"
+               Message="@string.Format(Localizer["BulkApproveConfirmMessage"].Value, selection.Count)"
+               ConfirmText="@Localizer["Approve"]"
+               CancelText="@Localizer["Cancel"]"
+               DialogType="warning"
+               OnConfirm="ConfirmBulkApprove"
+               OnCancel="@(() => showApproveConfirm = false)" />
 
 @if (showRejectDialog)
 {
     <div class="modal-overlay" @onclick="CloseRejectDialog">
         <div class="modal-content" @onclick:stopPropagation="true">
-            <h2>@Localizer["RejectAssignmentTitle"]</h2>
-
-            <p>@Localizer["RejectConfirmQuestion"]</p>
-            <p><strong>@rejectingApproval?.PresentationName</strong></p>
+            <h2>@string.Format(Localizer["RejectAssignmentTitle"].Value, rejectingItems?.Count ?? 0)</h2>
 
             <div class="form-group">
                 <label>@Localizer["RejectionReasonLabel"]</label>
@@ -112,8 +164,8 @@
 
             <div class="modal-actions">
                 <button @onclick="CloseRejectDialog" class="btn btn-secondary">@Localizer["Cancel"]</button>
-                <button @onclick="ConfirmReject" class="btn btn-danger" disabled="@isProcessing">
-                    @(isProcessing ? Localizer["Rejecting"].Value : Localizer["RejectButton"].Value)
+                <button @onclick="ConfirmReject" class="btn btn-danger" disabled="@isRunning">
+                    @(isRunning ? Localizer["Rejecting"].Value : Localizer["RejectButton"].Value)
                 </button>
             </div>
         </div>
@@ -158,90 +210,6 @@
         margin-bottom: 10px;
     }
 
-    .approvals-list {
-        display: flex;
-        flex-direction: column;
-        gap: 20px;
-    }
-
-    .approval-card {
-        background: white;
-        border-radius: 10px;
-        padding: 25px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border-left: 4px solid #ffc107;
-    }
-
-    .approval-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: start;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #f0f0f0;
-    }
-
-    .approval-header h3 {
-        margin: 0;
-        color: #333;
-    }
-
-    .meta {
-        color: #666;
-        margin: 5px 0 0 0;
-        font-size: 14px;
-    }
-
-    .status-badge {
-        padding: 6px 12px;
-        border-radius: 5px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .status-badge.pending {
-        background: #fff3cd;
-        color: #856404;
-    }
-
-    .approval-body {
-        margin-bottom: 20px;
-    }
-
-    .description {
-        color: #666;
-        margin-bottom: 15px;
-    }
-
-    .schedule-info {
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 5px;
-        margin-bottom: 15px;
-        font-size: 14px;
-        color: #333;
-    }
-
-    .poster-preview {
-        margin-top: 15px;
-        text-align: center;
-        background: #000;
-        padding: 10px;
-        border-radius: 5px;
-    }
-
-    .poster-preview img {
-        max-width: 100%;
-        max-height: 300px;
-        border-radius: 5px;
-    }
-
-    .approval-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-    }
-
     .btn {
         padding: 10px 20px;
         border: none;
@@ -251,6 +219,11 @@
         font-weight: 500;
     }
 
+    .btn-sm {
+        padding: 5px 12px;
+        font-size: 13px;
+    }
+
     .btn-success {
         background: #28a745;
         color: white;
@@ -258,6 +231,11 @@
 
     .btn-success:hover {
         background: #218838;
+    }
+
+    .btn-success:disabled {
+        background: #ccc;
+        cursor: not-allowed;
     }
 
     .btn-danger {
@@ -348,20 +326,176 @@
         margin-top: 20px;
     }
 
-    .display-badges-inline {
-        margin: 8px 0;
+    /* UI-2 — toolbar + batch grouping */
+    .approvals-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
     }
 
+    .approvals-search {
+        flex: 1 1 220px;
+        min-width: 160px;
+        padding: 8px 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 13px;
+        box-sizing: border-box;
+    }
+
+    .approvals-counter {
+        font-size: 13px;
+        color: #666;
+        white-space: nowrap;
+    }
+
+    .approvals-bulk-actions {
+        display: flex;
+        gap: 10px;
+        margin-left: auto;
+    }
+
+    .no-batches-match {
+        padding: 20px;
+        text-align: center;
+        color: #999;
+        font-style: italic;
+    }
+
+    .batches-list {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .batch-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        border-left: 4px solid #ffc107;
+        overflow: hidden;
+    }
+
+    .batch-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+    }
+
+    .batch-expand-toggle {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        color: #667eea;
+        padding: 0 4px;
+    }
+
+    .batch-header-main {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .batch-title {
+        font-weight: 600;
+        color: #333;
+        font-size: 15px;
+    }
+
+    .batch-meta {
+        font-size: 12px;
+        color: #666;
+        margin-top: 2px;
+    }
+
+    .batch-rows {
+        border-top: 1px solid #f0f0f0;
+    }
+
+    .batch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 16px;
+        min-height: 32px;
+        border-bottom: 1px solid #f5f5f5;
+    }
+
+        .batch-row:last-child {
+            border-bottom: none;
+        }
+
+        .batch-row.selected {
+            background: #e7f3ff;
+        }
+
+    .batch-row-main {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: normal;
+        cursor: pointer;
+        margin-bottom: 0;
+        font-size: 13px;
+        color: #333;
+    }
+
+    .batch-row-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
 </style>
 
 @code {
-    private List<ApprovalViewModel> pendingApprovals = new();
+    private List<BatchViewModel> batchViewModels = new();
+    private Dictionary<string, string> teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
     private bool isLoading = true;
-    private bool isProcessing = false;
-    private bool showRejectDialog = false;
-    private ApprovalViewModel? rejectingApproval;
-    private string rejectionReason = string.Empty;
     private string errorMessage = string.Empty;
+
+    // UI-2 — selection/search over the flattened set of pending assignments, keyed by AssignmentID.
+    private SelectionModel<string> selection = new();
+    private string approvalSearch = string.Empty;
+
+    private bool showApproveConfirm;
+    private bool showRejectDialog;
+    private List<Assignment>? rejectingItems;
+    private string rejectionReason = string.Empty;
+
+    private bool isRunning;
+    private string runVerb = string.Empty;
+    private int runDone;
+    private int runTotal;
+    private BulkRunResult<Assignment>? runResult;
+    private CancellationTokenSource? runCts;
+
+    private bool IsSearchActive => !string.IsNullOrWhiteSpace(approvalSearch);
+
+    private List<Assignment> AllPendingAssignments => batchViewModels.SelectMany(b => b.Batch.Assignments).ToList();
+
+    private List<Assignment> AllShownAssignments => batchViewModels.SelectMany(ShownInBatch).ToList();
+
+    private string TeamDisplayName(string folderName) =>
+        teamNamesByFolder.TryGetValue(folderName, out var name) ? name : folderName;
+
+    private bool MatchesSearch(string? text) =>
+        !IsSearchActive || (text != null && text.Contains(approvalSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    // A batch whose presentation title matches shows every one of its rows (the title is shared
+    // by the whole batch); otherwise each row is matched individually against its target team.
+    private List<Assignment> ShownInBatch(BatchViewModel vm)
+    {
+        if (!IsSearchActive || MatchesSearch(vm.PresentationTitle))
+            return vm.Batch.Assignments.ToList();
+
+        return vm.Batch.Assignments
+            .Where(a => MatchesSearch(TeamDisplayName(a.TargetTeam)) || MatchesSearch(a.TargetTeam))
+            .ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -374,54 +508,48 @@
         await LoadPendingApprovals();
     }
 
+    // Looks up each batch's presentation and schedule ONCE (not per row) — every assignment in a
+    // batch shares the same SourceTeam + PresentationID + ScheduleID, so one lookup covers it.
     private async Task LoadPendingApprovals()
     {
         isLoading = true;
-        pendingApprovals.Clear();
 
         try
         {
             var assignments = await AssignmentService.GetPendingApprovalsForUserAsync();
             var allTeams = await TeamService.GetAllTeamsAsync();
+            teamNamesByFolder = allTeams.ToDictionary(t => t.FolderName, t => t.Name, StringComparer.OrdinalIgnoreCase);
 
-            foreach (var assignment in assignments)
+            var batches = AssignmentBatchGrouper.Group(assignments);
+            var previousExpansion = batchViewModels.ToDictionary(b => b.Batch.Key, b => b.IsExpanded);
+
+            var newViewModels = new List<BatchViewModel>();
+            foreach (var batch in batches)
             {
-                // Load presentation details
-                var presentation = await PresentationService.GetPresentationAsync(
-                    assignment.SourceTeam,
-                    assignment.PresentationID);
+                var presentation = await PresentationService.GetPresentationAsync(batch.Key.SourceTeam, batch.Key.PresentationID);
+                var schedule = string.IsNullOrEmpty(batch.Key.ScheduleID)
+                    ? null
+                    : await ScheduleService.GetScheduleAsync(batch.Key.SourceTeam, batch.Key.ScheduleID);
+                var sourceTeam = allTeams.FirstOrDefault(t => t.FolderName == batch.Key.SourceTeam);
 
-                if (presentation is null) continue;
-
-                var sourceTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.SourceTeam);
-                var targetTeam = allTeams.FirstOrDefault(t => t.FolderName == assignment.TargetTeam);
-
-                // Load poster preview
-                string? posterPreview = null;
-                if (!string.IsNullOrEmpty(presentation.ContentImageBase64))
+                newViewModels.Add(new BatchViewModel
                 {
-                    posterPreview = $"data:image/jpeg;base64,{presentation.ContentImageBase64}";
-                }
-
-                // Load schedule
-                var schedule = await ScheduleService.GetScheduleAsync(
-                    assignment.SourceTeam,
-                    assignment.ScheduleID);
-
-                pendingApprovals.Add(new ApprovalViewModel
-                {
-                    Assignment = assignment,
-                    PresentationName = presentation.Name,
-                    PresentationDescription = presentation.Description,
-                    SourceTeamName = sourceTeam?.Name ?? assignment.SourceTeam,
-                    TargetTeamName = targetTeam?.Name ?? assignment.TargetTeam,
-                    PosterPreview = posterPreview,
-                    ScheduleStart = schedule?.ScheduleStart ?? DateTime.MinValue,
-                    ScheduleEnd = schedule?.ScheduleEnd ?? DateTime.MaxValue,
-                    DaysOfWeek = schedule?.DaysOfWeek ?? "",
-                    Presentation = presentation  // Store presentation reference
+                    Batch = batch,
+                    PresentationTitle = presentation?.Name ?? batch.Key.PresentationID,
+                    ScheduleStart = schedule?.ScheduleStart,
+                    ScheduleEnd = schedule?.ScheduleEnd,
+                    SourceTeamName = sourceTeam?.Name ?? batch.Key.SourceTeam,
+                    // Batches with more than 5 items start collapsed; 5 or fewer start expanded —
+                    // unless the batch already existed before this reload, in which case its
+                    // expand/collapse state is preserved instead.
+                    IsExpanded = previousExpansion.TryGetValue(batch.Key, out var wasExpanded)
+                        ? wasExpanded
+                        : batch.Count <= 5
                 });
             }
+
+            batchViewModels = newViewModels;
+            selection.RemoveMissing(assignments.Select(a => a.AssignmentID));
         }
         catch (Exception ex)
         {
@@ -433,19 +561,14 @@
         }
     }
 
-    private async Task ApproveAssignment(ApprovalViewModel approval)
+    private async Task ApproveSingleAsync(Assignment assignment)
     {
+        errorMessage = string.Empty;
         try
         {
             await AssignmentService.ApproveAssignmentAsync(
-                approval.Assignment.SourceTeam,
-                approval.Assignment.AssignmentID,
-                "Approved via UI"
-            );
-
-            // Remove from list
-            pendingApprovals.Remove(approval);
-            StateHasChanged();
+                assignment.SourceTeam, assignment.AssignmentID, "Approved via UI");
+            await LoadPendingApprovals();
         }
         catch (Exception ex)
         {
@@ -453,9 +576,19 @@
         }
     }
 
-    private void ShowRejectDialog(ApprovalViewModel approval)
+    private void ShowRejectDialogForItem(Assignment assignment)
     {
-        rejectingApproval = approval;
+        rejectingItems = new List<Assignment> { assignment };
+        rejectionReason = string.Empty;
+        errorMessage = string.Empty;
+        showRejectDialog = true;
+    }
+
+    private void ShowRejectDialogForSelection()
+    {
+        if (selection.Count == 0) return;
+
+        rejectingItems = AllPendingAssignments.Where(a => selection.IsSelected(a.AssignmentID)).ToList();
         rejectionReason = string.Empty;
         errorMessage = string.Empty;
         showRejectDialog = true;
@@ -464,11 +597,20 @@
     private void CloseRejectDialog()
     {
         showRejectDialog = false;
-        rejectingApproval = null;
+        rejectingItems = null;
         rejectionReason = string.Empty;
         errorMessage = string.Empty;
     }
 
+    private async Task ConfirmBulkApprove()
+    {
+        showApproveConfirm = false;
+        var items = AllPendingAssignments.Where(a => selection.IsSelected(a.AssignmentID)).ToList();
+        await RunBulkAsync(items, "Approving",
+            a => AssignmentService.ApproveAssignmentAsync(a.SourceTeam, a.AssignmentID, "Approved via bulk action"));
+    }
+
+    // Single-item reject keeps working through this SAME dialog — a run of exactly one item.
     private async Task ConfirmReject()
     {
         if (string.IsNullOrWhiteSpace(rejectionReason))
@@ -477,69 +619,63 @@
             return;
         }
 
-        if (rejectingApproval is null) return;
+        if (rejectingItems == null || rejectingItems.Count == 0)
+            return;
 
-        isProcessing = true;
+        showRejectDialog = false;
+        var items = rejectingItems;
+        var reason = rejectionReason;
+        rejectingItems = null;
 
-        try
-        {
-            await AssignmentService.RejectAssignmentAsync(
-                rejectingApproval.Assignment.SourceTeam,
-                rejectingApproval.Assignment.AssignmentID,
-                rejectionReason
-            );
-
-            // Remove from list
-            pendingApprovals.Remove(rejectingApproval);
-            CloseRejectDialog();
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error rejecting assignment: {ex.Message}";
-        }
-        finally
-        {
-            isProcessing = false;
-        }
+        await RunBulkAsync(items, "Rejecting",
+            a => AssignmentService.RejectAssignmentAsync(a.SourceTeam, a.AssignmentID, reason));
     }
 
-    private string FormatDaysOfWeek(string daysOfWeek)
+    private async Task RunBulkAsync(List<Assignment> items, string verb, Func<Assignment, Task> action)
     {
-        if (string.IsNullOrEmpty(daysOfWeek)) return Localizer["None"];
+        isRunning = true;
+        runVerb = verb;
+        runDone = 0;
+        runTotal = items.Count;
+        runResult = null;
+        runCts = new CancellationTokenSource();
+        StateHasChanged();
 
-        var days = daysOfWeek.Split(',').Select(int.Parse).ToList();
-        var dayNames = new List<string>();
-
-        foreach (var day in days)
+        var progress = new Progress<(int done, int total)>(p =>
         {
-            dayNames.Add(day switch
+            runDone = p.done;
+            runTotal = p.total;
+            InvokeAsync(StateHasChanged);
+        });
+
+        var result = await BulkOperationRunner.RunAsync(
+            items,
+            async item =>
             {
-                1 => Localizer["Mon"],
-                2 => Localizer["Tue"],
-                3 => Localizer["Wed"],
-                4 => Localizer["Thu"],
-                5 => Localizer["Fri"],
-                6 => Localizer["Sat"],
-                7 => Localizer["Sun"],
-                _ => ""
-            });
-        }
+                await action(item);
+                return BulkItemOutcome.Success();
+            },
+            progress,
+            runCts.Token);
 
-        return string.Join(", ", dayNames);
+        isRunning = false;
+        runResult = result;
+        runCts.Dispose();
+        runCts = null;
+
+        await LoadPendingApprovals();
+        StateHasChanged();
     }
 
-    private class ApprovalViewModel
+    private void StopRun() => runCts?.Cancel();
+
+    private sealed class BatchViewModel
     {
-        public Assignment Assignment { get; set; } = null!;
-        public string PresentationName { get; set; } = string.Empty;
-        public string PresentationDescription { get; set; } = string.Empty;
+        public AssignmentBatch Batch { get; set; } = null!;
+        public string PresentationTitle { get; set; } = string.Empty;
+        public DateTime? ScheduleStart { get; set; }
+        public DateTime? ScheduleEnd { get; set; }
         public string SourceTeamName { get; set; } = string.Empty;
-        public string TargetTeamName { get; set; } = string.Empty;
-        public string? PosterPreview { get; set; }
-        public DateTime ScheduleStart { get; set; }
-        public DateTime ScheduleEnd { get; set; }
-        public string DaysOfWeek { get; set; } = string.Empty;
-        public Presentation? Presentation { get; set; }
+        public bool IsExpanded { get; set; }
     }
 }

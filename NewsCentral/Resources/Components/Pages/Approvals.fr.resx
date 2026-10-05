@@ -29,8 +29,18 @@
   <data name="DaysLabel" xml:space="preserve"><value>Jours :</value></data>
   <data name="Reject" xml:space="preserve"><value>✗ Rejeter</value></data>
   <data name="Approve" xml:space="preserve"><value>✓ Approuver</value></data>
-  <data name="RejectAssignmentTitle" xml:space="preserve"><value>Rejeter l'affectation</value></data>
+  <data name="RejectAssignmentTitle" xml:space="preserve"><value>Rejeter {0} affectation(s)</value></data>
   <data name="RejectConfirmQuestion" xml:space="preserve"><value>Êtes-vous sûr de vouloir rejeter cette affectation ?</value></data>
+  <data name="SearchPlaceholder" xml:space="preserve"><value>Rechercher par équipe ou présentation…</value></data>
+  <data name="SelectedCounter" xml:space="preserve"><value>{0} sur {1} sélectionnée(s)</value></data>
+  <data name="SelectAllLabel" xml:space="preserve"><value>Tout sélectionner ({0})</value></data>
+  <data name="SelectAllShownLabel" xml:space="preserve"><value>Sélectionner tout ce qui est affiché ({0})</value></data>
+  <data name="ApproveCount" xml:space="preserve"><value>Approuver {0}</value></data>
+  <data name="RejectCount" xml:space="preserve"><value>Rejeter {0}</value></data>
+  <data name="TeamsCountLabel" xml:space="preserve"><value>{0} équipes</value></data>
+  <data name="NoAssignmentsMatchSearch" xml:space="preserve"><value>Aucune affectation ne correspond à « {0} ».</value></data>
+  <data name="BulkApproveConfirmTitle" xml:space="preserve"><value>Approuver les affectations ?</value></data>
+  <data name="BulkApproveConfirmMessage" xml:space="preserve"><value>Approuver {0} affectation(s) ?</value></data>
   <data name="RejectionReasonLabel" xml:space="preserve"><value>Motif du rejet : *</value></data>
   <data name="RejectionReasonPlaceholder" xml:space="preserve"><value>Veuillez fournir un motif de rejet...</value></data>
   <data name="Cancel" xml:space="preserve"><value>Annuler</value></data>
