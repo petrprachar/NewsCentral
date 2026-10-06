@@ -23,8 +23,9 @@
 6. [Step 6 — Team signing keys](#step-6--team-signing-keys)
 7. [Step 7 — Registry configuration to push](#step-7--registry-configuration-to-push)
 8. [Step 8 — Validation and cutover](#step-8--validation-and-cutover)
-9. [Preparation checklist](#preparation-checklist)
-10. [Appendix — Reference commands](#appendix--reference-commands)
+9. [Upgrading an existing installation](#upgrading-an-existing-installation)
+10. [Preparation checklist](#preparation-checklist)
+11. [Appendix — Reference commands](#appendix--reference-commands)
 
 ---
 
@@ -116,6 +117,12 @@ publishing.
 The MSAL token is persisted in a named cache (`"NewsCentral"`), so authors see a browser prompt on first
 use only. Subsequent launches refresh silently unless Conditional Access requires step-up or the refresh
 token lapses.
+
+**First sign-in — no default credentials.** NewsCentral has no seeded admin account of any kind. A
+brand-new environment (no `config/users.json` yet) is initialized through the **setup wizard** —
+from the login page for a Policy or Configured environment, or from Environment Management's
+"Initialize an environment" section while signed in to another environment — where the operator
+running the wizard chooses the first System Administrator's own username and password.
 
 ---
 
@@ -479,6 +486,29 @@ Other silent-failure candidates, in order of likelihood:
 > news", troubleshooting is limited to verifying the NewsViewer registry tree and clearing the per-user
 > gate by deleting `%LOCALAPPDATA%\NewsCentral\viewerstate.json`. EventLog logging for NewsViewer is a
 > planned follow-up (`docs/packaging.md`).
+
+---
+
+## Upgrading an existing installation
+
+Two bugs fixed in this build affected every environment that had ever published content across
+teams, and the fix does not retroactively correct data already on disk — a one-time repair closes
+that gap.
+
+**Why.** Before the fix, publishing an assignment from team S to team T wrote T's copy of the
+assignment while it was still `Approved`, and only updated S's own record afterward — so T's copy
+never flipped to `Published` and T's devices never received the content. Separately, a team's
+`index.json` listed every assignment that team had ever published, including ones sent to OTHER
+teams — so a publishing team's own devices could show content meant for someone else.
+
+**What to do.** After installing a build that includes these fixes, in **every** environment: sign
+in as a System Administrator, open **Index Management**, run **Repair published assignment
+copies**, then run **Regenerate all**. Do this once per environment, not once overall — each
+environment's data is separate from the others.
+
+**Running it again is harmless.** The repair tool only writes a copy that is actually stale; a copy
+that already matches its source reports as "already in sync," not "left" or an error. Re-running it
+on an environment that was already repaired is a safe no-op.
 
 ---
 
