@@ -115,7 +115,9 @@ HKLM\Software\[Company]\NewsCentral\NewsCentral\
 │   DataPath               REG_SZ    (root for IStorageService)
 │   LockExpirationMinutes  REG_SZ    (int minutes; MUST be REG_SZ — a 1-minute lock is valid, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 ├── Authentication\
-│       EnableAutoLogin   DWORD     (dev/test only — not for registry deployment)
+│       EnableAutoLogin   REG_SZ    "true" or "false" (DWORD also works for this boolean); shows the
+│                                   UPN Login button on the login page — no sign-in happens
+│                                   automatically; the key name is historical; default true
 │       UseMockUPN        DWORD     (Debug builds only — ignored in Release; not for registry deployment)
 │       MockUPN           REG_SZ    (Debug builds only — ignored in Release; not for registry deployment)
 ├── Storage\
@@ -183,7 +185,7 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
   "DataPath": "C:\\Download\\NewsCentral",
   "LockExpirationMinutes": 15,
   "Authentication": {
-    "EnableAutoLogin": false,
+    "EnableAutoLogin": true,
     "UseMockUPN": true,
     "MockUPN": "user@company.com"
   },

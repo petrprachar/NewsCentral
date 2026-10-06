@@ -150,8 +150,11 @@ public static class ConfigManifests
             Key("LockExpirationMinutes", "15", "LockExpirationMinutes", RegistryValueType.RegSz,
                 ControlKind.Number, OverridableState.Overridable,
                 "integer minutes (registry: REG_SZ, NOT DWORD — a 1-minute lock is valid; DWORD 0/1 coerce to \"False\"/\"True\" and the int binder throws)"),
-            Key("Authentication:EnableAutoLogin", "false", @"Authentication\EnableAutoLogin", RegistryValueType.RegSz,
-                ControlKind.Toggle, OverridableState.Overridable, "true | false (registry: REG_SZ)"),
+            Key("Authentication:EnableAutoLogin", "true", @"Authentication\EnableAutoLogin", RegistryValueType.RegSz,
+                ControlKind.Toggle, OverridableState.Overridable,
+                "true | false (registry: REG_SZ; DWORD also works for this boolean). Shows the UPN Login " +
+                "button on the login page (sign-in with the Windows user's UPN) — no sign-in happens " +
+                "automatically; the key name is historical"),
             Key("Authentication:UseMockUPN", "false", @"Authentication\UseMockUPN", RegistryValueType.RegSz,
                 ControlKind.Toggle, OverridableState.Overridable,
                 "true | false (registry: REG_SZ); Debug builds only — ignored in Release"),
