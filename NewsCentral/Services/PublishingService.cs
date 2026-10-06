@@ -128,42 +128,7 @@ public class PublishingService
                 throw;
             }
 
-            // ── 3. Assignment JSON → authoring tier only ──────────────────────
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("→ Copying assignment JSON...");
-                var path = await CopyAssignmentToTargetAsync(assignment, assignment.TargetTeam);
-                publishedPaths.Add(path);
-                System.Diagnostics.Debug.WriteLine($"  ✓ Assignment: {path}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR copying assignment: {ex.Message}");
-                throw;
-            }
-
-            // ── 4. Update assignment status ───────────────────────────────────
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("→ Updating assignment status...");
-                var repo = new TeamAwareRepository<Assignment>(
-                    _storage, sourceTeamFolderName, "assignments");
-
-                assignment.Status         = AssignmentStatus.Published;
-                assignment.PublishedBy    = currentUser.UserID;
-                assignment.PublishedDate  = DateTime.UtcNow;
-                assignment.PublishedPaths = publishedPaths;
-
-                await repo.UpdateAsync(assignment);
-                System.Diagnostics.Debug.WriteLine("  ✓ Status updated to Published");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"  ✗ ERROR updating assignment: {ex.Message}");
-                throw;
-            }
-
-            // ── 5a. Generated image → authoring tier + blob ───────────────────
+            // ── 3a. Generated image → authoring tier + blob ───────────────────
             // GeneratedImagePath is always set at create time (new presentations)
             // or promoted during UpdatePresentationFullAsync (legacy presentations).
             if (!string.IsNullOrEmpty(presentation.GeneratedImagePath))
@@ -186,7 +151,7 @@ public class PublishingService
                         $"  ⚠ WARNING: Could not copy generated image - {ex.Message}");
                 }
             }
-            // ── 5b. Safety net: no GeneratedImagePath — promote original ──────
+            // ── 3b. Safety net: no GeneratedImagePath — promote original ──────
             // Handles presentations created before the always-populate fix.
             else if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
@@ -227,7 +192,7 @@ public class PublishingService
                 }
             }
 
-            // ── 5c. Original image → authoring tier + blob ────────────────────
+            // ── 3c. Original image → authoring tier + blob ────────────────────
             if (!string.IsNullOrEmpty(presentation.OriginalImagePath))
             {
                 try
@@ -249,7 +214,75 @@ public class PublishingService
                 }
             }
 
-            // ── 6. Regenerate index → authoring tier + blob ───────────────────
+            // ── 4. Write the assignment in its FINAL Published state ─────────
+            // PUB-1: build the complete Published state — including the assignment copy's own
+            // path, deterministic and known without writing it first — BEFORE any assignment
+            // JSON is written. This closes the bug where a cross-team copy was written while
+            // still Status=Approved (step 3, pre-fix) and never updated afterward, because the
+            // status flip (step 4, pre-fix) only ever touched the SOURCE team's record.
+            var targetTeamFolder = assignment.TargetTeam;
+            var isCrossTeam = !string.Equals(
+                sourceTeamFolderName, targetTeamFolder, StringComparison.OrdinalIgnoreCase);
+            var assignmentRelativePath =
+                $"{targetTeamFolder}/content/assignments/assign_{assignment.AssignmentID}.json";
+
+            publishedPaths.Add(assignmentRelativePath);
+
+            assignment.Status         = AssignmentStatus.Published;
+            assignment.PublishedBy    = currentUser.UserID;
+            assignment.PublishedDate  = DateTime.UtcNow;
+            assignment.PublishedPaths = publishedPaths;
+
+            if (isCrossTeam)
+            {
+                // Target copy first, already in its final state — there is no window where a
+                // reader could observe a half-published copy.
+                System.Diagnostics.Debug.WriteLine("→ Writing target team's copy (final state)...");
+                await WriteAssignmentJsonAsync(assignment, assignmentRelativePath);
+                System.Diagnostics.Debug.WriteLine($"  ✓ Target copy: {assignmentRelativePath}");
+
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine("→ Updating source team's record...");
+                    var sourceRepo = new TeamAwareRepository<Assignment>(
+                        _storage, sourceTeamFolderName, "assignments");
+                    await sourceRepo.UpdateAsync(assignment);
+                    System.Diagnostics.Debug.WriteLine("  ✓ Source record updated to Published");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ✗ ERROR updating source record: {ex.Message} — rolling back target copy");
+
+                    // Best effort — a failed rollback is logged but never masks the original
+                    // failure below; the orphaned copy is also within reach of the Index
+                    // Management repair tool (PublishedCopyRepairPlanner) if this cleanup fails.
+                    try
+                    {
+                        var targetDeletedPath =
+                            $"{targetTeamFolder}/deleted/assign_{assignment.AssignmentID}.json";
+                        await _storage.MoveFileAsync(assignmentRelativePath, targetDeletedPath);
+                    }
+                    catch (Exception moveEx)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"  ⚠ WARNING: Could not roll back target copy: {moveEx.Message}");
+                    }
+
+                    return Fail(result, $"Publishing error: {ex.Message}");
+                }
+            }
+            else
+            {
+                // Same team — exactly one write of the final state; no separate copy step.
+                System.Diagnostics.Debug.WriteLine("→ Updating assignment status...");
+                var repo = new TeamAwareRepository<Assignment>(
+                    _storage, sourceTeamFolderName, "assignments");
+                await repo.UpdateAsync(assignment);
+                System.Diagnostics.Debug.WriteLine("  ✓ Status updated to Published");
+            }
+
+            // ── 5. Regenerate index → authoring tier + blob ───────────────────
             try
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -391,21 +424,16 @@ public class PublishingService
         return destRelative;
     }
 
-    private async Task<string> CopyAssignmentToTargetAsync(
-        Assignment assignment,
-        string targetTeamFolder)
+    /// <summary>
+    /// PUB-1: writes the assignment JSON — already in its final state — to the target team's
+    /// authoring-tier folder only (never blob; the assignment copy has never been distributed
+    /// via blob, by design — see CopyPresentationToTargetAsync/CopyScheduleToTargetAsync for the
+    /// artifacts that are).
+    /// </summary>
+    private async Task WriteAssignmentJsonAsync(Assignment assignment, string relativePath)
     {
-        System.Diagnostics.Debug.WriteLine("  Copying assignment to target team...");
-
-        var fileName     = $"assign_{assignment.AssignmentID}.json";
-        var relativePath = $"{targetTeamFolder}/content/assignments/{fileName}";
-        var json         = JsonSerializer.Serialize(assignment, JsonOptions);
-
+        var json = JsonSerializer.Serialize(assignment, JsonOptions);
         await _storage.WriteTextAsync(relativePath, json);
-
-        System.Diagnostics.Debug.WriteLine($"  ✓ Assignment file created at: {relativePath}");
-
-        return relativePath;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
