@@ -1,5 +1,6 @@
 ﻿@page "/assignments"
 @using System.Globalization
+@using NewsCentral.Authorization
 @using NewsCentral.Services
 @using NewsCentral.Models
 @using NewsCentral.Formatting
@@ -1050,58 +1051,15 @@
         return false;
     }
     */
-    private bool CanDelete(Assignment assignment)
-    {
-        if (currentUser == null) return false;
+    // UI-2.3: matches AssignmentService.DeleteAssignmentAsync's own rule exactly — SystemAdmin,
+    // creator, or ContentAuthor of the assignment's SOURCE team (never the currently viewed
+    // team). Same rule for every status; CanDeletePublished is the same check, kept as its own
+    // name only because the Published section's call sites already read that way.
+    private bool CanDelete(Assignment assignment) =>
+        TeamAuthorization.CanDeleteAssignment(assignment, currentUser);
 
-        // For Pending/Approved: Any ContentAuthor from current team OR SystemAdmin
-        if (assignment.Status != AssignmentStatus.Published)
-        {
-            // SystemAdmin can delete anything
-            if (currentUser.IsSystemAdmin) return true;
-
-            // Any ContentAuthor from current team can delete
-            var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
-                tr.TeamFolderName == currentTeamFolder &&
-                tr.Roles.Contains("ContentAuthor"));
-
-            if (hasContentAuthorRole) return true;
-        }
-
-        return false;
-    }
-    
-    /*
-    private bool CanDelete(Assignment assignment)
-    {
-        if (currentUser == null) return false;
-
-        // SystemAdmin can delete anything
-        if (currentUser.IsSystemAdmin) return true;
-
-        // Any ContentAuthor from current team can delete (Pending/Approved/Published)
-        var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
-            tr.TeamFolderName == currentTeamFolder &&
-            tr.Roles.Contains("ContentAuthor"));
-
-        return hasContentAuthorRole;
-    }
-    */
-
-    private bool CanDeletePublished(Assignment assignment)
-    {
-        if (currentUser == null) return false;
-
-        // SystemAdmin can delete any published assignment
-        if (currentUser.IsSystemAdmin) return true;
-
-        // Any ContentAuthor from current team can delete published assignments
-        var hasContentAuthorRole = currentUser.TeamRoles.Any(tr =>
-            tr.TeamFolderName == currentTeamFolder &&
-            tr.Roles.Contains("ContentAuthor"));
-
-        return hasContentAuthorRole;
-    }
+    private bool CanDeletePublished(Assignment assignment) =>
+        TeamAuthorization.CanDeleteAssignment(assignment, currentUser);
 
     /*
     private bool CanPublish(Assignment assignment)
