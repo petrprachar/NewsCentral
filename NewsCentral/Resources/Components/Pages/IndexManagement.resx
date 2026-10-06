@@ -42,4 +42,15 @@
   <data name="RegenerationSuccess" xml:space="preserve"><value>Index regenerated successfully for {0}!</value></data>
   <data name="RegenerationAllSuccess" xml:space="preserve"><value>Successfully regenerated {0} of {1} team indexes!</value></data>
   <data name="RegenerationError" xml:space="preserve"><value>Error: {0}</value></data>
+  <data name="RepairSection" xml:space="preserve"><value>Repair Published Assignment Copies</value></data>
+  <data name="RepairDescription" xml:space="preserve"><value>Scans every team for cross-team assignment copies and fixes ones that are out of sync with their source, or removes ones whose source was deleted.</value></data>
+  <data name="RepairButton" xml:space="preserve"><value>Repair Published Copies</value></data>
+  <data name="Repairing" xml:space="preserve"><value>Repairing...</value></data>
+  <data name="RepairScanning" xml:space="preserve"><value>Scanning {0} of {1}…</value></data>
+  <data name="RepairStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="RepairSummary" xml:space="preserve"><value>Scanned {0} cross-team copies — {1} synced, {2} removed, {3} left untouched, {4} index(es) regenerated.</value></data>
+  <data name="RepairStoppedSuffix" xml:space="preserve"><value> Stopped before every copy was scanned.</value></data>
+  <data name="RepairLeftHeading" xml:space="preserve"><value>Left untouched:</value></data>
+  <data name="RepairErrorsHeading" xml:space="preserve"><value>Errors:</value></data>
+  <data name="RepairError" xml:space="preserve"><value>Repair failed: {0}</value></data>
 </root>

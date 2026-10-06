@@ -5,6 +5,7 @@
 @using Microsoft.Extensions.Localization
 @inject IStringLocalizer<IndexManagement> Localizer
 @inject IndexGenerationService IndexService
+@inject PublishingService PublishingService
 @inject TeamService TeamService
 @inject TeamContextService TeamContext
 @inject AuthenticationService AuthService
@@ -219,6 +220,92 @@
         </div>
     </div>
 
+    @* PUB-1 — one-time repair for existing cross-team copies affected by the publish-ordering
+       bug; SystemAdmin only, same as the rest of this page (isAuthorized gate above). *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5>@Localizer["RepairSection"]</h5>
+        </div>
+        <div class="card-body">
+            <p>@Localizer["RepairDescription"]</p>
+
+            <button class="btn btn-warning" @onclick="RunRepairAsync" disabled="@isRepairing">
+                @if (isRepairing)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    @Localizer["Repairing"]
+                }
+                else
+                {
+                    <i class="bi bi-tools me-2"></i>
+                    @Localizer["RepairButton"]
+                }
+            </button>
+
+            @if (isRepairing)
+            {
+                <div class="d-flex align-items-center gap-2 mt-3">
+                    <span>@string.Format(Localizer["RepairScanning"].Value, repairDone, repairTotal)</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="StopRepair">@Localizer["RepairStop"]</button>
+                </div>
+            }
+
+            @if (!isRepairing && repairSummary != null)
+            {
+                var hasIssues = repairSummary.Left.Count > 0 || repairSummary.Errors.Count > 0;
+                <div class="alert @(hasIssues ? "alert-warning" : "alert-success") mt-3">
+                    @string.Format(
+                        Localizer["RepairSummary"].Value,
+                        repairSummary.Scanned, repairSummary.Synced, repairSummary.Removed,
+                        repairSummary.Left.Count, repairSummary.IndexesRegenerated)
+                    @if (repairSummary.Stopped)
+                    {
+                        @Localizer["RepairStoppedSuffix"]
+                    }
+
+                    @if (repairSummary.Left.Count > 0)
+                    {
+                        <div class="mt-2"><strong>@Localizer["RepairLeftHeading"]</strong></div>
+                        <ul class="mb-0 mt-1">
+                            @foreach (var left in repairSummary.Left.Take(20))
+                            {
+                                <li>@left.TargetTeam / @left.AssignmentId: @left.Reason</li>
+                            }
+                            @if (repairSummary.Left.Count > 20)
+                            {
+                                <li>+@(repairSummary.Left.Count - 20) more</li>
+                            }
+                        </ul>
+                    }
+
+                    @if (repairSummary.Errors.Count > 0)
+                    {
+                        <div class="mt-2"><strong>@Localizer["RepairErrorsHeading"]</strong></div>
+                        <ul class="mb-0 mt-1">
+                            @foreach (var error in repairSummary.Errors.Take(20))
+                            {
+                                <li>@error</li>
+                            }
+                            @if (repairSummary.Errors.Count > 20)
+                            {
+                                <li>+@(repairSummary.Errors.Count - 20) more</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(repairErrorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    @repairErrorMessage
+                    <button type="button" class="btn-close" @onclick="() => repairErrorMessage = null"></button>
+                </div>
+            }
+        </div>
+    </div>
+
     @* Page-level — failures loading index information itself, unrelated to either button. *@
     @if (!string.IsNullOrEmpty(errorMessage))
     {
@@ -250,6 +337,14 @@
     private string? allWarningMessage;
     private string? allErrorMessage;
     private List<string> allDistributionFailures = new();
+
+    // PUB-1 — repair published assignment copies card.
+    private bool isRepairing;
+    private int repairDone;
+    private int repairTotal;
+    private CancellationTokenSource? repairCts;
+    private PublishedCopyRepairSummary? repairSummary;
+    private string? repairErrorMessage;
 
     private void DismissAllWarning()
     {
@@ -440,6 +535,49 @@
             StateHasChanged();
         }
     }
+
+    private async Task RunRepairAsync()
+    {
+        if (isRepairing)
+            return;
+
+        isRepairing = true;
+        repairDone = 0;
+        repairTotal = 0;
+        repairSummary = null;
+        repairErrorMessage = null;
+        repairCts = new CancellationTokenSource();
+        StateHasChanged();
+
+        var progress = new Progress<(int done, int total)>(p =>
+        {
+            repairDone = p.done;
+            repairTotal = p.total;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            repairSummary = await PublishingService.RepairPublishedCopiesAsync(progress, repairCts.Token);
+        }
+        catch (Exception ex)
+        {
+            repairErrorMessage = Localizer["RepairError", ex.Message];
+            System.Diagnostics.Debug.WriteLine($"Error repairing published copies: {ex.Message}");
+        }
+        finally
+        {
+            isRepairing = false;
+            repairCts?.Dispose();
+            repairCts = null;
+        }
+
+        // Repaired copies change what the cards above show (TotalAssignments etc.).
+        await LoadIndexInformation();
+        StateHasChanged();
+    }
+
+    private void StopRepair() => repairCts?.Cancel();
 
     private class IndexInfo
     {

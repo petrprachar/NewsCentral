@@ -1,4 +1,5 @@
 using NewsCentral.Models;
+using NewsCentral.Publishing;
 using NewsCentral.Repositories;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -14,6 +15,7 @@ public class PublishingService
     private readonly AssignmentService _assignmentService;
     private readonly AuthenticationService _authService;
     private readonly IndexGenerationService _indexGenerationService;
+    private readonly TeamService _teamService;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,7 +30,8 @@ public class PublishingService
         AssignmentService assignmentService,
         PresentationService presentationService,
         ScheduleService scheduleService,
-        IndexGenerationService indexGenerationService)
+        IndexGenerationService indexGenerationService,
+        TeamService teamService)
     {
         _storage                = storage;
         _blobDistribution       = blobDistribution;
@@ -37,6 +40,7 @@ public class PublishingService
         _presentationService    = presentationService;
         _scheduleService        = scheduleService;
         _indexGenerationService = indexGenerationService;
+        _teamService            = teamService;
     }
 
     // ── Publish ──────────────────────────────────────────────────────────────
@@ -317,6 +321,100 @@ public class PublishingService
         }
     }
 
+    // ── Repair (PUB-1) ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// PUB-1: one-time repair for existing environments affected by the pre-fix bug — scans every
+    /// team's own content/assignments for copies whose SourceTeam is some OTHER team, compares
+    /// each against its source record via <see cref="PublishedCopyRepairPlanner"/>, and applies
+    /// the resulting plan (Sync/Remove/Leave). Sequential and cancellable between items — an
+    /// in-flight item is never interrupted, matching <c>BulkOperationRunner</c>'s convention
+    /// elsewhere in this app. Every team whose copies changed gets its index regenerated exactly
+    /// once at the end, even if the scan was stopped partway through.
+    /// </summary>
+    public async Task<PublishedCopyRepairSummary> RepairPublishedCopiesAsync(
+        IProgress<(int done, int total)>? progress,
+        CancellationToken cancellationToken)
+    {
+        var summary = new PublishedCopyRepairSummary();
+        var changedTeams = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var allTeams = await _teamService.GetAllTeamsAsync();
+
+        // Build the full candidate list upfront so progress/cancellation can be reported per item.
+        var candidates = new List<(string TargetTeam, Assignment Copy)>();
+        foreach (var team in allTeams)
+        {
+            var teamAssignments = await _assignmentService.GetAssignmentsForTeamAsync(team.FolderName);
+            foreach (var copy in teamAssignments)
+            {
+                if (!string.Equals(copy.SourceTeam, team.FolderName, StringComparison.OrdinalIgnoreCase))
+                    candidates.Add((team.FolderName, copy));
+            }
+        }
+
+        summary.Scanned = candidates.Count;
+
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                summary.Stopped = true;
+                break;
+            }
+
+            var (targetTeam, copy) = candidates[i];
+
+            try
+            {
+                var source = await _assignmentService.GetAssignmentAsync(copy.SourceTeam, copy.AssignmentID);
+                var plan = PublishedCopyRepairPlanner.Plan(copy, source);
+                var copyPath = $"{targetTeam}/content/assignments/assign_{copy.AssignmentID}.json";
+
+                switch (plan.Action)
+                {
+                    case RepairAction.Sync:
+                        await WriteAssignmentJsonAsync(source!, copyPath);
+                        summary.Synced++;
+                        changedTeams.Add(targetTeam);
+                        break;
+
+                    case RepairAction.Remove:
+                        var deletedPath = $"{targetTeam}/deleted/assign_{copy.AssignmentID}.json";
+                        await _storage.MoveFileAsync(copyPath, deletedPath);
+                        summary.Removed++;
+                        changedTeams.Add(targetTeam);
+                        break;
+
+                    case RepairAction.Leave:
+                        summary.Left.Add(new PublishedCopyLeftEntry(copy.AssignmentID, targetTeam, plan.Reason));
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                summary.Errors.Add($"{copy.AssignmentID} ({targetTeam}): {ex.Message}");
+            }
+
+            progress?.Report((i + 1, candidates.Count));
+        }
+
+        foreach (var team in changedTeams)
+        {
+            try
+            {
+                await _indexGenerationService.GenerateAndSaveIndexAsync(team);
+                summary.IndexesRegenerated++;
+            }
+            catch (Exception ex)
+            {
+                summary.Errors.Add($"index regeneration for {team}: {ex.Message}");
+            }
+        }
+
+        return summary;
+    }
+
     // ── Private copy methods ─────────────────────────────────────────────────
 
     private async Task<string> CopyPresentationToTargetAsync(
@@ -460,4 +558,32 @@ public class PublishResult
     /// index is regenerated.
     /// </summary>
     public List<string> DistributionWarnings { get; set; } = new();
+}
+
+/// <summary>One "Leave" outcome from <see cref="PublishingService.RepairPublishedCopiesAsync"/>.</summary>
+public sealed record PublishedCopyLeftEntry(string AssignmentId, string TargetTeam, string Reason);
+
+/// <summary>Result of <see cref="PublishingService.RepairPublishedCopiesAsync"/> (PUB-1).</summary>
+public sealed class PublishedCopyRepairSummary
+{
+    /// <summary>Total cross-team copies examined (SourceTeam != the team folder they live in).</summary>
+    public int Scanned { get; set; }
+
+    /// <summary>Copies rewritten from an already-Published source record.</summary>
+    public int Synced { get; set; }
+
+    /// <summary>Copies moved to {team}/deleted/ because their source record no longer exists.</summary>
+    public int Removed { get; set; }
+
+    /// <summary>Copies left untouched, with the reason — see <see cref="RepairAction.Leave"/>.</summary>
+    public List<PublishedCopyLeftEntry> Left { get; set; } = new();
+
+    /// <summary>Number of distinct teams whose index was regenerated after Sync/Remove changes.</summary>
+    public int IndexesRegenerated { get; set; }
+
+    /// <summary>One entry per item (or index regeneration) that failed; the scan never aborts.</summary>
+    public List<string> Errors { get; set; } = new();
+
+    /// <summary>True when cancellation was requested before every candidate was examined.</summary>
+    public bool Stopped { get; set; }
 }
