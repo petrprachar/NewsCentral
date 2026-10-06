@@ -1,6 +1,9 @@
 @page "/environment-management"
+@using System.Diagnostics
+@using System.Text
 @using System.Threading
 @using NewsCentral.Configuration
+@using NewsCentral.Configuration.FleetExport
 @using NewsCentral.Services
 @using NewsCentral.Components.Shared
 @inject AuthenticationService AuthService
@@ -12,6 +15,8 @@
 @inject DistributionStatusTracker DistributionStatus
 @inject AppConfiguration AppConfig
 @inject IndexGenerationService IndexService
+@inject TeamService TeamService
+@inject IJSRuntime JS
 @implements IDisposable
 
 @* M5a — Environment Management page. TODO(i18n): plain English for now, following M3a/M4a. *@
@@ -66,6 +71,16 @@
                         <div class="col-md-9 text-muted">managed by policy: @effective.PolicyEnvironmentName</div>
                     </div>
                 }
+                <div class="row mb-2">
+                    <div class="col-md-3"></div>
+                    <div class="col-md-9">
+                        <button class="btn btn-outline-secondary" @onclick="OpenExportDialogAsync"
+                                disabled="@(!CanExportFleetSettings)"
+                                title="@(CanExportFleetSettings ? "Generate NewsService/NewsViewer registry settings for this environment" : "Fix the settings source (currently Invalid or Unreachable) before exporting fleet settings")">
+                            <i class="bi bi-download me-2"></i>Export fleet settings
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -378,6 +393,122 @@
                OnConfirm="ConfirmSaveAsync"
                OnCancel="CancelRetarget" />
 
+@* M6 — fleet settings export dialog. A bespoke modal (not the shared ConfirmDialog, whose shape
+   is title/message/confirm-cancel only) reusing ConfirmDialog's own .modal-overlay/.modal-content
+   styles — both are global, not CSS-isolated, since neither this page nor ConfirmDialog uses a
+   co-located .razor.css file. *@
+@if (showExportDialog && exportResult != null)
+{
+    <div class="modal-overlay" @onclick="CloseExportDialog">
+        <div class="modal-content export-dialog" @onclick:stopPropagation="true">
+            <h3>Export fleet settings</h3>
+
+            @if (exportResult.Warnings.Count > 0)
+            {
+                <div class="alert alert-warning">
+                    <strong>Warnings:</strong>
+                    <ul class="mb-0 mt-1">
+                        @foreach (var warning in exportResult.Warnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            @if (exportResult.Placeholders.Count > 0)
+            {
+                <div class="mb-3">
+                    <strong>Placeholders — replace before use:</strong>
+                    <ul class="mb-0 mt-1">
+                        @foreach (var placeholder in exportResult.Placeholders)
+                        {
+                            <li><code>@placeholder</code></li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <div class="export-tabs">
+                <button type="button" class="btn btn-sm @(exportActiveTab == "powershell" ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="@(() => exportActiveTab = "powershell")">
+                    PowerShell (pilot machines)
+                </button>
+                <button type="button" class="btn btn-sm @(exportActiveTab == "reg" ? "btn-primary" : "btn-outline-secondary")"
+                        @onclick="@(() => exportActiveTab = "reg")">
+                    .reg (GPO hand-off)
+                </button>
+            </div>
+
+            @if (exportActiveTab == "powershell")
+            {
+                <textarea class="export-textarea" readonly>@exportResult.PowerShell</textarea>
+                <button class="btn btn-sm btn-outline-secondary mt-2" @onclick="@(() => CopyExportTextAsync(exportResult.PowerShell))">
+                    <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+            }
+            else
+            {
+                <textarea class="export-textarea" readonly>@exportResult.Reg</textarea>
+                <button class="btn btn-sm btn-outline-secondary mt-2" @onclick="@(() => CopyExportTextAsync(exportResult.Reg))">
+                    <i class="bi bi-clipboard me-1"></i>Copy
+                </button>
+            }
+
+            @if (!string.IsNullOrEmpty(exportCopyFeedback))
+            {
+                <div class="text-muted small mt-1">@exportCopyFeedback</div>
+            }
+
+            @if (exportSaveError != null)
+            {
+                <div class="alert alert-danger mt-3">@exportSaveError</div>
+            }
+
+            @if (exportSavedPs1Path != null)
+            {
+                <div class="alert alert-success mt-3">
+                    Saved:
+                    <div><code>@exportSavedPs1Path</code></div>
+                    <div><code>@exportSavedRegPath</code></div>
+                    <button class="btn btn-sm btn-outline-success mt-2" @onclick="OpenExportFolder">Open folder</button>
+                </div>
+            }
+
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-secondary" @onclick="CloseExportDialog">Close</button>
+                <button class="btn btn-primary" @onclick="SaveExportToDownloads">Save to Downloads</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .modal-content.export-dialog {
+        max-width: 800px;
+        width: 90%;
+        text-align: left;
+    }
+
+    .export-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .export-textarea {
+        display: block;
+        width: 100%;
+        height: 320px;
+        font-family: Consolas, 'Courier New', monospace;
+        font-size: 12px;
+        white-space: pre;
+        overflow: auto;
+        resize: vertical;
+        box-sizing: border-box;
+    }
+</style>
+
 @code {
     private bool isAuthorized;
     private EnvironmentOption? current;
@@ -421,6 +552,21 @@
     // M5a.1: true once the user has touched any editable field — an external reload (another save
     // elsewhere, a distribution status change) must never clobber in-progress edits.
     private bool isDirty;
+
+    // M6 — Export fleet settings.
+    private bool showExportDialog;
+    private FleetExport? exportResult;
+    private string exportActiveTab = "powershell";
+    private string? exportCopyFeedback;
+    private string? exportSaveError;
+    private string? exportSavedPs1Path;
+    private string? exportSavedRegPath;
+    private string? exportSavedFolder;
+
+    private bool CanExportFleetSettings =>
+        effective != null &&
+        effective.Source != EnvironmentSettingsSource.Invalid &&
+        effective.Source != EnvironmentSettingsSource.Unreachable;
 
     // M5b — "Initialize an environment".
     private string initPath = string.Empty;
@@ -853,5 +999,136 @@
 
         EnvironmentDirectory.SwitchTo(initCreatedPath);
         Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    // ── M6 — Export fleet settings ────────────────────────────────────────────
+
+    private async Task OpenExportDialogAsync()
+    {
+        if (!CanExportFleetSettings || effective?.Settings == null)
+            return;
+
+        exportSaveError = null;
+        exportSavedPs1Path = null;
+        exportSavedRegPath = null;
+        exportSavedFolder = null;
+        exportActiveTab = "powershell";
+
+        var allTeams = await TeamService.GetAllTeamsAsync();
+        var exportTeams = new List<FleetExportTeam>();
+        foreach (var team in allTeams)
+        {
+            // Public keys only — team-signing.json's PrivateKey is never read here.
+            var keys = await IndexService.LoadTeamSigningKeysAsync(team.FolderName);
+            exportTeams.Add(new FleetExportTeam(team.FolderName, team.Name, keys?.PublicKey, keys?.PublicKeyPrevious));
+        }
+
+        var distribution = effective.Settings.Distribution;
+        var input = new FleetExportInput(
+            Company: SolutionConstants.Company,
+            EnvironmentDisplayName: string.IsNullOrWhiteSpace(current?.DisplayName) ? EnvironmentContext.DataPath : current!.DisplayName,
+            DataPath: EnvironmentContext.DataPath,
+            GeneratedAtUtc: DateTime.UtcNow,
+            Distribution: new FleetExportDistribution(
+                distribution.Enabled,
+                distribution.Mode,
+                distribution.LocalPath,
+                distribution.AzureBlob.TenantId,
+                distribution.AzureBlob.AccountName,
+                distribution.AzureBlob.ContainerName),
+            // Same helper MainLayout/Settings use for display — already resolves the
+            // {DataPath}\_distribution fallback for Local mode (ignored by the builder for Azure).
+            EffectiveLocalDistributionPath: EnvironmentSettingsService.DescribeDistributionTarget(distribution, EnvironmentContext.DataPath),
+            Teams: exportTeams);
+
+        exportResult = FleetExportBuilder.Build(input);
+        showExportDialog = true;
+    }
+
+    private void CloseExportDialog()
+    {
+        showExportDialog = false;
+        exportResult = null;
+    }
+
+    private async Task CopyExportTextAsync(string text)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            exportCopyFeedback = "Copied.";
+        }
+        catch
+        {
+            exportCopyFeedback = "Couldn't copy to the clipboard.";
+        }
+
+        StateHasChanged();
+        await Task.Delay(2000);
+        exportCopyFeedback = null;
+        StateHasChanged();
+    }
+
+    private void SaveExportToDownloads()
+    {
+        if (exportResult == null)
+            return;
+
+        exportSaveError = null;
+        try
+        {
+            var downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+            Directory.CreateDirectory(downloads);
+
+            var slug = Slugify(current?.DisplayName ?? "environment");
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmm");
+            var baseName = $"NewsCentral-fleet-{slug}-{stamp}";
+
+            var ps1Path = Path.Combine(downloads, $"{baseName}.ps1");
+            var regPath = Path.Combine(downloads, $"{baseName}.reg");
+
+            // PowerShell 5.1 needs a BOM to reliably detect UTF-8; .reg is what regedit itself
+            // writes (UTF-16 LE with BOM) — Encoding.Unicode is UTF-16 LE and includes the BOM.
+            File.WriteAllText(ps1Path, exportResult.PowerShell, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            File.WriteAllText(regPath, exportResult.Reg, Encoding.Unicode);
+
+            exportSavedPs1Path = ps1Path;
+            exportSavedRegPath = regPath;
+            exportSavedFolder = downloads;
+        }
+        catch (Exception ex)
+        {
+            exportSaveError = ex.Message;
+        }
+    }
+
+    private void OpenExportFolder()
+    {
+        if (exportSavedFolder == null)
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe") { ArgumentList = { exportSavedFolder } });
+        }
+        catch (Exception ex)
+        {
+            exportSaveError = $"Couldn't open the folder: {ex.Message}";
+        }
+    }
+
+    private static string Slugify(string value)
+    {
+        var sb = new StringBuilder();
+        foreach (var ch in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch))
+                sb.Append(ch);
+            else if (sb.Length > 0 && sb[^1] != '-')
+                sb.Append('-');
+        }
+
+        var slug = sb.ToString().Trim('-');
+        return string.IsNullOrEmpty(slug) ? "environment" : slug;
     }
 }
