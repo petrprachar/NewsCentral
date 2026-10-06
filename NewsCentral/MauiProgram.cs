@@ -3,10 +3,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NewsCentral.Configuration;
+using NewsCentral.Localization;
 using NewsCentral.Security;
 using NewsCentral.Services;
 using System.Reflection;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using System.Globalization;
 
 namespace NewsCentral;
@@ -236,6 +238,21 @@ public static class MauiProgram
         // override after sign-in — see AuthenticationService). Registered as a singleton so it
         // captures Windows' own UI culture exactly once, before anything in-process can change it.
         builder.Services.AddSingleton<UiLanguageService>();
+
+        // L10N-1.1: replaces the framework's IStringLocalizerFactory (registered by AddLocalization
+        // just above, via TryAdd) with a decorator that resolves every string against
+        // UiLanguageService.CurrentUiCulture instead of the ambient CultureInfo.CurrentUICulture —
+        // see UiCultureStringLocalizerFactory/UiCultureStringLocalizer for why the ambient value
+        // alone is unreliable in Blazor Hybrid. MUST be registered AFTER AddLocalization so this
+        // registration — not the framework's — is the one every IStringLocalizer/IStringLocalizer<T>
+        // consumer actually resolves.
+        builder.Services.AddSingleton<IStringLocalizerFactory>(sp =>
+        {
+            var inner = new ResourceManagerStringLocalizerFactory(
+                sp.GetRequiredService<IOptions<LocalizationOptions>>(),
+                sp.GetRequiredService<ILoggerFactory>());
+            return new UiCultureStringLocalizerFactory(inner, sp.GetRequiredService<UiLanguageService>());
+        });
 
         var app = builder.Build();
 
