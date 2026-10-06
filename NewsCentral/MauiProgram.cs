@@ -216,6 +216,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<AssignmentService>();
         builder.Services.AddSingleton<PublishingService>();
 
+        // UI-2.2: cached poster thumbnails — PosterThumbnailCache lives in NewsCentral.Shared
+        // (platform-neutral); the scaler and the ILogger bridge are this app's own.
+        builder.Services.AddSingleton<NewsCentral.Ui.IPosterThumbnailScaler, WindowsPosterThumbnailScaler>();
+        builder.Services.AddSingleton<NewsCentral.Ui.IPosterThumbnailCacheLogger, PosterThumbnailCacheLoggerBridge>();
+        builder.Services.AddSingleton<NewsCentral.Ui.PosterThumbnailCache>();
+
         // M5b: DataSeederService no longer seeds anything (no Initialization:* dependency left) —
         // plain constructor injection is enough, same as AuthenticationService above.
         builder.Services.AddSingleton<DataSeederService>();
