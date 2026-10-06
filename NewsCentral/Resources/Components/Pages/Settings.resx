@@ -30,7 +30,8 @@
   <data name="NewPassword" xml:space="preserve"><value>New Password</value></data>
   <data name="ConfirmPassword" xml:space="preserve"><value>Confirm Password</value></data>
   <data name="Language" xml:space="preserve"><value>Language</value></data>
-  <data name="LanguageChangeRequiresReload" xml:space="preserve"><value>Changing language will reload the page</value></data>
+  <data name="LanguageChangeRequiresReload" xml:space="preserve"><value>The page reloads in the selected language.</value></data>
+  <data name="LanguageWindowsDefault" xml:space="preserve"><value>Windows default ({0})</value></data>
   <data name="AdminSettings" xml:space="preserve"><value>Administrator Settings</value></data>
   <data name="ManageUsers" xml:space="preserve"><value>Manage Users</value></data>
   <data name="ManageTeams" xml:space="preserve"><value>Manage Teams</value></data>

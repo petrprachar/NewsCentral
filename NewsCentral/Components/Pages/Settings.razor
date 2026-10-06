@@ -4,10 +4,12 @@
 @using NewsCentral.Models
 @using NewsCentral.Configuration
 @using NewsCentral.Components.Shared
+@using NewsCentral.Localization
 @using Microsoft.Extensions.Localization
 @inject AuthenticationService AuthService
 @inject EnvironmentContext EnvironmentContext
 @inject EnvironmentSettingsService EnvironmentSettingsService
+@inject UiLanguageService UiLanguageService
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Settings> Localizer
 
@@ -99,10 +101,12 @@
             <h5><i class="bi bi-globe me-2"></i>@Localizer["Language"]</h5>
         </div>
         <div class="card-body">
-            <select class="form-select" @onchange="ChangeLanguage">
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-                <option value="es" selected>Español</option>
+            <select class="form-select" value="@(currentUser?.PreferredUiLanguage ?? "")" @onchange="ChangeLanguage">
+                <option value="">@string.Format(Localizer["LanguageWindowsDefault"].Value, UiLanguageService.WindowsLanguage.NativeName)</option>
+                @foreach (var language in UiLanguages.All)
+                {
+                    <option value="@language.CultureName">@language.NativeName</option>
+                }
             </select>
             <small class="text-muted">@Localizer["LanguageChangeRequiresReload"]</small>
         </div>
@@ -309,12 +313,23 @@
         }
     }
 
-    private void ChangeLanguage(ChangeEventArgs e)
+    private async Task ChangeLanguage(ChangeEventArgs e)
     {
-        var selectedLanguage = e.Value?.ToString();
-        // TODO: Implement language change
-        // This would typically involve setting a cookie or user preference
-        // and reloading the page
-        successMessage = $"Language changed to: {selectedLanguage}";
+        var selected = e.Value?.ToString();
+        var preferred = string.IsNullOrEmpty(selected) ? null : selected;
+
+        try
+        {
+            await AuthService.UpdatePreferredUiLanguageAsync(preferred);
+            UiLanguageService.Apply(preferred);
+
+            // The page tree (MainLayout, NavMenu, this page) is already rendered in the old
+            // language — only a full reload re-renders everything in the new one.
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
     }
 }

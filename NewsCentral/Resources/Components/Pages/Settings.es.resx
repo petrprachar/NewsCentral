@@ -30,7 +30,8 @@
   <data name="NewPassword" xml:space="preserve"><value>Nueva contraseña</value></data>
   <data name="ConfirmPassword" xml:space="preserve"><value>Confirmar contraseña</value></data>
   <data name="Language" xml:space="preserve"><value>Idioma</value></data>
-  <data name="LanguageChangeRequiresReload" xml:space="preserve"><value>Cambiar el idioma recargará la página</value></data>
+  <data name="LanguageChangeRequiresReload" xml:space="preserve"><value>La página se recargará en el idioma seleccionado.</value></data>
+  <data name="LanguageWindowsDefault" xml:space="preserve"><value>Predeterminado de Windows ({0})</value></data>
   <data name="AdminSettings" xml:space="preserve"><value>Configuración de administrador</value></data>
   <data name="ManageUsers" xml:space="preserve"><value>Gestionar usuarios</value></data>
   <data name="ManageTeams" xml:space="preserve"><value>Gestionar equipos</value></data>
