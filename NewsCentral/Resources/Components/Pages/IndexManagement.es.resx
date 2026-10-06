@@ -36,10 +36,22 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>No se ha seleccionado ningún equipo. Seleccione un equipo desde la página de inicio.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>Índices de todos los equipos</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Regenerar los archivos de índice para todos los equipos. Esto es útil tras cambios masivos de datos o para solucionar problemas.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Tras actualizar a esta versión, ejecute Regenerar todos una vez en cada entorno para eliminar las asignaciones que el índice de un equipo nunca debería haber incluido.</value></data>
   <data name="Team" xml:space="preserve"><value>Equipo</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Regenerando todos...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Regenerar todos los índices de equipo</value></data>
   <data name="RegenerationSuccess" xml:space="preserve"><value>Índice regenerado correctamente para {0}!</value></data>
   <data name="RegenerationAllSuccess" xml:space="preserve"><value>¡Se regeneraron correctamente {0} de {1} índices de equipo!</value></data>
   <data name="RegenerationError" xml:space="preserve"><value>Error: {0}</value></data>
+  <data name="RepairSection" xml:space="preserve"><value>Reparar copias de asignaciones publicadas</value></data>
+  <data name="RepairDescription" xml:space="preserve"><value>Examina todos los equipos en busca de copias de asignaciones entre equipos y corrige las que estén desincronizadas con su origen, o elimina aquellas cuyo origen se haya eliminado.</value></data>
+  <data name="RepairButton" xml:space="preserve"><value>Reparar copias publicadas</value></data>
+  <data name="Repairing" xml:space="preserve"><value>Reparando...</value></data>
+  <data name="RepairScanning" xml:space="preserve"><value>Examinando {0} de {1}…</value></data>
+  <data name="RepairStop" xml:space="preserve"><value>Detener</value></data>
+  <data name="RepairSummary" xml:space="preserve"><value>Se examinaron {0} copias entre equipos — {1} sincronizadas, {2} ya sincronizadas, {3} eliminadas, {4} sin modificar, {5} índice(s) regenerado(s).</value></data>
+  <data name="RepairStoppedSuffix" xml:space="preserve"><value> Detenido antes de examinar todas las copias.</value></data>
+  <data name="RepairLeftHeading" xml:space="preserve"><value>Sin modificar:</value></data>
+  <data name="RepairErrorsHeading" xml:space="preserve"><value>Errores:</value></data>
+  <data name="RepairError" xml:space="preserve"><value>Error en la reparación: {0}</value></data>
 </root>

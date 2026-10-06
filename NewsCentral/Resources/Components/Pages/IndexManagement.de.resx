@@ -36,10 +36,22 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>Kein Team ausgewählt. Bitte wählen Sie ein Team auf der Startseite aus.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>Alle Team-Indizes</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Indexdateien für alle Teams neu generieren. Nützlich nach Massenänderungen oder zur Fehlersuche.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Führen Sie nach der Aktualisierung auf diese Version einmal in jeder Umgebung „Alle neu generieren" aus, um Zuweisungen zu entfernen, die im Index eines Teams niemals hätten aufgeführt werden dürfen.</value></data>
   <data name="Team" xml:space="preserve"><value>Team</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Alle werden neu generiert...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Alle Team-Indizes neu generieren</value></data>
   <data name="RegenerationSuccess" xml:space="preserve"><value>Index für {0} erfolgreich neu generiert!</value></data>
   <data name="RegenerationAllSuccess" xml:space="preserve"><value>{0} von {1} Team-Indizes erfolgreich neu generiert!</value></data>
   <data name="RegenerationError" xml:space="preserve"><value>Fehler: {0}</value></data>
+  <data name="RepairSection" xml:space="preserve"><value>Kopien veröffentlichter Zuweisungen reparieren</value></data>
+  <data name="RepairDescription" xml:space="preserve"><value>Durchsucht alle Teams nach teamübergreifenden Zuweisungskopien und korrigiert jene, die nicht mit ihrer Quelle übereinstimmen, oder entfernt jene, deren Quelle gelöscht wurde.</value></data>
+  <data name="RepairButton" xml:space="preserve"><value>Veröffentlichte Kopien reparieren</value></data>
+  <data name="Repairing" xml:space="preserve"><value>Wird repariert...</value></data>
+  <data name="RepairScanning" xml:space="preserve"><value>Durchsuche {0} von {1}…</value></data>
+  <data name="RepairStop" xml:space="preserve"><value>Stopp</value></data>
+  <data name="RepairSummary" xml:space="preserve"><value>{0} teamübergreifende Kopien durchsucht — {1} synchronisiert, {2} bereits synchron, {3} entfernt, {4} unverändert gelassen, {5} Index/Indizes neu generiert.</value></data>
+  <data name="RepairStoppedSuffix" xml:space="preserve"><value> Gestoppt, bevor alle Kopien durchsucht wurden.</value></data>
+  <data name="RepairLeftHeading" xml:space="preserve"><value>Unverändert gelassen:</value></data>
+  <data name="RepairErrorsHeading" xml:space="preserve"><value>Fehler:</value></data>
+  <data name="RepairError" xml:space="preserve"><value>Reparatur fehlgeschlagen: {0}</value></data>
 </root>
