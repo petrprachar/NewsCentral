@@ -232,12 +232,18 @@ public static class MauiProgram
         // Add localization — ResourcesPath tells the factory where to find per-type .resx files
         builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 
-        // Set culture for testing
-        // var culture = new CultureInfo("es");
-        // CultureInfo.CurrentCulture = culture;
-        // CultureInfo.CurrentUICulture = culture;
+        // L10N-1: resolves and applies the UI language (follows Windows by default, per-user
+        // override after sign-in — see AuthenticationService). Registered as a singleton so it
+        // captures Windows' own UI culture exactly once, before anything in-process can change it.
+        builder.Services.AddSingleton<UiLanguageService>();
 
         var app = builder.Build();
+
+        // Before any UI renders, resolve against Windows (the login page always follows Windows —
+        // AuthenticationService.LoginAsync/LoginWithUpnAsync apply the signed-in user's own
+        // preference once sign-in succeeds).
+        app.Services.GetRequiredService<UiLanguageService>().Apply(null);
+
         return app;
     }
 }

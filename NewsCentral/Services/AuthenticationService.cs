@@ -25,14 +25,16 @@ public class AuthenticationService
 {
     private readonly JsonFileRepository<UsersCollection> _userRepo;
     private readonly WindowsIdentityService _windowsIdentityService;
+    private readonly UiLanguageService _uiLanguageService;
     private User? _currentUser;
 
     public event Action? OnAuthenticationStateChanged;
 
-    public AuthenticationService(IStorageService storage, WindowsIdentityService windowsIdentityService)
+    public AuthenticationService(IStorageService storage, WindowsIdentityService windowsIdentityService, UiLanguageService uiLanguageService)
     {
         _userRepo = new JsonFileRepository<UsersCollection>(storage, "config", "");
         _windowsIdentityService = windowsIdentityService;
+        _uiLanguageService = uiLanguageService;
     }
 
     public async Task<User?> LoginAsync(string username, string password)
@@ -80,6 +82,7 @@ public class AuthenticationService
             await _userRepo.UpdateAsync(usersCollection);
 
             _currentUser = user;
+            _uiLanguageService.Apply(user.PreferredUiLanguage);
             System.Diagnostics.Debug.WriteLine($"Login successful: {user.Username} (IsSystemAdmin: {user.IsSystemAdmin})");
 
             OnAuthenticationStateChanged?.Invoke();
@@ -138,6 +141,7 @@ public class AuthenticationService
             await _userRepo.UpdateAsync(usersCollection);
 
             _currentUser = user;
+            _uiLanguageService.Apply(user.PreferredUiLanguage);
 
             OnAuthenticationStateChanged?.Invoke();
 
@@ -152,7 +156,36 @@ public class AuthenticationService
     public void Logout()
     {
         _currentUser = null;
+        _uiLanguageService.Apply(null);
         OnAuthenticationStateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// L10N-1: self-service update of the CURRENT user's own UI language preference — any
+    /// authenticated role, no admin rights needed. Touches only <see cref="User.PreferredUiLanguage"/>;
+    /// every other field in <c>users.json</c> is left exactly as-is.
+    /// </summary>
+    public async Task UpdatePreferredUiLanguageAsync(string? preferredLanguage)
+    {
+        if (_currentUser == null)
+            throw new UnauthorizedAccessException("Not authenticated");
+
+        var usersCollection = await _userRepo.GetByIdAsync("users")
+            ?? throw new InvalidOperationException("Users collection not found");
+
+        var user = usersCollection.Users.FirstOrDefault(u => u.UserID == _currentUser.UserID)
+            ?? throw new InvalidOperationException("User not found");
+
+        var normalized = string.IsNullOrWhiteSpace(preferredLanguage) ? null : preferredLanguage.Trim();
+        user.PreferredUiLanguage = normalized;
+        usersCollection.LastModified = DateTime.UtcNow;
+        usersCollection.ModifiedBy = _currentUser.UserID;
+
+        await _userRepo.UpdateAsync(usersCollection);
+
+        // Keep the in-memory session's own user object in sync — never re-fetch the whole user
+        // record just to reflect the ONE field we just changed.
+        _currentUser.PreferredUiLanguage = normalized;
     }
 
     public User? GetCurrentUser()

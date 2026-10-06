@@ -14,6 +14,13 @@ public class User : IEntity
     public DateTime? LastLogin { get; set; }
     public List<TeamRole> TeamRoles { get; set; } = new();
 
+    /// <summary>
+    /// L10N-1: the user's chosen UI language ("en"/"de"/"es"/"fr"), or null to follow Windows'
+    /// own UI language. Resolved via <c>NewsCentral.Localization.UiLanguageResolver</c>. Follows
+    /// the user's account, not the machine.
+    /// </summary>
+    public string? PreferredUiLanguage { get; set; }
+
     public string GetId() => UserID;
     public void SetId(string id) => UserID = id;
 }
