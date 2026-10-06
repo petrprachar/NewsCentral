@@ -265,6 +265,7 @@ public class AssignmentService
 
         var targetTeam    = assignment.TargetTeam;
         var wasPublished  = assignment.Status == AssignmentStatus.Published;
+        var isCrossTeam   = !string.Equals(sourceTeamFolderName, targetTeam, StringComparison.OrdinalIgnoreCase);
 
         // Soft-delete: move to flat {team}/deleted/ folder.
         // MoveFileAsync creates the deleted/ folder if it does not exist.
@@ -275,6 +276,40 @@ public class AssignmentService
 
         System.Diagnostics.Debug.WriteLine(
             $"✓ Moved assign_{assignmentId} to deleted folder by {currentUser.Username}");
+
+        // PUB-1: a published cross-team assignment also has a copy under the TARGET team's own
+        // content/assignments/ (written by PublishingService at publish time) — delete that too,
+        // or the target team's index/page would keep showing content whose source was removed.
+        // Not an error if the copy is already gone (never existed, or a previous delete already
+        // moved it) — only the images/presentation/schedule it may share with other assignments
+        // are deliberately left alone, since those can be referenced by more than one assignment.
+        if (wasPublished && isCrossTeam)
+        {
+            var targetCopyPath = $"{targetTeam}/content/assignments/assign_{assignmentId}.json";
+            var targetDeletedPath = $"{targetTeam}/deleted/assign_{assignmentId}.json";
+
+            if (await _storage.FileExistsAsync(targetCopyPath))
+            {
+                try
+                {
+                    await _storage.MoveFileAsync(targetCopyPath, targetDeletedPath);
+                    System.Diagnostics.Debug.WriteLine(
+                        $"✓ Moved target team's copy ({targetCopyPath}) to deleted folder");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"  ⚠ WARNING: Could not move target team's copy to deleted: {ex.Message}");
+                    // Non-fatal — the source record is already soft-deleted; the orphaned copy is
+                    // also within reach of the Index Management repair tool.
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"  Target team's copy was already absent ({targetCopyPath}) — nothing to move");
+            }
+        }
 
         // Regenerate index for the target team so agents/viewers see the removal.
         // IndexGenerationService.GenerateAndSaveIndexAsync pushes to blob automatically.
