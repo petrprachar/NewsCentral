@@ -3,6 +3,7 @@
 @using NewsCentral.Models
 @using NewsCentral.Configuration
 @using NewsCentral.Components.Shared
+@using Microsoft.Extensions.Logging
 @inject AuthenticationService AuthService
 @inject TeamContextService TeamContext
 @inject TeamService TeamService
@@ -10,6 +11,7 @@
 @inject EnvironmentContext EnvironmentContext
 @inject DistributionStatusTracker DistributionStatus
 @inject NavigationManager Navigation
+@inject ILogger<MainLayout> Logger
 @implements IDisposable
 
 <div class="page">
@@ -91,7 +93,22 @@
         }
 
         <article class="content px-4">
-            @Body
+            @* UI-2.2 — catches an unhandled rendering exception (e.g. a page that tries to embed
+               too much content in one render batch) so the user gets a recoverable message
+               instead of Blazor's own "An unhandled error has occurred" bar. Reset on navigation
+               (HandleLocationChanged, below) so leaving the broken page clears the boundary. *@
+            <ErrorBoundary @ref="errorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="exception">
+                    @{ LogPageError(exception); }
+                    <div class="alert alert-danger m-4">
+                        <p>Something went wrong while showing this page.</p>
+                        <button class="btn btn-secondary" @onclick="RecoverToDashboard">Go to Dashboard</button>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>
@@ -100,6 +117,10 @@
     private User? currentUser;
     private string? currentTeamName;
     private Dictionary<string, string> teamNamesByFolder = new(StringComparer.OrdinalIgnoreCase);
+
+    // UI-2.2 — ErrorBoundary around @Body.
+    private ErrorBoundary? errorBoundary;
+    private Exception? lastLoggedException;
 
     private enum EnvironmentBannerKind { None, MachineDefaults, Invalid, Unreachable }
     private EnvironmentBannerKind environmentBanner = EnvironmentBannerKind.None;
@@ -125,8 +146,30 @@
     // M5a.1: re-evaluates IsOnEnvironmentManagementPage on every navigation, so the environment-
     // settings banners reappear the moment the user navigates away from /environment-management
     // (and disappear the moment they navigate to it), without a full page reload.
-    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+    // UI-2.2: also resets the ErrorBoundary, so navigating away from a page that just crashed
+    // clears the error state instead of carrying it into the next page.
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        errorBoundary?.Recover();
         InvokeAsync(StateHasChanged);
+    }
+
+    // Logs exactly once per distinct exception instance, even though ErrorContent can re-render
+    // several times while the boundary stays in its error state.
+    private void LogPageError(Exception exception)
+    {
+        if (ReferenceEquals(lastLoggedException, exception))
+            return;
+
+        lastLoggedException = exception;
+        Logger.LogError(exception, "Unhandled error while rendering page content.");
+    }
+
+    private void RecoverToDashboard()
+    {
+        errorBoundary?.Recover();
+        Navigation.NavigateTo("/");
+    }
 
     private async Task RefreshAsync()
     {
