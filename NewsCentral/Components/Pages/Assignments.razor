@@ -57,10 +57,7 @@
                 <div class="assignment-card pending-card">
                     <div class="card-content">
                         <div class="card-header-section">
-                            @if (PosterImage.ToDataUrl(presentation) is string thumb)
-                            {
-                                <img class="presentation-thumb" src="@thumb" alt="@presentation?.Name" />
-                            }
+                            <PosterThumbnail ImageDataUrl="@PosterImage.ToDataUrl(presentation)" Title="@presentation?.Name" Width="120" />
                             <div class="presentation-info">
                                 <h3>@presentation?.Name</h3>
                                 <p class="target-team">To: <strong>@assignment.TargetTeam</strong></p>
@@ -168,14 +165,28 @@
                         <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                             <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                         </button>
+                        <PosterThumbnail ImageDataUrl="@vm.PresentationImageDataUrl" Title="@vm.PresentationTitle" Width="120" />
                         <div class="batch-header-main">
                             <div class="batch-title">@vm.PresentationTitle</div>
-                            <div class="batch-meta">
+                            @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
+                            {
+                                <DisplayTypeBadges ShowNewsOfWeek="@vm.IsNewsOfWeek" ShowWallpaper="@vm.IsWallpaper" ShowLogonScreen="@vm.IsLogonScreen" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(vm.PresentationDescription))
+                            {
+                                <div class="batch-comment" title="@vm.PresentationDescription">
+                                    <strong>Comment:</strong> @vm.PresentationDescription
+                                </div>
+                            }
+                            <div class="batch-schedule">
                                 Schedule:
                                 @(vm.ScheduleStart.HasValue && vm.ScheduleEnd.HasValue
                                     ? AssignmentDateFormat.DateOnly(vm.ScheduleStart.Value, CultureInfo.CurrentCulture) + " - " + AssignmentDateFormat.DateOnly(vm.ScheduleEnd.Value, CultureInfo.CurrentCulture)
                                     : "—")
-                                &nbsp;·&nbsp; Source: <strong>@vm.Batch.Key.SourceTeam</strong>
+                                &nbsp;·&nbsp; Days: @GetDaysOfWeekString(vm.DaysOfWeek)
+                            </div>
+                            <div class="batch-meta">
+                                Source: <strong>@vm.Batch.Key.SourceTeam</strong>
                                 &nbsp;·&nbsp; @vm.Batch.Count teams
                                 &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
                             </div>
@@ -253,10 +264,7 @@
                 <div class="assignment-card published-card">
                     <div class="card-content">
                         <div class="card-header-section">
-                            @if (PosterImage.ToDataUrl(presentation) is string thumb)
-                            {
-                                <img class="presentation-thumb" src="@thumb" alt="@presentation?.Name" />
-                            }
+                            <PosterThumbnail ImageDataUrl="@PosterImage.ToDataUrl(presentation)" Title="@presentation?.Name" Width="120" />
                             <div class="presentation-info">
                                 <h3>@presentation?.Name</h3>
                                 <p class="target-team">
@@ -672,9 +680,26 @@
 
 .batch-header {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 12px;
     padding: 14px 16px;
+}
+
+.batch-comment {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.batch-schedule {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
 }
 
 .batch-expand-toggle {
@@ -821,8 +846,14 @@
             {
                 Batch = batch,
                 PresentationTitle = presentation?.Name ?? batch.Key.PresentationID,
+                PresentationDescription = presentation?.Description,
+                PresentationImageDataUrl = PosterImage.ToDataUrl(presentation),
+                IsNewsOfWeek = presentation?.IsNewsOfWeek ?? false,
+                IsWallpaper = presentation?.IsWallpaper ?? false,
+                IsLogonScreen = presentation?.IsLogonScreen ?? false,
                 ScheduleStart = schedule?.ScheduleStart,
                 ScheduleEnd = schedule?.ScheduleEnd,
+                DaysOfWeek = schedule?.DaysOfWeek ?? string.Empty,
                 IsExpanded = previousExpansion.TryGetValue(batch.Key, out var wasExpanded)
                     ? wasExpanded
                     : batch.Count <= 5
@@ -884,8 +915,14 @@
     {
         public AssignmentBatch Batch { get; set; } = null!;
         public string PresentationTitle { get; set; } = string.Empty;
+        public string? PresentationDescription { get; set; }
+        public string? PresentationImageDataUrl { get; set; }
+        public bool IsNewsOfWeek { get; set; }
+        public bool IsWallpaper { get; set; }
+        public bool IsLogonScreen { get; set; }
         public DateTime? ScheduleStart { get; set; }
         public DateTime? ScheduleEnd { get; set; }
+        public string DaysOfWeek { get; set; } = string.Empty;
         public bool IsExpanded { get; set; }
     }
 
