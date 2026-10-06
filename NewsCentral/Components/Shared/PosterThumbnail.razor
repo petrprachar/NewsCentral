@@ -1,10 +1,15 @@
-@* UI-2.1 — reusable poster thumbnail with a click-to-enlarge lightbox. With no image, renders a
+@* UI-2.1/UI-2.2 — reusable poster thumbnail with a click-to-enlarge lightbox. The small image is
+   always the cheap, cached thumbnail (ThumbnailDataUrl); the full-size image is produced only on
+   demand, via GetFullImageDataUrl, and kept only while the lightbox is open — a render batch never
+   carries a full-size image for a thumbnail nobody is looking at. With no thumbnail, renders a
    neutral, non-clickable "No preview" placeholder of the same footprint instead of nothing, so a
-   row of thumbnails stays visually aligned. *@
+   row of thumbnails stays visually aligned. Styles live in PosterThumbnail.razor.css (scoped) —
+   NOT an inline <style> block — so they ship once in the bundled stylesheet instead of once per
+   rendered instance. *@
 
-@if (!string.IsNullOrEmpty(ImageDataUrl))
+@if (!string.IsNullOrEmpty(ThumbnailDataUrl))
 {
-    <img class="poster-thumbnail" src="@ImageDataUrl" alt="@Title" title="Click to enlarge"
+    <img class="poster-thumbnail" src="@ThumbnailDataUrl" alt="@Title" title="Click to enlarge"
          style="width: @(Width)px;" @onclick="Open" />
 }
 else
@@ -19,7 +24,7 @@ else
     <div class="poster-lightbox-overlay" tabindex="-1" @ref="overlayRef" @onclick="Close" @onkeydown="HandleKeyDown">
         <div class="poster-lightbox-content" @onclick:stopPropagation="true">
             <button type="button" class="poster-lightbox-close" @onclick="Close" aria-label="Close">×</button>
-            <img src="@ImageDataUrl" alt="@Title" class="poster-lightbox-image" />
+            <img src="@lightboxImageDataUrl" alt="@Title" class="poster-lightbox-image" />
             @if (!string.IsNullOrEmpty(Title))
             {
                 <div class="poster-lightbox-title">@Title</div>
@@ -28,94 +33,34 @@ else
     </div>
 }
 
-<style>
-    .poster-thumbnail {
-        height: auto;
-        max-height: 90px;
-        object-fit: contain;
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        cursor: zoom-in;
-        background: #f5f5f5;
-        display: block;
-        flex-shrink: 0;
-    }
-
-    .poster-thumbnail-placeholder {
-        height: 90px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #999;
-        font-size: 11px;
-        font-style: italic;
-        text-align: center;
-        cursor: default;
-    }
-
-    .poster-lightbox-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.85);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 3000;
-    }
-
-    .poster-lightbox-content {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        max-width: 90vw;
-        max-height: 85vh;
-    }
-
-    .poster-lightbox-image {
-        max-width: 90vw;
-        max-height: 75vh;
-        object-fit: contain;
-        border-radius: 6px;
-    }
-
-    .poster-lightbox-title {
-        color: white;
-        margin-top: 12px;
-        font-size: 15px;
-        text-align: center;
-    }
-
-    .poster-lightbox-close {
-        position: absolute;
-        top: -36px;
-        right: -8px;
-        background: none;
-        border: none;
-        color: white;
-        font-size: 28px;
-        line-height: 1;
-        cursor: pointer;
-        padding: 4px 8px;
-    }
-</style>
-
 @code {
-    [Parameter] public string? ImageDataUrl { get; set; }
+    [Parameter] public string? ThumbnailDataUrl { get; set; }
+    [Parameter] public Func<string?>? GetFullImageDataUrl { get; set; }
     [Parameter] public string? Title { get; set; }
     [Parameter] public int Width { get; set; } = 120;
 
     private bool isOpen;
     private bool wasOpen;
+    private string? lightboxImageDataUrl;
     private ElementReference overlayRef;
 
     private void Open()
     {
-        if (!string.IsNullOrEmpty(ImageDataUrl))
-            isOpen = true;
+        if (string.IsNullOrEmpty(ThumbnailDataUrl))
+            return;
+
+        // The full image lives only in this field, and only while the lightbox is open. If the
+        // caller has no full image to offer (or it returns null), the thumbnail itself is shown
+        // enlarged rather than nothing.
+        lightboxImageDataUrl = GetFullImageDataUrl?.Invoke() ?? ThumbnailDataUrl;
+        isOpen = true;
     }
 
-    private void Close() => isOpen = false;
+    private void Close()
+    {
+        isOpen = false;
+        lightboxImageDataUrl = null;
+    }
 
     // No form inside the lightbox, so closing on an outside click (via the overlay's own @onclick,
     // above) or Escape is always safe here.
