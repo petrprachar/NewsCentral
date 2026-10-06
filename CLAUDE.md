@@ -99,15 +99,17 @@ new JsonSerializerOptions {
 
 **Assignments are immutable after creation.** There is no edit path. To change a scheduled assignment, delete it and create a new one.
 
-**Numeric registry overrides that could legitimately be `0` or `1` MUST be provisioned as `REG_SZ`, never `REG_DWORD`.** `RegistryConfigurationProvider` coerces `REG_DWORD` `0`→`"False"` and `1`→`"True"`; the configuration binder then throws converting that string to `int`, crashing the component at startup. Applies to `Display:LogicalDayStartHour` today; latent for `Service:PollIntervalSeconds`. See `docs/configuration.md`.
+**Numeric registry overrides that could legitimately be `0` or `1` MUST be provisioned as `REG_SZ`, never `REG_DWORD`.** `RegistryConfigurationProvider` coerces `REG_DWORD` `0`→`"False"` and `1`→`"True"`; the configuration binder then throws converting that string to `int`, crashing the component at startup. Applies to `Display:LogicalDayStartHour`; latent for `Service:PollIntervalSeconds`. See `docs/configuration.md`.
 
-**Display types (`IsNewsOfWeek`/`IsWallpaper`/`IsLogonScreen`) are owned by `Presentation` and nothing else.** `Assignment` must never carry copies — the index's `DisplayTypeInfo` is sourced from the presentation, the single source of truth. Virtual Desktop does **not** exclude wallpaper or lock screen; those applies are independent of how the poster is presented.
+**Display types (`IsNewsOfWeek`/`IsWallpaper`/`IsLogonScreen`) are owned by `Presentation` and nothing else.** `Assignment` must never carry copies — the index's `DisplayTypeInfo` is sourced from the presentation, the single source of truth. Virtual Desktop does **not** exclude wallpaper or lock screen; those applies are independent of poster presentation.
 
 **Registry `teams\` naming** — value names must match the generated folder name exactly, i.e. the sanitized team name (e.g. `cz-its`, not `CZ_ITS`). Folder names carry no `team-` prefix.
 
 **`Company` is a single build-time constant, not configuration.** Authored once in `Directory.Build.props` (`<Company>`), surfaced to code as `SolutionConstants.Company` (generated into `NewsCentral.Shared`), and consumed by all three components; an MSBuild target fails the build if it is empty. It is **absent from every `appsettings.json`** — no runtime default, no fallback — and is **not** registry-overridable (it defines the hive path `HKLM\Software\{Company}\NewsCentral\{Component}`). A `Company` **mismatch fails silently**: `OpenSubKey` returns `null` with no error, so every GPO/registry override is quietly ignored and the component runs on shipped defaults (the exact drift that motivated making it one constant). See `docs/configuration.md`.
 
 **NewsViewer startup** — `appsettings.json` is required (`optional: false`); the `appsettings.Development.json` overlay is `optional: true`. Missing base file = hard startup failure. `Main()` checks the `Active` master switch first (registry DWORD 0/1, default `true`) and returns silently if `false` — no poster, no wallpaper style re-assert, no state write, no dialog. `Main()` then validates `CacheRootPath` (not `Company` — that is the build constant) and exits with `MessageBox` if it is empty.
+
+**Razor comments must never contain an `@` token or an HTML tag.** `@* … *@`/`<!-- … -->` must avoid `@media`/`@code` and tags like `<style>` — Razor parses comments too, and this has broken the build before. Write "media query"/"style block" in prose instead.
 
 ---
 
