@@ -204,6 +204,21 @@ The display-type flags (`IsNewsOfWeek` / `IsWallpaper` / `IsLogonScreen`) were r
 
 `Priority` is **RESERVED**: `0` = normal, ascending = more urgent. It is emitted by `IndexGenerationService` **inside the signed index payload** (so its bytes are signature-covered) and **read by nothing** today. It is deliberately an `int` and **not** an enum, because `JsonStringEnumConverter` throws on an unknown enum string — adding a member later would make older clients reject the *entire* index. Reserving it in the `6010cd1` schema break means the future priority-display feature ships as a **pure behaviour change with no wire break and no fleet coordination**.
 
+### Publish and Delete (PUB-1)
+
+**Publish S → T.** `PublishingService.PublishAssignmentAsync` copies the presentation, schedule and
+images to T, then writes T's own copy of the assignment **already in its final `Published` state**
+(`Status`, `PublishedBy`, `PublishedDate`, `PublishedPaths` all set) before updating S's record —
+there is no window where T's copy exists but is not yet `Published`. S's record is updated next;
+T's index is regenerated last. When S and T are the same team, this collapses to a single write.
+(Before PUB-1, T's copy was written while still `Approved` and never updated afterward, so it never
+reached T's index or T's devices.)
+
+**Delete a Published assignment.** `AssignmentService.DeleteAssignmentAsync` moves S's record to
+`S/deleted`; when S ≠ T, it also moves T's copy to `T/deleted` if present (absent is not an error);
+T's index is regenerated, so T's devices drop the content at their next sync. The presentation,
+schedule and image files stay in T untouched — other assignments there may still reference them.
+
 ## Team / User
 
 ```csharp
@@ -272,7 +287,16 @@ public class TeamIndexFile : ISignable, IDeliveredKeyCarrier
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SigningPublicKey { get; set; }
 }
+```
 
+**Index inclusion (PUB-2).** `PublishedAssignments` lists only assignments with `Status == Published`
+**and** `TargetTeam` equal to the team folder this index is for (`IndexInclusion.Includes`, case-
+insensitive). A team's own folder also holds its SOURCE records for assignments it published to
+OTHER teams (`TargetTeam != this team`) — those are excluded; they describe content authored FOR
+someone else, not content for this team's own devices. (Before PUB-2, a team's index also listed
+everything it had published elsewhere.)
+
+```csharp
 public class PublishedAssignmentIndex
 {
     public string AssignmentId { get; set; }

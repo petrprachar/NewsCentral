@@ -34,6 +34,9 @@
 | `EditPresentation.razor` | `/presentations/edit/{id}` | Edit name, description, URL, display types; set `UseVirtualDesktop` checkbox (defaults to `true` for new presentations) and `VirtualDesktopBackgroundColor` color picker; optionally generate a poster |
 | `CreateAssignment.razor` | `/presentations/{id}/assign` | Set schedule dates (default start = today, all 7 days selected), select target teams, set approval requirement. Display-type badges (News-of-Week / Wallpaper / Logon Screen) are shown **read-only** here — display types are set on the presentation (see `EditPresentation.razor`), never on the assignment. |
 | `KeyManagement.razor` | `/key-management` | TeamAdmin-gated (SystemAdmin passes automatically). View current public key (full, copyable for GPO/registry deployment) and truncated private key hint. Generate a new ECDSA P-256 key pair (held in page state). Apply — sets `PublicKeyPrevious = old PublicKey` for rotation-window continuity and writes `team-signing.json` via `IStorageService` (never through `IBlobDistributionService`). Republish — separate deliberate action: re-signs and saves `index.json` via `GenerateAndSaveIndexAsync` (self-verify guard runs). Nav item hidden when no team is selected or user lacks TeamAdmin. Import-from-authority (paste/derive) deferred. |
+| `Approvals.razor` | `/approvals` | Pending assignments grouped into batches (by source team, presentation and schedule; collapsed by default past 5 rows). Bulk Approve and bulk Reject, each sequential with a Stop control and a confirmation dialog; a cached poster thumbnail per batch, full image only in its lightbox. |
+| `Assignments.razor` | `/assignments` | Pending/Approved/Published, each batched the same way. Bulk Publish (Approved only) and bulk Delete (all three sections), sequential with Stop; every delete — bulk or single-row — confirms first, and a Published delete's confirmation names that the poster is withdrawn from target devices at their next sync. Delete is offered only where the current user is eligible — see Role Model. |
+| `IndexManagement.razor` | `/index-management` | SystemAdmin only. Regenerate one team's index, or all teams'. **Repair published assignment copies** (PUB-1) scans every team for a cross-team copy of an assignment and, per copy: **Sync** (source is Published, copy is stale → rewrite from source), **Remove** (source record no longer exists → move copy to `deleted`), **InSync** (copy already matches → no write), or **Left** (source exists but isn't Published → report only, untouched). Every team whose copies changed gets its index regenerated once at the end. |
 
 ## Storage Backend
 
@@ -45,7 +48,20 @@
 - `SystemAdmin` — full access across all teams
 - `ContentAuthor` — creates and edits content within their team; edit/delete restricted to creator or SystemAdmin
 
+**Assignment delete eligibility (any status)** — SystemAdmin, the assignment's creator, or a
+ContentAuthor of the assignment's **source** team (`AssignmentService.DeleteAssignmentAsync`'s own
+check; the Assignments page mirrors it exactly). This is **not** the currently viewed team — a
+ContentAuthor of a team that only *receives* an assignment cannot delete it.
+
 **Assignments are immutable after creation** — there is no edit path. To change a scheduled assignment, delete it and create a new one.
+
+## Poster Thumbnails
+
+Approvals and Assignments render one small cached thumbnail per distinct presentation
+(`PosterThumbnailCache`, an LRU-bounded cache of JPEGs scaled from the presentation's embedded
+image) rather than embedding the full image per row — the pattern that previously made a large
+batch (~200 assignments) exceed Blazor's render-batch size. The full-size image is produced only
+when a thumbnail's lightbox is opened, and discarded again when it closes.
 
 ## Folder Convention
 
