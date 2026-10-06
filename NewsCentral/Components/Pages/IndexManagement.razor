@@ -257,7 +257,7 @@
                 <div class="alert @(hasIssues ? "alert-warning" : "alert-success") mt-3">
                     @string.Format(
                         Localizer["RepairSummary"].Value,
-                        repairSummary.Scanned, repairSummary.Synced, repairSummary.Removed,
+                        repairSummary.Scanned, repairSummary.Synced, repairSummary.InSync, repairSummary.Removed,
                         repairSummary.Left.Count, repairSummary.IndexesRegenerated)
                     @if (repairSummary.Stopped)
                     {

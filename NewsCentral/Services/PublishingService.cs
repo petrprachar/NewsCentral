@@ -386,6 +386,10 @@ public class PublishingService
                         changedTeams.Add(targetTeam);
                         break;
 
+                    case RepairAction.InSync:
+                        summary.InSync++;
+                        break;
+
                     case RepairAction.Leave:
                         summary.Left.Add(new PublishedCopyLeftEntry(copy.AssignmentID, targetTeam, plan.Reason));
                         break;
@@ -571,6 +575,10 @@ public sealed class PublishedCopyRepairSummary
 
     /// <summary>Copies rewritten from an already-Published source record.</summary>
     public int Synced { get; set; }
+
+    /// <summary>UI-2.3: copies that already matched their Published source — nothing written; the
+    /// expected steady state on a clean re-run, not a problem to report.</summary>
+    public int InSync { get; set; }
 
     /// <summary>Copies moved to {team}/deleted/ because their source record no longer exists.</summary>
     public int Removed { get; set; }

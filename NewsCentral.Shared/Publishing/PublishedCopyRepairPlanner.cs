@@ -11,8 +11,15 @@ public enum RepairAction
     /// <summary>The source record is missing (deleted) — move the copy to the target's deleted folder.</summary>
     Remove,
 
-    /// <summary>Report only — the source exists but isn't Published, or the copy already matches it.</summary>
-    Leave
+    /// <summary>Report only — the source exists but isn't Published.</summary>
+    Leave,
+
+    /// <summary>
+    /// UI-2.3: the source is Published and the copy already matches it — nothing to write. Kept
+    /// distinct from <see cref="Leave"/> so a clean re-run (the normal case) doesn't read as a
+    /// pile of "left untouched" warnings; it is simply the expected steady state.
+    /// </summary>
+    InSync
 }
 
 /// <summary>A planned action plus a human-readable reason (always set, for logging/reporting).</summary>
@@ -44,7 +51,7 @@ public static class PublishedCopyRepairPlanner
             return new RepairPlan(RepairAction.Leave, $"Source is not Published (status: {source.Status})");
 
         if (IsCopyUpToDate(copy, source))
-            return new RepairPlan(RepairAction.Leave, "Copy already matches the source's Published state");
+            return new RepairPlan(RepairAction.InSync, "Copy already matches the source's Published state");
 
         return new RepairPlan(RepairAction.Sync, "Source is Published and the copy is stale");
     }

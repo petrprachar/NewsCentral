@@ -60,7 +60,7 @@ public sealed class PublishedCopyRepairPlannerTests
     }
 
     [Fact]
-    public void Plan_SourcePublished_CopyAlreadyMatches_ReturnsLeave_NoRewrite()
+    public void Plan_SourcePublished_CopyAlreadyMatches_ReturnsInSync_NoRewrite()
     {
         var publishedDate = new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc);
         var paths = new List<string> { "load-001/content/presentations/pres_1.json", "load-001/content/assignments/assign_a1.json" };
@@ -70,12 +70,12 @@ public sealed class PublishedCopyRepairPlannerTests
 
         var plan = PublishedCopyRepairPlanner.Plan(copy, source);
 
-        Assert.Equal(RepairAction.Leave, plan.Action);
+        Assert.Equal(RepairAction.InSync, plan.Action);
         Assert.Contains("already matches", plan.Reason);
     }
 
     [Fact]
-    public void Plan_SourcePublished_CopyMatchesExceptPathOrder_ReturnsLeave_NoRewrite()
+    public void Plan_SourcePublished_CopyMatchesExceptPathOrder_ReturnsInSync_NoRewrite()
     {
         var publishedDate = new DateTime(2026, 2, 2, 0, 0, 0, DateTimeKind.Utc);
 
@@ -84,7 +84,7 @@ public sealed class PublishedCopyRepairPlannerTests
 
         var plan = PublishedCopyRepairPlanner.Plan(copy, source);
 
-        Assert.Equal(RepairAction.Leave, plan.Action);
+        Assert.Equal(RepairAction.InSync, plan.Action);
     }
 
     [Fact]

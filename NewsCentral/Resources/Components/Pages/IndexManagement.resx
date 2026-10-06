@@ -49,7 +49,7 @@
   <data name="Repairing" xml:space="preserve"><value>Repairing...</value></data>
   <data name="RepairScanning" xml:space="preserve"><value>Scanning {0} of {1}…</value></data>
   <data name="RepairStop" xml:space="preserve"><value>Stop</value></data>
-  <data name="RepairSummary" xml:space="preserve"><value>Scanned {0} cross-team copies — {1} synced, {2} removed, {3} left untouched, {4} index(es) regenerated.</value></data>
+  <data name="RepairSummary" xml:space="preserve"><value>Scanned {0} cross-team copies — {1} synced, {2} already in sync, {3} removed, {4} left untouched, {5} index(es) regenerated.</value></data>
   <data name="RepairStoppedSuffix" xml:space="preserve"><value> Stopped before every copy was scanned.</value></data>
   <data name="RepairLeftHeading" xml:space="preserve"><value>Left untouched:</value></data>
   <data name="RepairErrorsHeading" xml:space="preserve"><value>Errors:</value></data>
