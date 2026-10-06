@@ -14,6 +14,7 @@
 @inject TeamContextService TeamContext
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Assignments> Localizer
+@inject NewsCentral.Ui.PosterThumbnailCache ThumbnailCache
 
 <PageTitle>@Localizer["Assignments"]</PageTitle>
 
@@ -42,81 +43,75 @@
     }
     else
     {
-        @* Pending Approval Section *@
+        @* Pending Approval Section — UI-2.2: batched like Approved, no selection checkboxes. *@
         @if (pendingAssignments.Any())
         {
             <div class="section-header">
                 <h4>⏳ Pending Approval (@pendingAssignments.Count)</h4>
             </div>
 
-            @foreach (var assignment in pendingAssignments)
+            @foreach (var vm in pendingBatchViewModels)
             {
-                var presentation = presentations.FirstOrDefault(p => p.PresentationID == assignment.PresentationID);
-                var schedule = schedules.FirstOrDefault(s => s.ScheduleID == assignment.ScheduleID);
-
-                <div class="assignment-card pending-card">
-                    <div class="card-content">
-                        <div class="card-header-section">
-                            <PosterThumbnail ImageDataUrl="@PosterImage.ToDataUrl(presentation)" Title="@presentation?.Name" Width="120" />
-                            <div class="presentation-info">
-                                <h3>@presentation?.Name</h3>
-                                <p class="target-team">To: <strong>@assignment.TargetTeam</strong></p>
-
-                                @* Display Type Badges *@
-                                <div class="display-badges">
-                                    @if (presentation?.IsNewsOfWeek == true)
-                                    {
-                                        <span class="display-badge news-badge">
-                                            <i class="bi bi-newspaper"></i> News of the Week
-                                        </span>
-                                    }
-                                    @if (presentation?.IsWallpaper == true)
-                                    {
-                                        <span class="display-badge wallpaper-badge">
-                                            <i class="bi bi-image-fill"></i> Wallpaper
-                                        </span>
-                                    }
-                                    @if (presentation?.IsLogonScreen == true)
-                                    {
-                                        <span class="display-badge logon-badge">
-                                            <i class="bi bi-lock-fill"></i> Logon Screen
-                                        </span>
-                                    }
+                <div class="batch-card pending-batch-card">
+                    <div class="batch-header">
+                        <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
+                            <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                        </button>
+                        <PosterThumbnail ThumbnailDataUrl="@ThumbnailFor(vm.Batch.Key.PresentationID)"
+                                         GetFullImageDataUrl="@(() => FullImageFor(vm.Batch.Key.PresentationID))"
+                                         Title="@vm.PresentationTitle" Width="120" />
+                        <div class="batch-header-main">
+                            <div class="batch-title">@vm.PresentationTitle</div>
+                            @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
+                            {
+                                <DisplayTypeBadges ShowNewsOfWeek="@vm.IsNewsOfWeek" ShowWallpaper="@vm.IsWallpaper" ShowLogonScreen="@vm.IsLogonScreen" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(vm.PresentationDescription))
+                            {
+                                <div class="batch-comment" title="@vm.PresentationDescription">
+                                    <strong>Comment:</strong> @vm.PresentationDescription
                                 </div>
+                            }
+                            <div class="batch-schedule">
+                                Schedule:
+                                @(vm.ScheduleStart.HasValue && vm.ScheduleEnd.HasValue
+                                    ? AssignmentDateFormat.DateOnly(vm.ScheduleStart.Value, CultureInfo.CurrentCulture) + " - " + AssignmentDateFormat.DateOnly(vm.ScheduleEnd.Value, CultureInfo.CurrentCulture)
+                                    : "—")
+                                &nbsp;·&nbsp; Days: @GetDaysOfWeekString(vm.DaysOfWeek)
                             </div>
-                            <span class="status-badge pending">Pending</span>
+                            <div class="batch-meta">
+                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                            </div>
                         </div>
-
-                        <p class="description"><strong>Comment:</strong> @presentation?.Description</p>
-
-                        @if (schedule != null)
-                        {
-                            <div class="schedule-box">
-                                <p class="schedule-label">Schedule:</p>
-                                <p class="schedule-dates">@AssignmentDateFormat.DateOnly(schedule.ScheduleStart, CultureInfo.CurrentCulture) - @AssignmentDateFormat.DateOnly(schedule.ScheduleEnd, CultureInfo.CurrentCulture) | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
-                            </div>
-                        }
-
-                        @if (CanDelete(assignment))
-                        {
-                            <div class="action-buttons">
-                                @if (CanDelete(assignment))
-                                {
-                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
-                                        @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
-                                        {
-                                            <span class="spinner-border spinner-border-sm"></span>
-                                        }
-                                        else
-                                        {
-                                            <i class="bi bi-trash"></i>
-                                        }
-                                        Delete
-                                    </button>
-                                }
-                            </div>
-                        }
                     </div>
+
+                    @if (vm.IsExpanded)
+                    {
+                        <div class="batch-rows">
+                            @foreach (var assignment in vm.Batch.Assignments)
+                            {
+                                <div class="batch-row">
+                                    <span class="batch-row-main">@assignment.TargetTeam</span>
+                                    <div class="batch-row-actions">
+                                        @if (CanDelete(assignment))
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
+                                                @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-trash"></i>
+                                                }
+                                                Delete
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
                 </div>
             }
         }
@@ -165,7 +160,9 @@
                         <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                             <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                         </button>
-                        <PosterThumbnail ImageDataUrl="@vm.PresentationImageDataUrl" Title="@vm.PresentationTitle" Width="120" />
+                        <PosterThumbnail ThumbnailDataUrl="@ThumbnailFor(vm.Batch.Key.PresentationID)"
+                                         GetFullImageDataUrl="@(() => FullImageFor(vm.Batch.Key.PresentationID))"
+                                         Title="@vm.PresentationTitle" Width="120" />
                         <div class="batch-header-main">
                             <div class="batch-title">@vm.PresentationTitle</div>
                             @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
@@ -249,97 +246,92 @@
             }
         }
 
-        @* Published Section *@
+        @* Published Section — UI-2.2: batched like Approved, no selection checkboxes. *@
         @if (publishedAssignments.Any())
         {
             <div class="section-header">
                 <h4>☑ Published (@publishedAssignments.Count)</h4>
             </div>
 
-            @foreach (var assignment in publishedAssignments)
+            @foreach (var vm in publishedBatchViewModels)
             {
-                var presentation = presentations.FirstOrDefault(p => p.PresentationID == assignment.PresentationID);
-                var schedule = schedules.FirstOrDefault(s => s.ScheduleID == assignment.ScheduleID);
-
-                <div class="assignment-card published-card">
-                    <div class="card-content">
-                        <div class="card-header-section">
-                            <PosterThumbnail ImageDataUrl="@PosterImage.ToDataUrl(presentation)" Title="@presentation?.Name" Width="120" />
-                            <div class="presentation-info">
-                                <h3>@presentation?.Name</h3>
-                                <p class="target-team">
-                                    To: <strong>@assignment.TargetTeam</strong>
-                                    @if (assignment.PublishedDate.HasValue)
-                                    {
-                                        <span class="approval-date">| Published: @AssignmentDateFormat.UtcTimestamp(assignment.PublishedDate.Value, CultureInfo.CurrentCulture)</span>
-                                    }
-                                </p>
-
-                                @* Display Type Badges *@
-                                <div class="display-badges">
-                                    @if (presentation?.IsNewsOfWeek == true)
-                                    {
-                                        <span class="display-badge news-badge">
-                                            <i class="bi bi-star-fill"></i> News of Week
-                                        </span>
-                                    }
-                                    @if (presentation?.IsWallpaper == true)
-                                    {
-                                        <span class="display-badge wallpaper-badge">
-                                            <i class="bi bi-image"></i> Wallpaper
-                                        </span>
-                                    }
-                                    @if (presentation?.IsLogonScreen == true)
-                                    {
-                                        <span class="display-badge logon-badge">
-                                            <i class="bi bi-lock"></i> Logon Screen
-                                        </span>
-                                    }
+                <div class="batch-card published-batch-card">
+                    <div class="batch-header">
+                        <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
+                            <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
+                        </button>
+                        <PosterThumbnail ThumbnailDataUrl="@ThumbnailFor(vm.Batch.Key.PresentationID)"
+                                         GetFullImageDataUrl="@(() => FullImageFor(vm.Batch.Key.PresentationID))"
+                                         Title="@vm.PresentationTitle" Width="120" />
+                        <div class="batch-header-main">
+                            <div class="batch-title">@vm.PresentationTitle</div>
+                            @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
+                            {
+                                <DisplayTypeBadges ShowNewsOfWeek="@vm.IsNewsOfWeek" ShowWallpaper="@vm.IsWallpaper" ShowLogonScreen="@vm.IsLogonScreen" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(vm.PresentationDescription))
+                            {
+                                <div class="batch-comment" title="@vm.PresentationDescription">
+                                    <strong>Comment:</strong> @vm.PresentationDescription
                                 </div>
+                            }
+                            <div class="batch-schedule">
+                                Schedule:
+                                @(vm.ScheduleStart.HasValue && vm.ScheduleEnd.HasValue
+                                    ? AssignmentDateFormat.DateOnly(vm.ScheduleStart.Value, CultureInfo.CurrentCulture) + " - " + AssignmentDateFormat.DateOnly(vm.ScheduleEnd.Value, CultureInfo.CurrentCulture)
+                                    : "—")
+                                &nbsp;·&nbsp; Days: @GetDaysOfWeekString(vm.DaysOfWeek)
                             </div>
-                            <span class="status-badge published">Published</span>
+                            <div class="batch-meta">
+                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                            </div>
                         </div>
-
-                        <p class="description"><strong>Comment:</strong> @presentation?.Description</p>
-
-                        @if (schedule != null)
-                        {
-                            <div class="schedule-box">
-                                <p class="schedule-label">Schedule:</p>
-                                <p class="schedule-dates">@AssignmentDateFormat.DateOnly(schedule.ScheduleStart, CultureInfo.CurrentCulture) - @AssignmentDateFormat.DateOnly(schedule.ScheduleEnd, CultureInfo.CurrentCulture) | @GetDaysOfWeekString(schedule.DaysOfWeek)</p>
-                            </div>
-                        }
-
-                        @if (assignment.PublishedPaths != null && assignment.PublishedPaths.Any())
-                        {
-                            <div class="published-files">
-                                <p class="files-label">Published files:</p>
-                                <ul class="file-list">
-                                    @foreach (var path in assignment.PublishedPaths)
-                                    {
-                                        <li>@path</li>
-                                    }
-                                </ul>
-                            </div>
-                        }
-                        @* ADD THIS SECTION - Delete button for Published *@
-                        @if (CanDeletePublished(assignment))
-                        {
-                            <div class="action-buttons">
-                                <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
-                                    @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
-                                    {
-                                        <span class="spinner-border spinner-border-sm"></span>
-                                    }
-                                    else
-                                    {
-                                        <i class="bi bi-trash"></i>
-                                    }
-                                    Delete
-                                </button>
-                            </div>
-                        }
                     </div>
+
+                    @if (vm.IsExpanded)
+                    {
+                        <div class="batch-rows">
+                            @foreach (var assignment in vm.Batch.Assignments)
+                            {
+                                <div class="batch-row">
+                                    <div class="batch-row-main">
+                                        <span>@assignment.TargetTeam</span>
+                                        @if (assignment.PublishedDate.HasValue)
+                                        {
+                                            <span class="approval-date">| Published: @AssignmentDateFormat.UtcTimestamp(assignment.PublishedDate.Value, CultureInfo.CurrentCulture)</span>
+                                        }
+                                    </div>
+                                    <div class="batch-row-actions">
+                                        @if (CanDeletePublished(assignment))
+                                        {
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
+                                                @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm"></span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-trash"></i>
+                                                }
+                                                Delete
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                                @if (assignment.PublishedPaths != null && assignment.PublishedPaths.Any())
+                                {
+                                    <div class="published-files-row">
+                                        <ul class="file-list">
+                                            @foreach (var path in assignment.PublishedPaths)
+                                            {
+                                                <li>@path</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
                 </div>
             }
         }
@@ -766,6 +758,26 @@
     gap: 6px;
     flex-shrink: 0;
 }
+
+/* UI-2.2 — Pending/Published batches reuse .batch-card but keep their own border colour,
+   matching the pre-batching .pending-card/.published-card left-border colours. */
+.pending-batch-card {
+    border-left-color: #ffc107;
+}
+
+.published-batch-card {
+    border-left-color: #007bff;
+}
+
+.published-files-row {
+    padding: 0 16px 8px 16px;
+    background: #e7f3ff;
+}
+
+.published-files-row .file-list {
+    margin: 0;
+    padding-left: 20px;
+}
 </style>
 
 @code {
@@ -800,10 +812,19 @@
     private string? currentTeamFolder;
 
     // UI-2 — approved section: batch grouping + bulk publish.
-    private List<ApprovedBatchViewModel> approvedBatchViewModels = new();
+    private List<AssignmentBatchViewModel> approvedBatchViewModels = new();
     private SelectionModel<string> approvedSelection = new();
     private string approvedSearch = string.Empty;
     private bool showPublishConfirm;
+
+    // UI-2.2 — Pending and Published are batched the same way as Approved, minus selection.
+    private List<AssignmentBatchViewModel> pendingBatchViewModels = new();
+    private List<AssignmentBatchViewModel> publishedBatchViewModels = new();
+
+    // UI-2.2 — one cached thumbnail data URL per DISTINCT presentation referenced by the loaded
+    // assignments, built once per LoadDataAsync call. Every render path looks up this dictionary
+    // instead of embedding a full-size image per row/batch — see PosterThumbnailCache.
+    private Dictionary<string, string?> thumbnailById = new();
 
     private bool isRunning;
     private string runVerb = string.Empty;
@@ -816,13 +837,13 @@
 
     private List<Assignment> AllShownApproved => approvedBatchViewModels.SelectMany(ShownInApprovedBatch).ToList();
 
-    private List<ApprovedBatchViewModel> ShownApprovedBatchViewModels =>
+    private List<AssignmentBatchViewModel> ShownApprovedBatchViewModels =>
         approvedBatchViewModels.Where(b => ShownInApprovedBatch(b).Count > 0).ToList();
 
     private bool MatchesApprovedSearch(string? text) =>
         !IsApprovedSearchActive || (text != null && text.Contains(approvedSearch.Trim(), StringComparison.OrdinalIgnoreCase));
 
-    private List<Assignment> ShownInApprovedBatch(ApprovedBatchViewModel vm)
+    private List<Assignment> ShownInApprovedBatch(AssignmentBatchViewModel vm)
     {
         if (!IsApprovedSearchActive || MatchesApprovedSearch(vm.PresentationTitle))
             return vm.Batch.Assignments.ToList();
@@ -830,24 +851,39 @@
         return vm.Batch.Assignments.Where(a => MatchesApprovedSearch(a.TargetTeam)).ToList();
     }
 
-    // Looks up each batch's presentation/schedule from the already-loaded team-wide lists
-    // (presentations/schedules, below) once per batch — never per row.
-    private void BuildApprovedBatches()
-    {
-        var batches = AssignmentBatchGrouper.Group(approvedAssignments);
-        var previousExpansion = approvedBatchViewModels.ToDictionary(b => b.Batch.Key, b => b.IsExpanded);
+    // UI-2.2 — thumbnailById is built once per LoadDataAsync call, keyed by PresentationID; every
+    // render path (Pending/Approved/Published) looks it up instead of computing its own image.
+    private string? ThumbnailFor(string presentationId) =>
+        thumbnailById.TryGetValue(presentationId, out var url) ? url : null;
 
-        approvedBatchViewModels = batches.Select(batch =>
+    private Presentation? PresentationFor(string presentationId) =>
+        presentations.FirstOrDefault(p => p.PresentationID == presentationId);
+
+    // The full-size image is built only when PosterThumbnail's lightbox actually asks for it
+    // (GetFullImageDataUrl), never eagerly during render.
+    private string? FullImageFor(string presentationId) => PosterImage.ToDataUrl(PresentationFor(presentationId));
+
+    // Shared by Pending, Approved, and Published — looks up each batch's presentation/schedule
+    // from the already-loaded team-wide lists (presentations/schedules, below) once per batch,
+    // never per row. Batches with more than 5 items start collapsed; 5 or fewer start expanded,
+    // unless the batch already existed before this reload, in which case its expand/collapse
+    // state is preserved instead.
+    private List<AssignmentBatchViewModel> BuildBatchViewModels(
+        IReadOnlyList<Assignment> source, List<AssignmentBatchViewModel> previous)
+    {
+        var batches = AssignmentBatchGrouper.Group(source);
+        var previousExpansion = previous.ToDictionary(b => b.Batch.Key, b => b.IsExpanded);
+
+        return batches.Select(batch =>
         {
             var presentation = presentations.FirstOrDefault(p => p.PresentationID == batch.Key.PresentationID);
             var schedule = schedules.FirstOrDefault(s => s.ScheduleID == batch.Key.ScheduleID);
 
-            return new ApprovedBatchViewModel
+            return new AssignmentBatchViewModel
             {
                 Batch = batch,
                 PresentationTitle = presentation?.Name ?? batch.Key.PresentationID,
                 PresentationDescription = presentation?.Description,
-                PresentationImageDataUrl = PosterImage.ToDataUrl(presentation),
                 IsNewsOfWeek = presentation?.IsNewsOfWeek ?? false,
                 IsWallpaper = presentation?.IsWallpaper ?? false,
                 IsLogonScreen = presentation?.IsLogonScreen ?? false,
@@ -859,8 +895,33 @@
                     : batch.Count <= 5
             };
         }).ToList();
+    }
+
+    private void BuildAllBatches()
+    {
+        approvedBatchViewModels = BuildBatchViewModels(approvedAssignments, approvedBatchViewModels);
+        pendingBatchViewModels = BuildBatchViewModels(pendingAssignments, pendingBatchViewModels);
+        publishedBatchViewModels = BuildBatchViewModels(publishedAssignments, publishedBatchViewModels);
 
         approvedSelection.RemoveMissing(approvedAssignments.Select(a => a.AssignmentID));
+    }
+
+    // UI-2.2 — one cache lookup per DISTINCT PresentationID referenced by the loaded assignments,
+    // never one per row/batch. A presentation with no match (deleted, or not yet loaded) maps to
+    // null, which PosterThumbnail renders as its "No preview" placeholder.
+    private async Task BuildThumbnailsAsync()
+    {
+        var map = new Dictionary<string, string?>();
+
+        foreach (var presentationId in assignments.Select(a => a.PresentationID).Distinct())
+        {
+            var presentation = PresentationFor(presentationId);
+            map[presentationId] = presentation != null
+                ? await ThumbnailCache.GetThumbnailDataUrlAsync(presentation)
+                : null;
+        }
+
+        thumbnailById = map;
     }
 
     private async Task ConfirmBulkPublish()
@@ -911,12 +972,11 @@
 
     private void StopRun() => runCts?.Cancel();
 
-    private sealed class ApprovedBatchViewModel
+    private sealed class AssignmentBatchViewModel
     {
         public AssignmentBatch Batch { get; set; } = null!;
         public string PresentationTitle { get; set; } = string.Empty;
         public string? PresentationDescription { get; set; }
-        public string? PresentationImageDataUrl { get; set; }
         public bool IsNewsOfWeek { get; set; }
         public bool IsWallpaper { get; set; }
         public bool IsLogonScreen { get; set; }
@@ -961,7 +1021,8 @@
             presentations = await PresentationService.GetPresentationsForTeamAsync(currentTeamFolder!);
             schedules = await ScheduleService.GetSchedulesForTeamAsync(currentTeamFolder!);
 
-            BuildApprovedBatches();
+            await BuildThumbnailsAsync();
+            BuildAllBatches();
         }
         catch (Exception ex)
         {
