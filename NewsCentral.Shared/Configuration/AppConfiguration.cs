@@ -19,8 +19,6 @@ public class AppConfiguration
     // When using Azure Files, mount the share as a drive and set DataPath to it.
 
     public string DataPath             => _configuration["DataPath"] ?? string.Empty;
-    public int    LockExpirationMinutes =>
-        int.TryParse(_configuration["LockExpirationMinutes"], out var m) ? m : 15;
 
     // ── Distribution tier (IBlobDistributionService) ─────────────────────────
     //

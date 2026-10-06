@@ -80,7 +80,6 @@ public static class MauiProgram
             var inMemorySettings = new Dictionary<string, string>
             {
                 {"DataPath",                          "C:\\Download\\NewsCentral"},
-                {"LockExpirationMinutes",             "15"},
                 {"Authentication:EnableAutoLogin",    "true"},
                 {"Authentication:UseMockUPN",         "true"},
                 {"Authentication:MockUPN",            "petr.prachar@company.com"},

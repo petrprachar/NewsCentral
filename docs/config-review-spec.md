@@ -195,7 +195,6 @@ Hive: `…\NewsCentral\NewsCentral\`. **No bindable POCO** — every value is an
 |---|---|---|---|---|---|---|---|
 | `Company` | `Contoso` | — | — | PATH | text | | build-time constant `SolutionConstants.Company` (single `Directory.Build.props` value, same for all components); defines hive path; not in appsettings |
 | `DataPath` | `""` | `DataPath` | S | OV | path | | authoring data root |
-| `LockExpirationMinutes` | `15` | `LockExpirationMinutes` | S | OV | number | | integer minutes; MUST be REG_SZ (a 1-minute lock is valid; DWORD 0/1 coerce to `False`/`True` → int binder throws) |
 | `Authentication:EnableAutoLogin` | `true` | `Authentication\EnableAutoLogin` | S | OV | toggle | | `true \| false` (registry: REG_SZ; DWORD also works for this boolean); shows the UPN Login button on the login page — no sign-in happens automatically; the key name is historical |
 | `Authentication:UseMockUPN` | `false` | `Authentication\UseMockUPN` | S | OV | toggle | | `true \| false` (registry: REG_SZ); Debug builds only — ignored in Release |
 | `Authentication:MockUPN` | `""` | `Authentication\MockUPN` | S | OV | text | | UPN string; Debug builds only — ignored in Release |

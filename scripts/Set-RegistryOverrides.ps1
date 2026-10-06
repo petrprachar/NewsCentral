@@ -12,7 +12,7 @@
 #    docs/production-deployment.md  ordered deployment sequence
 #
 #  NOT WRITTEN by this script (write by hand or by GPO):
-#    NewsCentral component keys (DataPath, LockExpirationMinutes, Storage\, ...) —
+#    NewsCentral component keys (DataPath, Storage\, ...) —
 #      EXCEPT Environments\ (-EnvironmentInstances) and AllowUserEnvironments
 #      (-AllowUserEnvironments), the policy environment catalog surface (M3b)
 #    NewsTester component keys (reserved; not yet defined)
@@ -21,8 +21,8 @@
 #  RegistryConfigurationProvider coerces REG_DWORD 0 -> "False" and 1 -> "True",
 #  after which the configuration binder throws converting "False"/"True" to int
 #  and crashes the component at startup. Write every int-valued key
-#  (PollIntervalSeconds, GracePeriodMinutes, LockExpirationMinutes,
-#  LogicalDayStartHour, MaxDynamicTeams, ...) as -Type String. Genuine booleans
+#  (PollIntervalSeconds, GracePeriodMinutes, LogicalDayStartHour, MaxDynamicTeams,
+#  ...) as -Type String. Genuine booleans
 #  as DWord are fine — the coercion exists for them.
 # ============================================================================
 <#

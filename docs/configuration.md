@@ -113,7 +113,6 @@ HKLM\Software\[Company]\NewsCentral\NewsViewer\
 ```
 HKLM\Software\[Company]\NewsCentral\NewsCentral\
 │   DataPath               REG_SZ    (root for IStorageService)
-│   LockExpirationMinutes  REG_SZ    (int minutes; MUST be REG_SZ — a 1-minute lock is valid, and DWORD 0/1 coerce to "False"/"True" and the int binder throws)
 ├── Authentication\
 │       EnableAutoLogin   REG_SZ    "true" or "false" (DWORD also works for this boolean); shows the
 │                                   UPN Login button on the login page — no sign-in happens
@@ -151,6 +150,10 @@ HKLM\Software\[Company]\NewsCentral\NewsCentral\
         (one REG_SZ value per team)
 ```
 
+**`LockExpirationMinutes` was removed (DOCS-1).** It was defined in appsettings/registry but read
+by nothing — no lock-expiration behavior ever existed. A leftover `LockExpirationMinutes` value
+under either layer is now simply ignored.
+
 Precedence per field: the M3a result (environment.json if present and valid, else this machine's
 own `Storage:*`/`AzureBlob:*` values) is overlaid field-by-field with whatever the matching policy
 entry sets — an `Invalid` environment.json is never rescued by policy. A matching entry's canonical
@@ -183,7 +186,6 @@ HKLM\Software\[Company]\NewsCentral\NewsTester\
 ```json
 {
   "DataPath": "C:\\Download\\NewsCentral",
-  "LockExpirationMinutes": 15,
   "Authentication": {
     "EnableAutoLogin": true,
     "UseMockUPN": true,
