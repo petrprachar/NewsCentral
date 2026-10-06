@@ -80,7 +80,7 @@
                                 &nbsp;·&nbsp; Days: @GetDaysOfWeekString(vm.DaysOfWeek)
                             </div>
                             <div class="batch-meta">
-                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; Created @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
                             </div>
                         </div>
                     </div>
@@ -185,7 +185,7 @@
                             <div class="batch-meta">
                                 Source: <strong>@vm.Batch.Key.SourceTeam</strong>
                                 &nbsp;·&nbsp; @vm.Batch.Count teams
-                                &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                                &nbsp;·&nbsp; Created @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
                             </div>
                         </div>
                     </div>
@@ -204,7 +204,7 @@
                                         <span>@assignment.TargetTeam</span>
                                         @if (assignment.ApprovedDate.HasValue)
                                         {
-                                            <span class="approval-date">| Approved: @AssignmentDateFormat.DateOnly(assignment.ApprovedDate.Value, CultureInfo.CurrentCulture)</span>
+                                            <span class="approval-date">| Approved: @DisplayTime.Local(assignment.ApprovedDate, "yyyy-MM-dd HH:mm")</span>
                                         }
                                     </label>
                                     <div class="batch-row-actions">
@@ -283,7 +283,7 @@
                                 &nbsp;·&nbsp; Days: @GetDaysOfWeekString(vm.DaysOfWeek)
                             </div>
                             <div class="batch-meta">
-                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
+                                @vm.Batch.Count assignment(s) &nbsp;·&nbsp; Created @DisplayTime.Local(vm.Batch.CreatedUtc, "yyyy-MM-dd HH:mm")
                             </div>
                         </div>
                     </div>
@@ -298,7 +298,7 @@
                                         <span>@assignment.TargetTeam</span>
                                         @if (assignment.PublishedDate.HasValue)
                                         {
-                                            <span class="approval-date">| Published: @AssignmentDateFormat.UtcTimestamp(assignment.PublishedDate.Value, CultureInfo.CurrentCulture)</span>
+                                            <span class="approval-date">| Published: @DisplayTime.Local(assignment.PublishedDate, "yyyy-MM-dd HH:mm")</span>
                                         }
                                     </div>
                                     <div class="batch-row-actions">
