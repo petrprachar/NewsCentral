@@ -1,5 +1,6 @@
 using NewsCentral.Models;
 using NewsCentral.Models.IndexFile;
+using NewsCentral.Publishing;
 using NewsCentral.Repositories;
 using NewsCentral.Security;
 using System.Security.Cryptography;
@@ -70,8 +71,12 @@ public class IndexGenerationService
 
         var allAssignments = await assignmentService.GetAssignmentsForTeamAsync(teamFolderName);
 
+        // PUB-2: a team's own content/assignments folder also holds its SOURCE records for
+        // assignments it published to OTHER teams (TargetTeam != this team) — those describe
+        // content authored FOR someone else, not content for this team's own devices, and must
+        // never appear in this team's own index.
         var publishedAssignments = allAssignments
-            .Where(a => a.Status == AssignmentStatus.Published)
+            .Where(a => IndexInclusion.Includes(a, teamFolderName))
             .OrderByDescending(a => a.PublishedDate ?? a.DateCreated)
             .ToList();
 

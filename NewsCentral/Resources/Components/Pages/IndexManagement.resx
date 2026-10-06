@@ -36,6 +36,7 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>No team selected. Please select a team from the home page.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>All Teams Indexes</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Regenerate index files for all teams. This is useful after bulk data changes or troubleshooting.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>After upgrading to this version, run Regenerate all once in every environment to remove any assignments a team's index should never have listed.</value></data>
   <data name="Team" xml:space="preserve"><value>Team</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Regenerating All...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Regenerate All Team Indexes</value></data>
