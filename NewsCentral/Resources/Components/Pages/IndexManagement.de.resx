@@ -36,7 +36,7 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>Kein Team ausgewählt. Bitte wählen Sie ein Team auf der Startseite aus.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>Alle Team-Indizes</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Indexdateien für alle Teams neu generieren. Nützlich nach Massenänderungen oder zur Fehlersuche.</value></data>
-  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Führen Sie nach der Aktualisierung auf diese Version einmal in jeder Umgebung „Alle neu generieren" aus, um Zuweisungen zu entfernen, die im Index eines Teams niemals hätten aufgeführt werden dürfen.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Führen Sie nach der Aktualisierung auf diese Version einmal in jeder Umgebung „Alle Team-Indizes neu generieren“ aus, um Zuweisungen zu entfernen, die im Index eines Teams niemals hätten aufgeführt werden dürfen.</value></data>
   <data name="Team" xml:space="preserve"><value>Team</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Alle werden neu generiert...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Alle Team-Indizes neu generieren</value></data>

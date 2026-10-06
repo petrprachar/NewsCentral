@@ -36,7 +36,7 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>No se ha seleccionado ningún equipo. Seleccione un equipo desde la página de inicio.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>Índices de todos los equipos</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Regenerar los archivos de índice para todos los equipos. Esto es útil tras cambios masivos de datos o para solucionar problemas.</value></data>
-  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Tras actualizar a esta versión, ejecute Regenerar todos una vez en cada entorno para eliminar las asignaciones que el índice de un equipo nunca debería haber incluido.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Tras actualizar a esta versión, ejecute "Regenerar todos los índices de equipo" una vez en cada entorno para eliminar las asignaciones que el índice de un equipo nunca debería haber incluido.</value></data>
   <data name="Team" xml:space="preserve"><value>Equipo</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Regenerando todos...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Regenerar todos los índices de equipo</value></data>

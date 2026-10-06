@@ -36,7 +36,7 @@
   <data name="NoTeamSelected" xml:space="preserve"><value>Aucune équipe sélectionnée. Veuillez sélectionner une équipe depuis la page d'accueil.</value></data>
   <data name="AllTeamsSection" xml:space="preserve"><value>Index de toutes les équipes</value></data>
   <data name="AllTeamsDescription" xml:space="preserve"><value>Régénère les fichiers d'index pour toutes les équipes. Utile après des modifications de données en masse ou pour le dépannage.</value></data>
-  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Après la mise à niveau vers cette version, exécutez Régénérer tout une fois dans chaque environnement pour supprimer les affectations que l'index d'une équipe n'aurait jamais dû lister.</value></data>
+  <data name="AllTeamsUpgradeNotice" xml:space="preserve"><value>Après la mise à niveau vers cette version, exécutez « Régénérer tous les index d'équipe » une fois dans chaque environnement pour supprimer les affectations que l'index d'une équipe n'aurait jamais dû lister.</value></data>
   <data name="Team" xml:space="preserve"><value>Équipe</value></data>
   <data name="RegeneratingAll" xml:space="preserve"><value>Régénération de tout...</value></data>
   <data name="RegenerateAllTeams" xml:space="preserve"><value>Régénérer tous les index d'équipe</value></data>
