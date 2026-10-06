@@ -44,17 +44,37 @@
     }
     else
     {
-        @* Pending Approval Section — UI-2.2: batched like Approved, no selection checkboxes. *@
+        @* Pending Approval Section — UI-2.3: bulk selection + delete added. *@
         @if (pendingAssignments.Any())
         {
             <div class="section-header">
                 <h4>⏳ Pending Approval (@pendingAssignments.Count)</h4>
             </div>
 
+            <BulkRunPanel Running="@(isRunning && runSection == "Pending")" Done="runDone" Total="runTotal" Verb="@runVerb"
+                          Result="@(runSection == "Pending" ? runResult : null)" OnStop="StopRun" />
+
+            <div class="bulk-toolbar">
+                <TriStateCheckbox State="@pendingSelection.StateOf(EligiblePendingIds)"
+                                  OnToggle="@(() => pendingSelection.ToggleAll(EligiblePendingIds))"
+                                  Disabled="@(isRunning || EligiblePendingIds.Count == 0)"
+                                  Label="@($"Select all ({EligiblePendingIds.Count})")" />
+                <span class="bulk-counter">@pendingSelection.Count of @pendingAssignments.Count selected</span>
+                <button class="btn btn-outline-danger" @onclick="@(() => ShowDeleteConfirmForSelection("Pending"))"
+                        disabled="@(pendingSelection.Count == 0 || isRunning)">
+                    Delete @pendingSelection.Count
+                </button>
+            </div>
+
             @foreach (var vm in pendingBatchViewModels)
             {
+                var eligibleInBatch = BulkDeleteSelection.EligibleIds(vm.Batch.Assignments, CanDelete, a => a.AssignmentID);
+
                 <div class="batch-card pending-batch-card">
                     <div class="batch-header">
+                        <TriStateCheckbox State="@pendingSelection.StateOf(eligibleInBatch)"
+                                          OnToggle="@(() => pendingSelection.ToggleAll(eligibleInBatch))"
+                                          Disabled="@(isRunning || eligibleInBatch.Count == 0)" />
                         <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                             <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                         </button>
@@ -91,20 +111,22 @@
                         <div class="batch-rows">
                             @foreach (var assignment in vm.Batch.Assignments)
                             {
-                                <div class="batch-row">
-                                    <span class="batch-row-main">@assignment.TargetTeam</span>
+                                var canDeleteRow = CanDelete(assignment);
+                                var isSelected = pendingSelection.IsSelected(assignment.AssignmentID);
+
+                                <div class="batch-row @(isSelected ? "selected" : "")">
+                                    <label class="batch-row-main @(canDeleteRow ? "" : "bulk-row-checkbox-disabled")"
+                                           title="@(canDeleteRow ? null : "You can't delete this assignment")">
+                                        <input type="checkbox" checked="@isSelected" disabled="@(!canDeleteRow || isRunning)"
+                                               @onchange="@(e => pendingSelection.Set(assignment.AssignmentID, (bool)e.Value!))" />
+                                        <span>@assignment.TargetTeam</span>
+                                    </label>
                                     <div class="batch-row-actions">
-                                        @if (CanDelete(assignment))
+                                        @if (canDeleteRow)
                                         {
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
-                                                @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm"></span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-trash"></i>
-                                                }
+                                            <button class="btn btn-sm btn-outline-danger" disabled="@isRunning"
+                                                    @onclick="@(() => ShowDeleteConfirmForSingle("Pending", assignment))">
+                                                <i class="bi bi-trash"></i>
                                                 Delete
                                             </button>
                                         }
@@ -124,12 +146,12 @@
                 <h4>✓ Approved - Ready to Publish (@approvedAssignments.Count)</h4>
             </div>
 
-            <BulkRunPanel Running="isRunning" Done="runDone" Total="runTotal" Verb="@runVerb"
-                          Result="runResult" OnStop="StopRun"
+            <BulkRunPanel Running="@(isRunning && runSection == "Approved")" Done="runDone" Total="runTotal" Verb="@runVerb"
+                          Result="@(runSection == "Approved" ? runResult : null)" OnStop="StopRun"
                           WarningSummaryFormat="{0} assignment(s) published with distribution warnings" />
 
-            <div class="approved-toolbar">
-                <input type="text" class="approved-search" placeholder="Search by team or presentation…"
+            <div class="bulk-toolbar">
+                <input type="text" class="bulk-search" placeholder="Search by team or presentation…"
                        @bind="approvedSearch" @bind:event="oninput" disabled="@isRunning" />
                 <TriStateCheckbox State="@approvedSelection.StateOf(AllShownApproved.Select(a => a.AssignmentID))"
                                   OnToggle="@(() => approvedSelection.ToggleAll(AllShownApproved.Select(a => a.AssignmentID)))"
@@ -137,10 +159,14 @@
                                   Label="@(IsApprovedSearchActive
                                       ? string.Format("Select all shown ({0})", AllShownApproved.Count)
                                       : string.Format("Select all ({0})", approvedAssignments.Count))" />
-                <span class="approved-counter">@approvedSelection.Count of @approvedAssignments.Count selected</span>
+                <span class="bulk-counter">@approvedSelection.Count of @approvedAssignments.Count selected</span>
                 <button class="btn btn-success" @onclick="@(() => showPublishConfirm = true)"
                         disabled="@(approvedSelection.Count == 0 || isRunning)">
                     Publish @approvedSelection.Count
+                </button>
+                <button class="btn btn-outline-danger" @onclick="@(() => ShowDeleteConfirmForSelection("Approved"))"
+                        disabled="@(DeletableSelectedApproved.Count == 0 || isRunning)">
+                    Delete @DeletableSelectedApproved.Count
                 </button>
             </div>
 
@@ -226,16 +252,9 @@
                                         }
                                         @if (CanDelete(assignment))
                                         {
-                                            <button class="btn btn-sm btn-outline-danger" disabled="@(isDeleting || isRunning)"
-                                                    @onclick="@(() => DeleteAssignment(assignment))">
-                                                @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm"></span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-trash"></i>
-                                                }
+                                            <button class="btn btn-sm btn-outline-danger" disabled="@isRunning"
+                                                    @onclick="@(() => ShowDeleteConfirmForSingle("Approved", assignment))">
+                                                <i class="bi bi-trash"></i>
                                             </button>
                                         }
                                     </div>
@@ -247,17 +266,37 @@
             }
         }
 
-        @* Published Section — UI-2.2: batched like Approved, no selection checkboxes. *@
+        @* Published Section — UI-2.3: bulk selection + delete added (withdraws from devices). *@
         @if (publishedAssignments.Any())
         {
             <div class="section-header">
                 <h4>☑ Published (@publishedAssignments.Count)</h4>
             </div>
 
+            <BulkRunPanel Running="@(isRunning && runSection == "Published")" Done="runDone" Total="runTotal" Verb="@runVerb"
+                          Result="@(runSection == "Published" ? runResult : null)" OnStop="StopRun" />
+
+            <div class="bulk-toolbar">
+                <TriStateCheckbox State="@publishedSelection.StateOf(EligiblePublishedIds)"
+                                  OnToggle="@(() => publishedSelection.ToggleAll(EligiblePublishedIds))"
+                                  Disabled="@(isRunning || EligiblePublishedIds.Count == 0)"
+                                  Label="@($"Select all ({EligiblePublishedIds.Count})")" />
+                <span class="bulk-counter">@publishedSelection.Count of @publishedAssignments.Count selected</span>
+                <button class="btn btn-danger" @onclick="@(() => ShowDeleteConfirmForSelection("Published"))"
+                        disabled="@(publishedSelection.Count == 0 || isRunning)">
+                    Delete and withdraw @publishedSelection.Count
+                </button>
+            </div>
+
             @foreach (var vm in publishedBatchViewModels)
             {
+                var eligibleInBatch = BulkDeleteSelection.EligibleIds(vm.Batch.Assignments, CanDeletePublished, a => a.AssignmentID);
+
                 <div class="batch-card published-batch-card">
                     <div class="batch-header">
+                        <TriStateCheckbox State="@publishedSelection.StateOf(eligibleInBatch)"
+                                          OnToggle="@(() => publishedSelection.ToggleAll(eligibleInBatch))"
+                                          Disabled="@(isRunning || eligibleInBatch.Count == 0)" />
                         <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                             <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                         </button>
@@ -294,26 +333,26 @@
                         <div class="batch-rows">
                             @foreach (var assignment in vm.Batch.Assignments)
                             {
-                                <div class="batch-row">
-                                    <div class="batch-row-main">
+                                var canDeleteRow = CanDeletePublished(assignment);
+                                var isSelected = publishedSelection.IsSelected(assignment.AssignmentID);
+
+                                <div class="batch-row @(isSelected ? "selected" : "")">
+                                    <label class="batch-row-main @(canDeleteRow ? "" : "bulk-row-checkbox-disabled")"
+                                           title="@(canDeleteRow ? null : "You can't delete this assignment")">
+                                        <input type="checkbox" checked="@isSelected" disabled="@(!canDeleteRow || isRunning)"
+                                               @onchange="@(e => publishedSelection.Set(assignment.AssignmentID, (bool)e.Value!))" />
                                         <span>@assignment.TargetTeam</span>
                                         @if (assignment.PublishedDate.HasValue)
                                         {
                                             <span class="approval-date">| Published: @DisplayTime.Local(assignment.PublishedDate, "yyyy-MM-dd HH:mm")</span>
                                         }
-                                    </div>
+                                    </label>
                                     <div class="batch-row-actions">
-                                        @if (CanDeletePublished(assignment))
+                                        @if (canDeleteRow)
                                         {
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAssignment(assignment)" disabled="@isDeleting">
-                                                @if (isDeleting && deletingAssignmentId == assignment.AssignmentID)
-                                                {
-                                                    <span class="spinner-border spinner-border-sm"></span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-trash"></i>
-                                                }
+                                            <button class="btn btn-sm btn-outline-danger" disabled="@isRunning"
+                                                    @onclick="@(() => ShowDeleteConfirmForSingle("Published", assignment))">
+                                                <i class="bi bi-trash"></i>
                                                 Delete
                                             </button>
                                         }
@@ -375,6 +414,15 @@
                DialogType="warning"
                OnConfirm="ConfirmBulkPublish"
                OnCancel="@(() => showPublishConfirm = false)" />
+
+<ConfirmDialog IsVisible="showDeleteConfirm"
+               Title="@DeleteConfirmTitle"
+               Message="@DeleteConfirmMessage"
+               ConfirmText="@DeleteConfirmButtonText"
+               CancelText="Cancel"
+               DialogType="@DeleteConfirmDialogType"
+               OnConfirm="ConfirmDelete"
+               OnCancel="CancelDeleteConfirm" />
 
 <style>
 .my-assignments-container {
@@ -627,11 +675,13 @@
     color: #999;
 }
 
-/* UI-2 — approved section: toolbar + batch grouping. Reuses the same class names/styles as
-   Approvals.razor's batch UI (both pages' inline style blocks are global, not CSS-isolated,
-   since neither uses a co-located .razor.css file — keeping the rules identical avoids the two
-   pages visually disagreeing with each other for the same class names). */
-.approved-toolbar {
+/* UI-2 — batch grouping; UI-2.3 — toolbar classes generalized from "approved-*" to "bulk-*" so
+   Pending and Published can reuse the exact same toolbar styling as Approved (one bulk-select
+   toolbar per section — checkbox, counter, action button(s)) without duplicating the block three
+   times. Reuses the same class names/styles as Approvals.razor's batch UI (both pages' inline
+   style blocks are global, not CSS-isolated, since neither uses a co-located .razor.css file —
+   keeping the rules identical avoids the two pages visually disagreeing for the same names). */
+.bulk-toolbar {
     display: flex;
     align-items: center;
     gap: 16px;
@@ -639,7 +689,7 @@
     margin: 16px 0;
 }
 
-.approved-search {
+.bulk-search {
     flex: 1 1 220px;
     min-width: 160px;
     padding: 8px 10px;
@@ -649,10 +699,15 @@
     box-sizing: border-box;
 }
 
-.approved-counter {
+.bulk-counter {
     font-size: 13px;
     color: #666;
     white-space: nowrap;
+}
+
+.bulk-row-checkbox-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .no-batches-match {
@@ -803,9 +858,7 @@
 
     private bool isLoading = true;
     private bool isPublishing = false;
-    private bool isDeleting = false;
     private string? publishingAssignmentId;
-    private string? deletingAssignmentId;
     private string? errorMessage;
     private string? successMessage;
     private string? warningMessage;
@@ -818,21 +871,34 @@
     private string approvedSearch = string.Empty;
     private bool showPublishConfirm;
 
-    // UI-2.2 — Pending and Published are batched the same way as Approved, minus selection.
+    // UI-2.2 — Pending and Published are batched the same way as Approved.
+    // UI-2.3 — and now have their own selection, for bulk delete.
     private List<AssignmentBatchViewModel> pendingBatchViewModels = new();
     private List<AssignmentBatchViewModel> publishedBatchViewModels = new();
+    private SelectionModel<string> pendingSelection = new();
+    private SelectionModel<string> publishedSelection = new();
 
     // UI-2.2 — one cached thumbnail data URL per DISTINCT presentation referenced by the loaded
     // assignments, built once per LoadDataAsync call. Every render path looks up this dictionary
     // instead of embedding a full-size image per row/batch — see PosterThumbnailCache.
     private Dictionary<string, string?> thumbnailById = new();
 
+    // UI-2.3 — one bulk run (Publish or Delete) at a time, shared across all three sections.
+    // runSection records which section's BulkRunPanel should show it — the other two sections'
+    // panels pass Running=false/Result=null so progress/results never appear in the wrong place.
     private bool isRunning;
+    private string? runSection;
     private string runVerb = string.Empty;
     private int runDone;
     private int runTotal;
     private BulkRunResult<Assignment>? runResult;
     private CancellationTokenSource? runCts;
+
+    // UI-2.3 — bulk delete confirmation, shared by all three sections and by every single-row
+    // Delete button (N = 1).
+    private bool showDeleteConfirm;
+    private string? deleteConfirmSection;
+    private List<Assignment> deleteConfirmItems = new();
 
     private bool IsApprovedSearchActive => !string.IsNullOrWhiteSpace(approvedSearch);
 
@@ -904,8 +970,27 @@
         pendingBatchViewModels = BuildBatchViewModels(pendingAssignments, pendingBatchViewModels);
         publishedBatchViewModels = BuildBatchViewModels(publishedAssignments, publishedBatchViewModels);
 
+        // UI-2.3 — every reload (publish, bulk delete, or a plain page load) prunes all three
+        // selections, not just Approved's.
         approvedSelection.RemoveMissing(approvedAssignments.Select(a => a.AssignmentID));
+        pendingSelection.RemoveMissing(pendingAssignments.Select(a => a.AssignmentID));
+        publishedSelection.RemoveMissing(publishedAssignments.Select(a => a.AssignmentID));
     }
+
+    // UI-2.3 — the ids a "select all"/batch checkbox may operate on: only rows this user may
+    // actually delete, so an ineligible row is excluded from bulk selection entirely rather than
+    // merely shown unchecked.
+    private List<string> EligiblePendingIds =>
+        BulkDeleteSelection.EligibleIds(pendingAssignments, CanDelete, a => a.AssignmentID);
+
+    private List<string> EligiblePublishedIds =>
+        BulkDeleteSelection.EligibleIds(publishedAssignments, CanDeletePublished, a => a.AssignmentID);
+
+    // Approved's checkbox selects for BOTH Publish and Delete, so it is never itself filtered by
+    // delete-eligibility (an ineligible-for-delete row must stay selectable for Publish) — only
+    // the Delete button's own count/run narrows the current selection down to deletable rows.
+    private List<Assignment> DeletableSelectedApproved =>
+        approvedAssignments.Where(a => approvedSelection.IsSelected(a.AssignmentID) && CanDelete(a)).ToList();
 
     // UI-2.2 — one cache lookup per DISTINCT PresentationID referenced by the loaded assignments,
     // never one per row/batch. A presentation with no match (deleted, or not yet loaded) maps to
@@ -931,6 +1016,7 @@
         var items = approvedAssignments.Where(a => approvedSelection.IsSelected(a.AssignmentID)).ToList();
 
         isRunning = true;
+        runSection = "Approved";
         runVerb = "Publishing";
         runDone = 0;
         runTotal = items.Count;
@@ -972,6 +1058,123 @@
     }
 
     private void StopRun() => runCts?.Cancel();
+
+    // UI-2.3 — bulk delete confirmation, shared by every section and by single-row deletes.
+
+    private string DeleteConfirmTitle => deleteConfirmSection == "Published" ? "Delete and withdraw" : "Delete assignments";
+
+    private string DeleteConfirmDialogType => deleteConfirmSection == "Published" ? "danger" : "warning";
+
+    private string DeleteConfirmButtonText =>
+        deleteConfirmSection == "Published"
+            ? $"Delete and withdraw {deleteConfirmItems.Count}"
+            : $"Delete {deleteConfirmItems.Count}";
+
+    private string DeleteConfirmMessage
+    {
+        get
+        {
+            var n = deleteConfirmItems.Count;
+
+            if (deleteConfirmSection == "Published")
+            {
+                // n == 1: name the one target team directly, rather than "1 team(s)".
+                var devicesPhrase = n == 1
+                    ? $"{deleteConfirmItems[0].TargetTeam}'s devices"
+                    : $"the devices of {BulkDeleteSelection.DistinctTargetTeamCount(deleteConfirmItems)} team(s)";
+
+                return $"Delete {n} published assignment(s)? The poster will be removed from " +
+                       $"{devicesPhrase} at their next sync. This can't be undone from the app.";
+            }
+
+            return $"Delete {n} assignment(s)? They will be moved to the deleted folder.";
+        }
+    }
+
+    private void ShowDeleteConfirmForSelection(string section)
+    {
+        var items = section switch
+        {
+            "Pending" => pendingAssignments.Where(a => pendingSelection.IsSelected(a.AssignmentID)).ToList(),
+            "Approved" => DeletableSelectedApproved,
+            "Published" => publishedAssignments.Where(a => publishedSelection.IsSelected(a.AssignmentID)).ToList(),
+            _ => new List<Assignment>()
+        };
+
+        if (items.Count == 0)
+            return;
+
+        deleteConfirmSection = section;
+        deleteConfirmItems = items;
+        showDeleteConfirm = true;
+    }
+
+    private void ShowDeleteConfirmForSingle(string section, Assignment assignment)
+    {
+        deleteConfirmSection = section;
+        deleteConfirmItems = new List<Assignment> { assignment };
+        showDeleteConfirm = true;
+    }
+
+    private void CancelDeleteConfirm()
+    {
+        showDeleteConfirm = false;
+        deleteConfirmSection = null;
+        deleteConfirmItems = new();
+    }
+
+    private async Task ConfirmDelete()
+    {
+        showDeleteConfirm = false;
+        var section = deleteConfirmSection!;
+        var items = deleteConfirmItems;
+        deleteConfirmSection = null;
+        deleteConfirmItems = new();
+
+        await RunBulkDeleteAsync(section, items);
+    }
+
+    // UI-2.3 — the single bulk-delete run shared by Pending/Approved/Published and by every
+    // single-row Delete (a one-item run). Each item calls AssignmentService.DeleteAssignmentAsync
+    // directly — never the old single-item page handler — so BulkOperationRunner's own try/catch
+    // maps UnauthorizedAccessException and anything else to a per-item failure outcome. Reloads
+    // exactly once after the run ends, whether it completed, was stopped, or every item failed.
+    private async Task RunBulkDeleteAsync(string section, List<Assignment> items)
+    {
+        isRunning = true;
+        runSection = section;
+        runVerb = "Deleting";
+        runDone = 0;
+        runTotal = items.Count;
+        runResult = null;
+        runCts = new CancellationTokenSource();
+        StateHasChanged();
+
+        var progress = new Progress<(int done, int total)>(p =>
+        {
+            runDone = p.done;
+            runTotal = p.total;
+            InvokeAsync(StateHasChanged);
+        });
+
+        var result = await BulkOperationRunner.RunAsync(
+            items,
+            async assignment =>
+            {
+                await AssignmentService.DeleteAssignmentAsync(assignment.SourceTeam, assignment.AssignmentID);
+                return BulkItemOutcome.Success();
+            },
+            progress,
+            runCts.Token);
+
+        isRunning = false;
+        runResult = result;
+        runCts.Dispose();
+        runCts = null;
+
+        await LoadDataAsync();
+        StateHasChanged();
+    }
 
     private sealed class AssignmentBatchViewModel
     {
@@ -1105,36 +1308,6 @@
         Navigation.NavigateTo($"/edit-assignment/{assignment.SourceTeam}/{assignment.AssignmentID}");
     }
     */
-    private async Task DeleteAssignment(Assignment assignment)
-    {
-        try
-        {
-            isDeleting = true;
-            deletingAssignmentId = assignment.AssignmentID;
-            errorMessage = null;
-            successMessage = null;
-
-            await AssignmentService.DeleteAssignmentAsync(assignment.SourceTeam, assignment.AssignmentID);
-
-            successMessage = "Assignment moved to deleted folder";
-            await LoadDataAsync();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            errorMessage = "You don't have permission to delete this assignment";
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error deleting assignment: {ex.Message}";
-            System.Diagnostics.Debug.WriteLine($"Delete error: {ex}");
-        }
-        finally
-        {
-            isDeleting = false;
-            deletingAssignmentId = null;
-        }
-    }
-
     private async Task PublishAssignment(Assignment assignment)
     {
         try
