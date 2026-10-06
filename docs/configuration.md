@@ -220,6 +220,11 @@ NewsService resolves configuration across the **same three layers as NewsViewer*
 
 `appsettings.json` is a committed base artifact, not a hand-maintained local file; GPO sits on top of it.
 
+> **M6 — generating this surface.** NewsCentral's Environment Management page's **Export fleet
+> settings** button generates the `Repository\`/`AzureBlob\` and `Signing\` values below for the
+> current environment (a `Set-RegistryOverrides.ps1` invocation and a `.reg` file); see
+> `docs/production-deployment.md` Step 7.
+
 > ⚠️ **Configuration is bound once at host start — verified on Windows 11 Enterprise.** `Program.cs` reads `appsettings.json`, the dev overlay, and the registry once into a single `ServiceConfiguration` object when the process starts. Every subsequent poll cycle re-evaluates **content and schedules** — it never re-reads configuration. A registry change to any key (`Delivery:LockScreenEnabled`/`WallpaperEnabled` included) has **no effect until NewsService is restarted**, however many poll cycles pass in between. This catches people out specifically with the toggles: pushing a GPO change and expecting it to take effect on the next cycle does not work — restart the service (or wait for its next scheduled restart/reboot) after any registry change.
 
 > ⚠️ **Worker-SDK trap — the overlay exclusion must use `<Content Update>`, not `<Content Include>`.** NewsService uses `Microsoft.NET.Sdk.Worker`, whose **default content items already glob `appsettings.json` AND `appsettings.*.json` — and those defaults PUBLISH**. The overlay is therefore suppressed in `NewsService.csproj` with `<Content Update="appsettings.Development.json">` carrying `CopyToPublishDirectory=Never`; a `<Content Include>` would double-include the SDK's own glob item and would **not** suppress publishing. Without the `Update`, a developer's `appsettings.Development.json` — personal share paths and all — would ship to the fleet automatically. NewsViewer uses plain `Microsoft.NET.Sdk`, which has no such glob, which is why **its** csproj uses `Include` instead.
@@ -317,6 +322,10 @@ NewsViewer resolves configuration across three layers (registry always wins):
 | Override | Registry (GPO) | **Always wins** — `HKLM\Software\{Company}\NewsCentral\NewsViewer`. |
 
 `appsettings.json` is a committed base artifact, not a hand-maintained local file; GPO sits on top of it. `Company` is **not** present in any layer's file — it is the build-time constant `SolutionConstants.Company` (see the Registry Hive note above).
+
+> **M6 — generating this surface.** The `Signing\` values below (NewsViewer has no `Repository\`/
+> `AzureBlob\` of its own) are generated the same way, by the same **Export fleet settings** button
+> — see `docs/production-deployment.md` Step 7.
 
 ```json
 {

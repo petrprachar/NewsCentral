@@ -270,6 +270,18 @@ distributed via `IBlobDistributionService`. Public keys are **not secret**; trea
 Two separate trees, one per fleet component. **GPO owns this configuration entirely — the installer must
 not write it** (`docs/packaging.md`). Full key surface: `docs/configuration.md`.
 
+**M6 — generate the repository/signing values instead of hand-copying them.** NewsCentral's
+Environment Management page has an **Export fleet settings** button (SystemAdmin only) for the
+current environment. It generates the `Repository\`/`AzureBlob\` and `Signing\` values below for
+NewsService and NewsViewer — as a `Set-RegistryOverrides.ps1` invocation (dev/pilot machines only;
+see the script's own scope note) and as a `.reg` file for GPO hand-off. The fleet always
+authenticates with its **own** app registration and certificate (§2.1 above), never the authoring
+app's, so the export never contains the authoring `ClientId` or any credential — the fleet's
+`ClientId` and certificate thumbprint are emitted as literal placeholders (`<FLEET-CLIENT-ID>`,
+`<CERT-THUMBPRINT>`) that **must be replaced before use**. Everything outside this surface — Entra,
+Delivery, Telemetry, Logging, Hmac, Display, Ui — is still configured by hand per
+`docs/configuration.md`.
+
 ```
 HKLM\Software\{Company}\NewsCentral\NewsService\
 HKLM\Software\{Company}\NewsCentral\NewsViewer\
