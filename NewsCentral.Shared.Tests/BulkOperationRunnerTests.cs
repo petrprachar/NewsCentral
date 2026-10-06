@@ -113,17 +113,17 @@ public sealed class BulkOperationRunnerTests
     {
         var items = new[] { "a", "b", "c" };
         var reports = new List<(int done, int total)>();
-        var progress = new Progress<(int done, int total)>(reports.Add);
+        // Progress<T> marshals its callback via the captured SynchronizationContext, which is
+        // asynchronous and made this test flaky (a fixed delay was never a reliable wait). This
+        // test double reports synchronously, inline with RunAsync's own Report call, so there is
+        // nothing to await and nothing to flake.
+        var progress = new SynchronousProgress<(int done, int total)>(reports.Add);
 
         await BulkOperationRunner.RunAsync(
             items,
             _ => Task.FromResult(BulkItemOutcome.Success()),
             progress,
             CancellationToken.None);
-
-        // Progress<T> marshals its callback via the captured SynchronizationContext, which may be
-        // asynchronous — give it a moment to flush before asserting.
-        await Task.Delay(50);
 
         Assert.Equal(3, reports.Count);
         Assert.Equal((1, 3), reports[0]);
@@ -150,5 +150,14 @@ public sealed class BulkOperationRunnerTests
         Assert.Equal(1, result.WarningCount);
         Assert.Equal(2, result.SucceededCount);
         Assert.Equal(1, result.FailedCount);
+    }
+
+    private sealed class SynchronousProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _report;
+
+        public SynchronousProgress(Action<T> report) => _report = report;
+
+        public void Report(T value) => _report(value);
     }
 }
