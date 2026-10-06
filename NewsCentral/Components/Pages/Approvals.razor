@@ -7,6 +7,7 @@
 @inject Services.AuthenticationService AuthService
 @inject NavigationManager Navigation
 @inject IStringLocalizer<Approvals> Localizer
+@inject NewsCentral.Ui.PosterThumbnailCache ThumbnailCache
 @using NewsCentral.Components.Shared
 @using NewsCentral.Models
 @using NewsCentral.Ui
@@ -87,7 +88,9 @@
                                 <button type="button" class="batch-expand-toggle" @onclick="@(() => vm.IsExpanded = !vm.IsExpanded)">
                                     <i class="bi @(vm.IsExpanded ? "bi-chevron-down" : "bi-chevron-right")"></i>
                                 </button>
-                                <PosterThumbnail ImageDataUrl="@vm.PresentationImageDataUrl" Title="@vm.PresentationTitle" Width="120" />
+                                <PosterThumbnail ThumbnailDataUrl="@ThumbnailFor(vm.Batch.Key.PresentationID)"
+                                                 GetFullImageDataUrl="@(() => FullImageFor(vm.Batch.Key.PresentationID))"
+                                                 Title="@vm.PresentationTitle" Width="120" />
                                 <div class="batch-header-main">
                                     <div class="batch-title">@vm.PresentationTitle</div>
                                     @if (vm.IsNewsOfWeek || vm.IsWallpaper || vm.IsLogonScreen)
@@ -170,7 +173,9 @@
                 var single = rejectingItems[0];
                 var singleBatch = BatchFor(single);
                 <div class="reject-dialog-presentation">
-                    <PosterThumbnail ImageDataUrl="@singleBatch?.PresentationImageDataUrl" Title="@singleBatch?.PresentationTitle" Width="90" />
+                    <PosterThumbnail ThumbnailDataUrl="@(singleBatch != null ? ThumbnailFor(singleBatch.Batch.Key.PresentationID) : null)"
+                                     GetFullImageDataUrl="@(() => singleBatch != null ? FullImageFor(singleBatch.Batch.Key.PresentationID) : null)"
+                                     Title="@singleBatch?.PresentationTitle" Width="90" />
                     <strong>@singleBatch?.PresentationTitle</strong>
                 </div>
             }
@@ -522,6 +527,13 @@
     private bool isLoading = true;
     private string errorMessage = string.Empty;
 
+    // UI-2.2 — one cached thumbnail, and one presentation lookup, per DISTINCT PresentationID
+    // referenced by the pending batches, built once per LoadPendingApprovals call. Render paths
+    // (the header thumbnail and the single-item reject dialog) only look these up; the full image
+    // is built on demand from presentationsById, never eagerly.
+    private Dictionary<string, string?> thumbnailById = new();
+    private Dictionary<string, Presentation?> presentationsById = new();
+
     // UI-2 — selection/search over the flattened set of pending assignments, keyed by AssignmentID.
     private SelectionModel<string> selection = new();
     private string approvalSearch = string.Empty;
@@ -589,9 +601,26 @@
             var previousExpansion = batchViewModels.ToDictionary(b => b.Batch.Key, b => b.IsExpanded);
 
             var newViewModels = new List<BatchViewModel>();
+            var newPresentations = new Dictionary<string, Presentation?>();
+            var newThumbnails = new Dictionary<string, string?>();
+
             foreach (var batch in batches)
             {
-                var presentation = await PresentationService.GetPresentationAsync(batch.Key.SourceTeam, batch.Key.PresentationID);
+                // One presentation fetch per DISTINCT PresentationID, even across multiple
+                // batches/source teams in this load — never one per batch.
+                if (!newPresentations.TryGetValue(batch.Key.PresentationID, out var presentation))
+                {
+                    presentation = await PresentationService.GetPresentationAsync(batch.Key.SourceTeam, batch.Key.PresentationID);
+                    newPresentations[batch.Key.PresentationID] = presentation;
+                }
+
+                if (!newThumbnails.ContainsKey(batch.Key.PresentationID))
+                {
+                    newThumbnails[batch.Key.PresentationID] = presentation != null
+                        ? await ThumbnailCache.GetThumbnailDataUrlAsync(presentation)
+                        : null;
+                }
+
                 var schedule = string.IsNullOrEmpty(batch.Key.ScheduleID)
                     ? null
                     : await ScheduleService.GetScheduleAsync(batch.Key.SourceTeam, batch.Key.ScheduleID);
@@ -602,7 +631,6 @@
                     Batch = batch,
                     PresentationTitle = presentation?.Name ?? batch.Key.PresentationID,
                     PresentationDescription = presentation?.Description,
-                    PresentationImageDataUrl = PosterImage.ToDataUrl(presentation),
                     IsNewsOfWeek = presentation?.IsNewsOfWeek ?? false,
                     IsWallpaper = presentation?.IsWallpaper ?? false,
                     IsLogonScreen = presentation?.IsLogonScreen ?? false,
@@ -620,6 +648,8 @@
             }
 
             batchViewModels = newViewModels;
+            presentationsById = newPresentations;
+            thumbnailById = newThumbnails;
             selection.RemoveMissing(assignments.Select(a => a.AssignmentID));
         }
         catch (Exception ex)
@@ -766,6 +796,14 @@
         return string.Join(", ", dayNames);
     }
 
+    private string? ThumbnailFor(string presentationId) =>
+        thumbnailById.TryGetValue(presentationId, out var url) ? url : null;
+
+    // The full-size image is built only when PosterThumbnail's lightbox actually asks for it,
+    // never eagerly during render.
+    private string? FullImageFor(string presentationId) =>
+        presentationsById.TryGetValue(presentationId, out var presentation) ? PosterImage.ToDataUrl(presentation) : null;
+
     // A rejecting item's presentation title/thumbnail — looked up from the already-cached batch
     // view model that produced it (same (Source, Presentation, Schedule) key), never a fresh fetch.
     private BatchViewModel? BatchFor(Assignment a) =>
@@ -787,7 +825,6 @@
         public AssignmentBatch Batch { get; set; } = null!;
         public string PresentationTitle { get; set; } = string.Empty;
         public string? PresentationDescription { get; set; }
-        public string? PresentationImageDataUrl { get; set; }
         public bool IsNewsOfWeek { get; set; }
         public bool IsWallpaper { get; set; }
         public bool IsLogonScreen { get; set; }
