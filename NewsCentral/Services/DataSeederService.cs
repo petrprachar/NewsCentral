@@ -1,5 +1,4 @@
 using NewsCentral.Configuration;
-using System.Collections.Concurrent;
 
 namespace NewsCentral.Services;
 
@@ -35,12 +34,12 @@ public class DataSeederService
     private readonly EnvironmentContext _environment;
 
     // Memoized per canonical DataPath — not per process — so switching between environments
-    // re-evaluates readiness independently for each one, while still never re-checking an
-    // environment this process has already resolved once (until Invalidate clears that one entry).
-    // Every caller for the same canonical path receives the same Task and observes the same
-    // completion or fault.
-    private readonly ConcurrentDictionary<string, Task<EnvironmentInitStatus>> _initialization =
-        new(StringComparer.OrdinalIgnoreCase);
+    // re-evaluates readiness independently for each one. ONLY a Ready result is kept: it cannot
+    // regress, whereas NotInitialized goes stale the moment anything (e.g. Environment Management's
+    // wizard) writes config/users.json, and a fault may be transient. Concurrent callers for the
+    // same canonical path still share one in-flight Task and observe the same completion or fault.
+    private readonly KeepWhenCache<EnvironmentInitStatus> _initialization =
+        new(status => status == EnvironmentInitStatus.Ready);
 
     public DataSeederService(IStorageService storage, EnvironmentContext environment)
     {
@@ -54,14 +53,16 @@ public class DataSeederService
     /// Reports whether the CURRENT environment (<see cref="EnvironmentContext.DataPath"/> at the
     /// moment of the call) is ready to log into. Every caller — the fire-and-forget call from
     /// App.CreateWindow and the awaited call from Login.razor — for the same canonical DataPath
-    /// receives the same Task and observes the same result or fault; I/O exceptions propagate to
-    /// every caller through that Task, none are swallowed here.
+    /// receives the same in-flight Task and observes the same result or fault; I/O exceptions
+    /// propagate to every caller through that Task, none are swallowed here. Only
+    /// <see cref="EnvironmentInitStatus.Ready"/> is cached afterward — <see cref="EnvironmentInitStatus.NotInitialized"/>
+    /// and faults are re-checked on the next call.
     /// </summary>
     public Task<EnvironmentInitStatus> EnsureInitializedAsync()
     {
         var dataPath = _environment.DataPath;
         var canonical = EnvironmentPaths.Canonicalize(dataPath);
-        return _initialization.GetOrAdd(canonical, _ => CheckInitializedAsync());
+        return _initialization.GetOrAdd(canonical, CheckInitializedAsync);
     }
 
     private async Task<EnvironmentInitStatus> CheckInitializedAsync() =>
@@ -71,8 +72,9 @@ public class DataSeederService
 
     /// <summary>
     /// Clears the memoized status for <paramref name="dataPath"/> so the next
-    /// <see cref="EnsureInitializedAsync"/> call for it re-checks disk instead of returning a
-    /// stale, memoized <see cref="EnvironmentInitStatus.NotInitialized"/>. Called by the login-page
+    /// <see cref="EnsureInitializedAsync"/> call for it re-checks disk. Since only
+    /// <see cref="EnvironmentInitStatus.Ready"/> is cached this is now a belt-and-braces reset
+    /// (e.g. an environment whose users file was removed). Called by the login-page
     /// setup wizard immediately after <see cref="EnvironmentInitializer"/> successfully writes
     /// <c>config/users.json</c> for the environment this process is currently pointed at — without
     /// this, the login form would stay disabled for the rest of the process's lifetime even though
@@ -81,7 +83,7 @@ public class DataSeederService
     public void Invalidate(string dataPath)
     {
         var canonical = EnvironmentPaths.Canonicalize(dataPath);
-        _initialization.TryRemove(canonical, out _);
+        _initialization.Remove(canonical);
     }
 
     /// <summary>
