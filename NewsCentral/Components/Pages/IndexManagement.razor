@@ -259,6 +259,7 @@
                         Localizer["RepairSummary"].Value,
                         repairSummary.Scanned, repairSummary.Synced, repairSummary.InSync, repairSummary.Removed,
                         repairSummary.Left.Count, repairSummary.IndexesRegenerated)
+                    @string.Format(Localizer["RepairPresentationsRemoved"].Value, repairSummary.PresentationsRemoved)
                     @if (repairSummary.Stopped)
                     {
                         @Localizer["RepairStoppedSuffix"]

@@ -219,6 +219,15 @@ reached T's index or T's devices.)
 T's index is regenerated, so T's devices drop the content at their next sync. The presentation,
 schedule and image files stay in T untouched — other assignments there may still reference them.
 
+**Delete a presentation.** `PresentationService.DeletePresentationAsync` soft-deletes S's presentation,
+assignments and schedules, then (via `PresentationDeletePlanner`) moves every target team T's own
+authoring-tier copies — `pres_{id}`, the related `sched_*` and `assign_*` — to `T/deleted` (a missing
+file is a no-op; a failed move is logged and non-fatal). Blob cleanup for T's presentation, schedule
+and images follows; the assignment copy is never uploaded to blob, so nothing is deleted there. T's
+index is regenerated **after** the moves, so it no longer lists the entry. T's images are left alone.
+Index Management repair removes copies orphaned by earlier deletes (`PresentationCopyRepairPlanner`:
+a presentation whose `TeamFolderName` names another team whose source file is gone).
+
 ## Team / User
 
 ```csharp

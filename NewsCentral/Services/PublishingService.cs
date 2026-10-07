@@ -403,6 +403,28 @@ public class PublishingService
             progress?.Report((i + 1, candidates.Count));
         }
 
+        // ── Presentation pass: copies orphaned by deletes that predate PresentationDeletePlanner ──
+        if (!summary.Stopped)
+        {
+            foreach (var team in allTeams)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    summary.Stopped = true;
+                    break;
+                }
+
+                try
+                {
+                    await RepairPresentationCopiesForTeamAsync(team.FolderName, summary, changedTeams);
+                }
+                catch (Exception ex)
+                {
+                    summary.Errors.Add($"presentations ({team.FolderName}): {ex.Message}");
+                }
+            }
+        }
+
         foreach (var team in changedTeams)
         {
             try
@@ -417,6 +439,56 @@ public class PublishingService
         }
 
         return summary;
+    }
+
+    private async Task RepairPresentationCopiesForTeamAsync(
+        string team,
+        PublishedCopyRepairSummary summary,
+        HashSet<string> changedTeams)
+    {
+        var presentations = await _presentationService.GetPresentationsForTeamAsync(team);
+        List<Schedule>? schedules = null;
+
+        foreach (var presentation in presentations)
+        {
+            try
+            {
+                var sourceExists =
+                    !string.IsNullOrEmpty(presentation.TeamFolderName) &&
+                    await _storage.FileExistsAsync(
+                        $"{presentation.TeamFolderName}/content/presentations/pres_{presentation.PresentationID}.json");
+
+                var plan = PresentationCopyRepairPlanner.Plan(presentation, team, sourceExists);
+
+                if (plan.Action == RepairAction.Leave)
+                {
+                    summary.Left.Add(new PublishedCopyLeftEntry(presentation.PresentationID, team, plan.Reason));
+                    continue;
+                }
+
+                if (plan.Action != RepairAction.Remove)
+                    continue;
+
+                await _storage.MoveFileAsync(
+                    $"{team}/content/presentations/pres_{presentation.PresentationID}.json",
+                    $"{team}/deleted/pres_{presentation.PresentationID}.json");
+
+                schedules ??= await _scheduleService.GetSchedulesForTeamAsync(team);
+                foreach (var schedule in schedules.Where(s => s.PresentationID == presentation.PresentationID))
+                {
+                    var schedPath = $"{team}/content/schedules/sched_{schedule.ScheduleID}.json";
+                    if (await _storage.FileExistsAsync(schedPath))
+                        await _storage.MoveFileAsync(schedPath, $"{team}/deleted/sched_{schedule.ScheduleID}.json");
+                }
+
+                summary.PresentationsRemoved++;
+                changedTeams.Add(team);
+            }
+            catch (Exception ex)
+            {
+                summary.Errors.Add($"presentation {presentation.PresentationID} ({team}): {ex.Message}");
+            }
+        }
     }
 
     // ── Private copy methods ─────────────────────────────────────────────────
@@ -582,6 +654,10 @@ public sealed class PublishedCopyRepairSummary
 
     /// <summary>Copies moved to {team}/deleted/ because their source record no longer exists.</summary>
     public int Removed { get; set; }
+
+    /// <summary>Orphaned presentation copies (source presentation gone) moved to {team}/deleted/ along
+    /// with their schedules.</summary>
+    public int PresentationsRemoved { get; set; }
 
     /// <summary>Copies left untouched, with the reason — see <see cref="RepairAction.Leave"/>.</summary>
     public List<PublishedCopyLeftEntry> Left { get; set; } = new();

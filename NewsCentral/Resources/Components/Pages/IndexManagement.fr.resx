@@ -54,4 +54,5 @@
   <data name="RepairLeftHeading" xml:space="preserve"><value>Non modifiées :</value></data>
   <data name="RepairErrorsHeading" xml:space="preserve"><value>Erreurs :</value></data>
   <data name="RepairError" xml:space="preserve"><value>Échec de la réparation : {0}</value></data>
+  <data name="RepairPresentationsRemoved" xml:space="preserve"><value> Copies de présentations orphelines supprimées : {0}.</value></data>
 </root>

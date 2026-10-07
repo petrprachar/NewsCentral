@@ -1,4 +1,5 @@
 using NewsCentral.Models;
+using NewsCentral.Publishing;
 using NewsCentral.Repositories;
 
 namespace NewsCentral.Services;
@@ -318,6 +319,14 @@ public class PresentationService
         var targetTeamsWithPublished =
             await GetTargetTeamsForPresentationAsync(teamFolderName, presentationId);
 
+        // Related source assignments, read once before anything moves: used by step 2 and by the
+        // target-copy plan below (PUB-1).
+        var assignmentRepo     = new TeamAwareRepository<Assignment>(_storage, teamFolderName, "assignments");
+        var allAssignments     = await assignmentRepo.GetAllAsync();
+        var relatedAssignments = allAssignments
+            .Where(a => a.PresentationID == presentationId)
+            .ToList();
+
         // ── 1. Soft-delete presentation JSON ─────────────────────────────────
         await _storage.MoveFileAsync(
             $"{teamFolderName}/content/presentations/pres_{presentationId}.json",
@@ -326,12 +335,6 @@ public class PresentationService
         System.Diagnostics.Debug.WriteLine($"✓ Moved pres_{presentationId} to deleted/");
 
         // ── 2. Soft-delete all related assignments ────────────────────────────
-        var assignmentRepo     = new TeamAwareRepository<Assignment>(_storage, teamFolderName, "assignments");
-        var allAssignments     = await assignmentRepo.GetAllAsync();
-        var relatedAssignments = allAssignments
-            .Where(a => a.PresentationID == presentationId)
-            .ToList();
-
         foreach (var assignment in relatedAssignments)
         {
             var src = $"{teamFolderName}/content/assignments/assign_{assignment.AssignmentID}.json";
@@ -368,6 +371,32 @@ public class PresentationService
         System.Diagnostics.Debug.WriteLine(
             $"✓ Moved {relatedAssignments.Count} assignments, " +
             $"{relatedSchedules.Count} schedules to deleted/");
+
+        // ── 3b. Soft-delete the TARGET teams' own authoring-tier copies (PUB-1) ──
+        // Publish wrote presentation/schedule/assignment copies into each target team's own
+        // folder; without this they stay visible there and keep feeding the target's index.
+        // Failures are non-fatal — the source is already soft-deleted and the Index Management
+        // repair finishes the job. Images are left alone (shared-file rule).
+        var deletePlan = PresentationDeletePlanner.Plan(teamFolderName, presentationId, relatedAssignments);
+        foreach (var move in deletePlan.Moves)
+        {
+            try
+            {
+                if (!await _storage.FileExistsAsync(move.From))
+                {
+                    System.Diagnostics.Debug.WriteLine($"  already absent: {move.From}");
+                    continue;
+                }
+
+                await _storage.MoveFileAsync(move.From, move.To);
+                System.Diagnostics.Debug.WriteLine($"✓ Moved {move.From} to {move.To}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"⚠ WARNING: Could not move target copy {move.From}: {ex.Message}");
+            }
+        }
 
         // ── 4. Blob distribution cleanup ──────────────────────────────────────
         var publishedAssignments = relatedAssignments
@@ -410,7 +439,7 @@ public class PresentationService
             }
         }
 
-        // ── 5. Regenerate indexes for affected target teams ───────────────────
+        // ── 5. Regenerate indexes for affected target teams (after the copy moves) ──
         foreach (var targetTeam in targetTeamsWithPublished)
         {
             try
