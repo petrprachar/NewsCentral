@@ -62,7 +62,7 @@ NewsService-only feature, gated by `Entra:Enabled` (default `false`). Each poll 
 
 | Component | Technology |
 |---|---|
-| NewsCentral | C# / .NET 9 MAUI Blazor Hybrid |
+| NewsCentral | C# / .NET 9 MAUI Blazor Hybrid — **Windows-only target (`net9.0-windows…`) by decision; do not re-add Android/iOS/MacCatalyst** |
 | NewsCentral.Shared | C# / .NET 9 class library |
 | NewsService | C# / .NET 9 Windows Service (`Microsoft.NET.Sdk.Worker`) |
 | NewsViewer | C# / .NET 9 WinForms; NativeAOT migration path preserved |
