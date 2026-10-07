@@ -149,16 +149,21 @@ No direct inter-process communication. All coordination is via the shared cache 
 
 ## Reference Documents
 
-@docs/solution-structure.md
-@docs/configuration.md
-@docs/azure-setup.md
-@docs/data-model.md
-@docs/newscentral-spec.md
-@docs/newsservice-spec.md
-@docs/entra-dynamic-teams.md
-@docs/newsviewer-spec.md
-@docs/security.md
-@docs/anti-tamper.md
-@docs/packaging.md
-@docs/production-deployment.md
-@docs/future.md
+These are not auto-loaded. Read the ones a task touches; a prompt's READ FIRST list is authoritative.
+
+| Document | Read when |
+|---|---|
+| docs/anti-tamper.md | index signing, integrity values, key trust |
+| docs/azure-setup.md | Azure/Entra app regs, RBAC, Graph consent |
+| docs/config-review-spec.md | the config review page in NewsCentral |
+| docs/configuration.md | any registry/appsettings key or its type |
+| docs/data-model.md | models, index.json, resolved-teams.json schema |
+| docs/entra-dynamic-teams.md | Entra attribute/group team resolution |
+| docs/future.md | deferred work, NewsTester |
+| docs/newscentral-spec.md | authoring app services, pages, roles |
+| docs/newsservice-spec.md | sync cycle, display surfaces, telemetry |
+| docs/newsviewer-spec.md | poster, daily gate, wallpaper style |
+| docs/packaging.md | installer, uninstall, upgrade behavior |
+| docs/production-deployment.md | GPO rollout and pilot validation |
+| docs/security.md | signing phase history, auth per component |
+| docs/solution-structure.md | project/file layout and references |
