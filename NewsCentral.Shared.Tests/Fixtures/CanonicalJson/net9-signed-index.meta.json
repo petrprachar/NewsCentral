@@ -1,0 +1,8 @@
+{
+  "generatedUtc": "2026-10-10T13:32:41.2571198Z",
+  "runtimeVersion": "9.0.20",
+  "frameworkDescription": ".NET 9.0.20",
+  "sdkVersion": "10.0.401",
+  "targetFramework": "net9.0",
+  "purpose": "Canonical JSON stability guard across runtime versions. Regenerate only on .NET 9."
+}

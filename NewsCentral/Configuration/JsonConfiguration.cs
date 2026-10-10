@@ -11,7 +11,9 @@ namespace NewsCentral.Configuration
     public static class JsonConfiguration
     {
         /// <summary>
-        /// Get standard JSON serializer options for index file generation
+        /// Get standard JSON serializer options for index file generation.
+        /// COUPLED COPY: NewsCentral.Shared.Tests/CanonicalJsonFixtureTests.cs duplicates these
+        /// options and SmartDateTimeConverter for the canonical JSON fixture generator — edit both.
         /// </summary>
         public static JsonSerializerOptions GetIndexJsonOptions()
         {
@@ -53,7 +55,9 @@ namespace NewsCentral.Configuration
 
     /// <summary>
     /// Smart DateTime converter that handles both UTC (system events) 
-    /// and Unspecified (schedule times) DateTime values correctly
+    /// and Unspecified (schedule times) DateTime values correctly.
+    /// COUPLED COPY: NewsCentral.Shared.Tests/CanonicalJsonFixtureTests.cs carries a private copy
+    /// of this converter (the test project cannot reference the MAUI project) — edit both.
     /// </summary>
     public class SmartDateTimeConverter : JsonConverter<DateTime>
     {

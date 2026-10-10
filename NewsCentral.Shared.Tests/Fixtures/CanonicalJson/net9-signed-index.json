@@ -1,0 +1,83 @@
+{
+  "teamFolderName": "cz-its",
+  "teamName": "CZ ITS \u2013 \u017Dlu\u0165ou\u010Dk\u00FD t\u00FDm",
+  "generatedAt": "2026-10-12T08:30:15Z",
+  "version": "1.0.0",
+  "indexHash": "07C0024ECBE5418C5C4FC0D5CCA2A6F3AAE6FFD0BD65A577913801CDB925F3FD",
+  "publishedAssignments": [
+    {
+      "assignmentId": "11111111-1111-1111-1111-111111111111",
+      "presentationId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "scheduleId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "presentationName": "Zpr\u00E1va t\u00FDdne \u2013 P\u0159\u00EDli\u0161 \u017Elu\u0165ou\u010Dk\u00FD k\u016F\u0148 \u2615 \u65B0\u95FB",
+      "presentationDescription": "Quotes \u0022and\u0022 \u003Cangle\u003E \u0026 \u00FCn\u00EFc\u00F6d\u00E9",
+      "presentationVersion": 3,
+      "presentationLastModified": "2026-10-01T12:00:00Z",
+      "scheduleStart": "2026-10-13T09:00:00",
+      "scheduleEnd": "2026-10-20T17:30:00",
+      "daysOfWeek": "Mon,Tue,Wed",
+      "publishedDate": "2026-10-02T07:15:30Z",
+      "publishedBy": "admin",
+      "displayTypes": {
+        "isNewsOfWeek": true,
+        "isWallpaper": false,
+        "isLogonScreen": true
+      },
+      "content": {
+        "imagePath": "cz-its/images/generated/poster_a_v1.jpg",
+        "imageHash": "abc123",
+        "imageSizeBytes": 123456,
+        "imageLastModified": "2026-10-01T11:59:59Z",
+        "moreInfoUrl": "https://example.com/more?a=1\u0026b=2"
+      },
+      "sourceTeamFolderName": "cz-its",
+      "sourceTeamName": "CZ ITS",
+      "displayDurationSeconds": 15,
+      "priority": 0,
+      "useVirtualDesktop": false,
+      "virtualDesktopBackgroundColor": "#000000"
+    },
+    {
+      "assignmentId": "22222222-2222-2222-2222-222222222222",
+      "presentationId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      "scheduleId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      "presentationName": "Wallpaper",
+      "presentationDescription": "",
+      "presentationVersion": 1,
+      "presentationLastModified": "2026-09-30T06:00:00Z",
+      "scheduleStart": "2026-10-01T00:00:00",
+      "scheduleEnd": "2026-12-31T23:59:59",
+      "daysOfWeek": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+      "publishedDate": "2026-09-30T06:05:00Z",
+      "publishedBy": "editor",
+      "displayTypes": {
+        "isNewsOfWeek": false,
+        "isWallpaper": true,
+        "isLogonScreen": false
+      },
+      "content": {
+        "imagePath": "cz-its/images/generated/poster_c_v1.jpg",
+        "imageUrl": "https://blob.example.com/cz-its/poster_c_v1.jpg",
+        "imageHash": "def456",
+        "imageSizeBytes": 999,
+        "imageLastModified": "2026-09-30T06:00:00Z",
+        "moreInfoUrl": ""
+      },
+      "sourceTeamFolderName": "de-prod",
+      "sourceTeamName": "DE Prod",
+      "posterText": "P\u0159ekvapen\u00ED \u2713",
+      "displayDurationSeconds": 30,
+      "priority": 2,
+      "useVirtualDesktop": true,
+      "virtualDesktopBackgroundColor": "#112233"
+    }
+  ],
+  "statistics": {
+    "totalPublishedAssignments": 2,
+    "activeAssignments": 1,
+    "upcomingAssignments": 1,
+    "expiredAssignments": 0
+  },
+  "signature": "HNT6Ucwh74p/ft9\u002BX4rDOaOuWy2O9WrI9OAtR4825uGF2e\u002BlhxKr0ScdypQkb8wuvOHngOeiAirO8/PxFRl4RA==",
+  "signingPublicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAgip3JBzPVSSLAkJ0DEwf5SDScnzAD7WPzrcovO7crTMcMprMHnkXCK\u002BZCX8HjNrphRp/we4g/7GYVymwnJY5w=="
+}
